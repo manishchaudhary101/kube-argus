@@ -67,8 +67,6 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           sed -i "s/^version:.*/version: ${VERSION}/" deploy/helm/kube-argus/Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" deploy/helm/kube-argus/Chart.yaml
-          # Point image tag to this release
-          sed -i "s/^  tag:.*/  tag: ${VERSION}/" deploy/helm/kube-argus/values.yaml
 
       - name: Package chart
         run: helm package deploy/helm/kube-argus
