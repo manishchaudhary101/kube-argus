@@ -1,0 +1,30 @@
+# Build output
+k8s-dash
+k8sdash
+*.exe
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Go
+vendor/
+
+# Misc
+tmp/
+*.log
