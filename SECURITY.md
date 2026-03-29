@@ -6,7 +6,7 @@ If you discover a security vulnerability in Kube-Argus, please report it respons
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, please email: **security@YOURDOMAIN.com** *(replace with your fork's contact)*
+Instead, please email: **imanishchaudhary@gmail.com** *(replace with your fork's contact)*
 
 We will acknowledge receipt within 48 hours and aim to provide a fix within 7 days for critical issues.
 
