@@ -7,8 +7,33 @@ A production-grade Kubernetes dashboard built for SREs and platform engineers. R
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24+-326CE5?logo=kubernetes&logoColor=white)
 
-<!-- Add a screenshot or demo GIF here -->
-<!-- ![K8SDASH Screenshot](docs/screenshot.png) -->
+![K8SDASH Overview](docs/screenshot-overview.png)
+
+![K8SDASH Spot Advisor](docs/screenshot-spot-advisor.png)
+
+---
+
+## Why K8SDASH?
+
+Most Kubernetes dashboards show you resources. K8SDASH tells you what's **wrong**, what it **costs**, and how to **fix** it.
+
+| Capability | K8SDASH | K8s Dashboard | Lens | Headlamp | k9s |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Spot instance cost analysis & consolidation | **Yes** | — | — | — | — |
+| AI-powered pod diagnosis (any LLM) | **Yes** | — | — | — | — |
+| Resource right-sizing recommendations | **Yes** | — | — | — | — |
+| Topology spread constraint validation | **Yes** | — | — | — | — |
+| Namespace-level cost allocation | **Yes** | — | — | — | — |
+| Prometheus metrics (node, pod, workload) | **Yes** | — | Partial | — | — |
+| Workload dependency graph | **Yes** | — | — | — | — |
+| PDB status inline on workloads | **Yes** | — | — | — | — |
+| Web terminal (exec into pods) | **Yes** | — | Yes | Yes | Terminal-native |
+| Troubled pods view (NOC screen mode) | **Yes** | — | — | — | — |
+| Single binary, zero dependencies | **Yes** | Needs metrics-server | Desktop app | Needs plugins | Terminal app |
+| Web-based (no install) | **Yes** | Yes | No | Yes | No |
+| Open source (Apache 2.0) | **Yes** | Yes | Freemium | Yes | Yes |
+
+**In short**: K8SDASH combines cluster visibility, cost optimisation, and AI diagnostics into a single binary that deploys in under a minute — no CRDs, no databases, no agents.
 
 ---
 
