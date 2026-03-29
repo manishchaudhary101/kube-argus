@@ -1,6 +1,6 @@
 # K8SDASH
 
-A production-grade Kubernetes dashboard built for SREs and platform engineers. Real-time cluster visibility with Prometheus metrics, cost analysis, resource right-sizing, and AI-powered diagnostics — all in a single pane of glass.
+**The real-time Kubernetes dashboard that SREs actually need.** Live cluster state every 10 seconds, streaming pod logs, interactive shell, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
 
 ![Go](https://img.shields.io/badge/Go-1.19+-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
@@ -15,10 +15,24 @@ A production-grade Kubernetes dashboard built for SREs and platform engineers. R
 
 ## Why K8SDASH?
 
-Most Kubernetes dashboards show you resources. K8SDASH tells you what's **wrong**, what it **costs**, and how to **fix** it.
+Most Kubernetes dashboards show you resources. K8SDASH gives you a **live, real-time operating picture** of your cluster — what's **happening now**, what it **costs**, and how to **fix** it — with the same immediacy as k9s, but in a web UI you can share with your team and put on a wall screen.
+
+### Built for real-time operations
+
+- **10-second auto-refresh** — every view updates automatically, no manual reload
+- **Live log streaming** — tail pod logs in real-time via Server-Sent Events, with container selector and init container support
+- **Interactive web shell** — exec into any pod over WebSocket, full xterm.js terminal in the browser
+- **Instant action feedback** — cordon, drain, restart, scale, and delete trigger immediate cache refresh so you see the result in seconds, not minutes
+- **Streaming AI diagnosis** — LLM responses stream token-by-token as they're generated
+- **Troubled pods view with fullscreen mode** — dedicated NOC screen for wall-mounted monitors showing CrashLoopBackOff, OOMKilled, Pending pods live
+
+### Feature comparison
 
 | Capability | K8SDASH | K8s Dashboard | Lens | Headlamp | k9s |
 |---|:---:|:---:|:---:|:---:|:---:|
+| Live auto-refresh (10s cycle) | **Yes** | Manual | Yes | Yes | **Yes** |
+| Streaming pod logs (SSE) | **Yes** | — | Yes | Yes | **Yes** |
+| Web terminal (exec into pods) | **Yes** | — | Yes | Yes | Terminal-native |
 | Spot instance cost analysis & consolidation | **Yes** | — | — | — | — |
 | AI-powered pod diagnosis (any LLM) | **Yes** | — | — | — | — |
 | Resource right-sizing recommendations | **Yes** | — | — | — | — |
@@ -27,26 +41,27 @@ Most Kubernetes dashboards show you resources. K8SDASH tells you what's **wrong*
 | Prometheus metrics (node, pod, workload) | **Yes** | — | Partial | — | — |
 | Workload dependency graph | **Yes** | — | — | — | — |
 | PDB status inline on workloads | **Yes** | — | — | — | — |
-| Web terminal (exec into pods) | **Yes** | — | Yes | Yes | Terminal-native |
-| Troubled pods view (NOC screen mode) | **Yes** | — | — | — | — |
+| Troubled pods / NOC screen mode | **Yes** | — | — | — | — |
 | Single binary, zero dependencies | **Yes** | Needs metrics-server | Desktop app | Needs plugins | Terminal app |
-| Web-based (no install) | **Yes** | Yes | No | Yes | No |
+| Web-based (sharable, no install) | **Yes** | Yes | No | Yes | No |
 | Open source (Apache 2.0) | **Yes** | Yes | Freemium | Yes | Yes |
 
-**In short**: K8SDASH combines cluster visibility, cost optimisation, and AI diagnostics into a single binary that deploys in under a minute — no CRDs, no databases, no agents.
+**In short**: K8SDASH gives you k9s-level real-time visibility in a web UI, plus cost optimisation and AI diagnostics — all in a single binary that deploys in under a minute with no CRDs, no databases, no agents.
 
 ---
 
 ## Features
 
 ### Cluster Overview
-- Real-time node status (Ready, NotReady, Draining, Cordoned) with k9s-style transitions
+- **Live cluster state refreshed every 10 seconds** — no manual reload needed
+- Node status (Ready, NotReady, Draining, Cordoned) with k9s-style transitions
 - Cluster-wide CPU and memory utilisation at a glance
-- Warning counts and top resource consumers
+- Warning counts and top resource consumers by namespace
 
 ### Node Management
 - All nodes with status, instance type, capacity, allocatable resources, and age
-- Click any node for `kubectl describe`-style detail with events (Karpenter, spot interruptions, drain failures)
+- Click any node for `kubectl describe`-style detail with live events (Karpenter, spot interruptions, drain failures)
+- **Admin actions**: cordon, uncordon, drain — with instant feedback
 - Per-node Prometheus metrics: CPU, memory, disk, and network
 
 ### Workloads
@@ -59,8 +74,9 @@ Most Kubernetes dashboards show you resources. K8SDASH tells you what's **wrong*
 
 ### Pod Management
 - All pods with phase, restarts, resource usage bars, and node placement
-- Log streaming with container selector (including init containers)
-- AI-powered diagnosis for unhealthy pods
+- **Live log streaming** with container selector (including init containers)
+- **Interactive web shell** — exec into any pod directly from the browser
+- **AI-powered diagnosis** for unhealthy pods (streams response in real-time)
 - Per-pod CPU and memory metrics
 
 ### Networking
@@ -81,9 +97,10 @@ Most Kubernetes dashboards show you resources. K8SDASH tells you what's **wrong*
 - Shows violations grouped by topology key (zone, hostname, instance-type)
 - Distinguishes soft (ScheduleAnyway) vs hard (DoNotSchedule) constraints
 
-### Troubled Pods
+### Troubled Pods (NOC Screen)
 - Non-running pods (CrashLoopBackOff, ImagePullBackOff, Pending, OOMKilled) in one dedicated view
-- Fullscreen mode for wall-mounted monitoring screens
+- **Fullscreen mode** designed for wall-mounted NOC/SRE monitoring screens
+- Auto-refreshes — put it on a TV and walk away
 
 ### Events
 - Cluster events filtered by namespace with type, reason, source, and message
@@ -273,11 +290,12 @@ When `AWS_SECRET_NAME` is set, the app loads config values from Secrets Manager 
 
 ## Cluster Impact
 
-K8SDASH is designed to be lightweight:
-- **Read-only**: No write operations to the K8s API (except admin actions: pod delete, scale, exec)
-- **Cached**: All list operations are cached in-memory, refreshed every 15 seconds
-- **Single connection**: One set of API calls per refresh cycle, not per-user
+K8SDASH is designed to be lightweight despite its real-time nature:
+- **Cached**: All K8s list operations are cached in-memory, refreshed every **10 seconds** server-side
+- **Single connection**: One set of API calls per refresh cycle, **not per-user** — 100 users don't mean 100x API load
+- **Read-only**: No write operations to the K8s API (except admin actions: cordon, drain, scale, restart, delete, exec)
 - **No CRDs**: No custom resources or operators needed
+- **No agents**: Nothing deployed to worker nodes
 - **Prometheus**: Standard PromQL range queries, no recording rules required (but supported)
 
 ---
