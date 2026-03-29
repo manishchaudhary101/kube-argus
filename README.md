@@ -7,9 +7,32 @@
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24+-326CE5?logo=kubernetes&logoColor=white)
 
-![K8SDASH Overview](docs/screenshot-overview.png)
-
-![K8SDASH Spot Advisor](docs/screenshot-spot-advisor.png)
+<table>
+<tr>
+<td width="50%">
+<strong>Cluster Overview</strong> — Live node status, CPU/memory utilisation, top namespaces, and resource counts refreshed every 10 seconds.
+<br><br>
+<img src="docs/screenshot-overview.png" alt="Cluster Overview">
+</td>
+<td width="50%">
+<strong>Node Detail & Metrics</strong> — kubectl describe-style detail with Prometheus metrics, events, pod list, and admin actions (cordon, drain).
+<br><br>
+<img src="docs/screenshot-node-detail.png" alt="Node Detail and Metrics">
+</td>
+</tr>
+<tr>
+<td width="50%">
+<strong>Pod Metrics & Logs</strong> — Per-pod CPU/memory graphs, live log streaming, container selector, and AI-powered diagnosis.
+<br><br>
+<img src="docs/screenshot-pod-metrics.png" alt="Pod Metrics and Logs">
+</td>
+<td width="50%">
+<strong>Spot Advisor & Cost Analysis</strong> — Spot instance risk scoring, cluster cost breakdown, and intelligent consolidation recommendations.
+<br><br>
+<img src="docs/screenshot-spot-advisor.png" alt="Spot Advisor and Cost Analysis">
+</td>
+</tr>
+</table>
 
 ---
 
