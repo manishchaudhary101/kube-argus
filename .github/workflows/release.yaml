@@ -62,13 +62,13 @@ jobs:
       - name: Set chart version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          sed -i "s/^version:.*/version: ${VERSION}/" deploy/helm/k8sdash/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" deploy/helm/k8sdash/Chart.yaml
+          sed -i "s/^version:.*/version: ${VERSION}/" deploy/helm/kube-argus/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" deploy/helm/kube-argus/Chart.yaml
           # Point image tag to this release
-          sed -i "s/^  tag:.*/  tag: ${VERSION}/" deploy/helm/k8sdash/values.yaml
+          sed -i "s/^  tag:.*/  tag: ${VERSION}/" deploy/helm/kube-argus/values.yaml
 
       - name: Package chart
-        run: helm package deploy/helm/k8sdash
+        run: helm package deploy/helm/kube-argus
 
       - name: Push chart to GHCR
-        run: helm push k8sdash-*.tgz oci://${{ env.REGISTRY }}/manishchaudhary101/charts
+        run: helm push kube-argus-*.tgz oci://${{ env.REGISTRY }}/manishchaudhary101/charts

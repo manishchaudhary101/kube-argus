@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in K8SDASH, please report it responsibly.
+If you discover a security vulnerability in Kube-Argus, please report it responsibly.
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
@@ -21,7 +21,7 @@ The following are in scope:
 
 ## Security Considerations
 
-- K8SDASH requires a Kubernetes service account with read access to cluster resources
+- Kube-Argus requires a Kubernetes service account with read access to cluster resources
 - Admin actions (pod delete, exec, scale) are gated behind the admin role
 - Session cookies use HMAC-SHA256 signing
 - OIDC tokens are verified server-side against the issuer

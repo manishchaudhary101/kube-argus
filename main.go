@@ -285,7 +285,7 @@ func setSessionCookie(w http.ResponseWriter, sd sessionData) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     "k8sdash_session",
+		Name:     "kubeargus_session",
 		Value:    val,
 		Path:     "/",
 		HttpOnly: true,
@@ -297,7 +297,7 @@ func setSessionCookie(w http.ResponseWriter, sd sessionData) {
 
 func clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "k8sdash_session",
+		Name:     "kubeargus_session",
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
@@ -388,9 +388,9 @@ func authCallback(w http.ResponseWriter, r *http.Request) {
 	log.Printf("auth: %s logged in as %s", claims.Email, role)
 
 	redirectTo := "/"
-	if rc, err := r.Cookie("k8sdash_return"); err == nil && rc.Value != "" && strings.HasPrefix(rc.Value, "/") {
+	if rc, err := r.Cookie("kubeargus_return"); err == nil && rc.Value != "" && strings.HasPrefix(rc.Value, "/") {
 		redirectTo = rc.Value
-		http.SetCookie(w, &http.Cookie{Name: "k8sdash_return", Value: "", Path: "/", MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{Name: "kubeargus_return", Value: "", Path: "/", MaxAge: -1})
 	}
 	http.Redirect(w, r, redirectTo, http.StatusFound)
 }
@@ -453,7 +453,7 @@ func authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		cookie, err := r.Cookie("k8sdash_session")
+		cookie, err := r.Cookie("kubeargus_session")
 		if err != nil {
 			if strings.HasPrefix(path, "/api/") {
 				w.Header().Set("Content-Type", "application/json")
@@ -462,7 +462,7 @@ func authMiddleware(next http.Handler) http.Handler {
 			} else {
 				returnTo := r.URL.RequestURI()
 				if returnTo != "" && returnTo != "/" {
-					http.SetCookie(w, &http.Cookie{Name: "k8sdash_return", Value: returnTo, Path: "/", HttpOnly: true, MaxAge: 300, SameSite: http.SameSiteLaxMode})
+					http.SetCookie(w, &http.Cookie{Name: "kubeargus_return", Value: returnTo, Path: "/", HttpOnly: true, MaxAge: 300, SameSite: http.SameSiteLaxMode})
 				}
 				http.Redirect(w, r, "/auth/login", http.StatusFound)
 			}
@@ -479,7 +479,7 @@ func authMiddleware(next http.Handler) http.Handler {
 			} else {
 				returnTo := r.URL.RequestURI()
 				if returnTo != "" && returnTo != "/" {
-					http.SetCookie(w, &http.Cookie{Name: "k8sdash_return", Value: returnTo, Path: "/", HttpOnly: true, MaxAge: 300, SameSite: http.SameSiteLaxMode})
+					http.SetCookie(w, &http.Cookie{Name: "kubeargus_return", Value: returnTo, Path: "/", HttpOnly: true, MaxAge: 300, SameSite: http.SameSiteLaxMode})
 				}
 				http.Redirect(w, r, "/auth/login", http.StatusFound)
 			}
@@ -1767,7 +1767,7 @@ func main() {
 	if p := os.Getenv("PORT"); p != "" {
 		addr = ":" + p
 	}
-	log.Printf("k8s-dash listening on %s", addr)
+	log.Printf("kube-argus listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, authMiddleware(corsWrap(mux))))
 }
 

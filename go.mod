@@ -1,4 +1,4 @@
-module k8s-dash
+module kube-argus
 
 go 1.19
 

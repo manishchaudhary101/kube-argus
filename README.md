@@ -1,4 +1,4 @@
-# K8SDASH
+# Kube-Argus
 
 **The real-time Kubernetes dashboard that SREs actually need.** Live cluster state every 10 seconds, streaming pod logs, interactive shell, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
 
@@ -36,9 +36,9 @@
 
 ---
 
-## Why K8SDASH?
+## Why Kube-Argus?
 
-Most Kubernetes dashboards show you resources. K8SDASH gives you a **live, real-time operating picture** of your cluster — what's **happening now**, what it **costs**, and how to **fix** it — with the same immediacy as k9s, but in a web UI you can share with your team and put on a wall screen.
+Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, real-time operating picture** of your cluster — what's **happening now**, what it **costs**, and how to **fix** it — with the same immediacy as k9s, but in a web UI you can share with your team and put on a wall screen.
 
 ### Built for real-time operations
 
@@ -51,7 +51,7 @@ Most Kubernetes dashboards show you resources. K8SDASH gives you a **live, real-
 
 ### Feature comparison
 
-| Capability | K8SDASH | K8s Dashboard | Lens | Headlamp | k9s |
+| Capability | Kube-Argus | K8s Dashboard | Lens | Headlamp | k9s |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Live auto-refresh (10s cycle) | **Yes** | Manual | Yes | Yes | **Yes** |
 | Streaming pod logs (SSE) | **Yes** | — | Yes | Yes | **Yes** |
@@ -69,7 +69,7 @@ Most Kubernetes dashboards show you resources. K8SDASH gives you a **live, real-
 | Web-based (sharable, no install) | **Yes** | Yes | No | Yes | No |
 | Open source (Apache 2.0) | **Yes** | Yes | Freemium | Yes | Yes |
 
-**In short**: K8SDASH gives you k9s-level real-time visibility in a web UI, plus cost optimisation and AI diagnostics — all in a single binary that deploys in under a minute with no CRDs, no databases, no agents.
+**In short**: Kube-Argus gives you k9s-level real-time visibility in a web UI, plus cost optimisation and AI diagnostics — all in a single binary that deploys in under a minute with no CRDs, no databases, no agents.
 
 ---
 
@@ -178,8 +178,8 @@ Most Kubernetes dashboards show you resources. K8SDASH gives you a **live, real-
 
 ```bash
 # Clone the repository
-git clone https://github.com/manishchaudhary101/k8sdash.git
-cd k8sdash
+git clone https://github.com/manishchaudhary101/kube-argus.git
+cd kube-argus
 
 # Build the frontend
 cd web && npm install && npm run build && cd ..
@@ -193,25 +193,25 @@ Open http://localhost:8080.
 ### With Docker
 
 ```bash
-docker build -t k8sdash .
+docker build -t kube-argus .
 docker run -p 8080:8080 \
   -v ~/.kube/config:/root/.kube/config:ro \
-  k8sdash
+  kube-argus
 ```
 
 ### On Kubernetes (Helm)
 
 ```bash
-helm install k8sdash oci://ghcr.io/manishchaudhary101/charts/k8sdash \
+helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
   --set env.CLUSTER_NAME="my-cluster"
 ```
 
 To customise, download the default values and edit:
 
 ```bash
-helm show values oci://ghcr.io/manishchaudhary101/charts/k8sdash > values.yaml
+helm show values oci://ghcr.io/manishchaudhary101/charts/kube-argus > values.yaml
 # Edit values.yaml, then:
-helm install k8sdash oci://ghcr.io/manishchaudhary101/charts/k8sdash -f values.yaml
+helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus -f values.yaml
 ```
 
 ### On Kubernetes (plain manifests)
@@ -313,7 +313,7 @@ When `AWS_SECRET_NAME` is set, the app loads config values from Secrets Manager 
 
 ## Cluster Impact
 
-K8SDASH is designed to be lightweight despite its real-time nature:
+Kube-Argus is designed to be lightweight despite its real-time nature:
 - **Cached**: All K8s list operations are cached in-memory, refreshed every **10 seconds** server-side
 - **Single connection**: One set of API calls per refresh cycle, **not per-user** — 100 users don't mean 100x API load
 - **Read-only**: No write operations to the K8s API (except admin actions: cordon, drain, scale, restart, delete, exec)
@@ -331,7 +331,7 @@ The service account needs the following permissions:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: k8sdash
+  name: kube-argus
 rules:
   - apiGroups: [""]
     resources: [nodes, pods, pods/log, services, events, configmaps, secrets, namespaces, resourcequotas]

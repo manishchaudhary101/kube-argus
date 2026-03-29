@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: k8sdash
-  namespace: k8sdash
+  name: kube-argus
+  namespace: kube-argus
   labels:
-    app: k8sdash
+    app: kube-argus
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: k8sdash
+      app: kube-argus
   template:
     metadata:
       labels:
-        app: k8sdash
+        app: kube-argus
     spec:
-      serviceAccountName: k8sdash
+      serviceAccountName: kube-argus
       containers:
-        - name: k8sdash
-          image: ghcr.io/manishchaudhary101/k8sdash:latest
+        - name: kube-argus
+          image: ghcr.io/manishchaudhary101/kube-argus:latest
           ports:
             - containerPort: 8080
               name: http
@@ -43,7 +43,7 @@ spec:
               memory: 512Mi
           envFrom:
             - secretRef:
-                name: k8sdash-config
+                name: kube-argus-config
                 optional: true
           env:
             - name: PORT
@@ -54,8 +54,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: k8sdash
-  namespace: k8sdash
+  name: kube-argus
+  namespace: kube-argus
 spec:
   type: ClusterIP
   ports:
@@ -63,4 +63,4 @@ spec:
       targetPort: http
       name: http
   selector:
-    app: k8sdash
+    app: kube-argus

@@ -1,4 +1,4 @@
-# Contributing to K8SDASH
+# Contributing to Kube-Argus
 
 Thanks for your interest in contributing! This document covers everything you need to get started.
 
@@ -31,8 +31,8 @@ The Vite dev server proxies `/api` and `/auth` to `localhost:8080`, so open http
 
 ```bash
 cd web && npm run build && cd ..
-go build -o k8sdash main.go
-./k8sdash
+go build -o kube-argus main.go
+./kube-argus
 ```
 
 The Go binary serves the built frontend from `web/dist/`.

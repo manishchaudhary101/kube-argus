@@ -1,6 +1,5 @@
 # Build output
-k8s-dash
-k8sdash
+/kube-argus
 *.exe
 
 # Frontend
