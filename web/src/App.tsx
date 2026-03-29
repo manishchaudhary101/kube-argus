@@ -4552,7 +4552,7 @@ function App() {
     <div className="flex h-full items-center justify-center bg-hull-950 pt-safe">
       <div className="mx-4 w-full max-w-sm text-center">
         <div className="stat-card ring-glow p-8">
-          <h1 className="text-2xl font-extrabold tracking-wider text-white mb-1">KUBE<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
+          <h1 className="text-2xl font-extrabold tracking-wider text-white mb-1">KUBE-<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
           <p className="text-xs text-gray-500 mb-6">Kubernetes Cluster Dashboard</p>
           {authModeHint === 'google' ? (
             <a href="/auth/login" className="inline-flex items-center gap-3 rounded-xl bg-white/[.06] border border-white/10 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-white/10 hover:border-white/20 no-underline">
@@ -4649,7 +4649,7 @@ function App() {
         {/* Sidebar */}
         <aside onMouseLeave={() => setSideOpen(false)} className={`fixed left-0 top-0 z-50 flex h-full w-56 flex-col border-r border-hull-700/40 bg-hull-950/95 backdrop-blur-xl transition-transform duration-300 ease-out pt-safe ${sideOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-hull-700/30">
-            <h1 className="text-sm font-extrabold tracking-wider text-white">KUBE<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
+            <h1 className="text-sm font-extrabold tracking-wider text-white">KUBE-<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
             <button onClick={() => setSideOpen(false)} className="rounded-lg p-1 text-gray-500 hover:text-white transition-colors">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
@@ -4690,7 +4690,7 @@ function App() {
                 <button onClick={() => setSideOpen(true)} className="rounded-lg p-1.5 text-gray-400 hover:text-white hover:bg-hull-800/60 transition-all active:scale-90">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
                 </button>
-                <h1 className="text-sm font-extrabold tracking-wider text-white">KUBE<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
+                <h1 className="text-sm font-extrabold tracking-wider text-white">KUBE-<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
                 {clusterInfo && <span className="hidden sm:inline rounded-lg bg-gradient-to-r from-amber-950/40 to-amber-950/20 border border-amber-900/20 px-2 py-0.5 font-mono text-[10px] text-neon-amber">{clusterInfo.name}</span>}
               </div>
               <div className="flex items-center gap-2">
