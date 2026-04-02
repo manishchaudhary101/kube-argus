@@ -97,6 +97,18 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 
 **In short**: Kube-Argus gives you k9s-level real-time visibility in a web UI, plus cost optimisation and AI diagnostics — all in a ~30 MB image that deploys in under a minute with no CRDs, no databases, no agents.
 
+### Works on
+
+| Platform | Support Level | Notes |
+|----------|:---:|---|
+| **Amazon EKS** | Full | All features including Spot Advisor, cost analysis, and spot interruption tracking |
+| **Google GKE** | Core + Metrics | All features except Spot Advisor (GCP Spot VMs use different APIs) |
+| **Azure AKS** | Core + Metrics | All features except Spot Advisor (Azure Spot VMs use different APIs) |
+| **Minikube / kind / k3s** | Core | All features except cloud-specific cost analysis and spot features |
+| **Self-managed / on-prem** | Core + Metrics | Full functionality with Prometheus; no cloud cost features |
+
+> Spot Advisor and cost analysis are currently EKS-specific. Cloud-agnostic support for GCP and Azure spot instances is on the roadmap.
+
 ---
 
 ## Features
@@ -244,12 +256,20 @@ go run main.go
 
 Open http://localhost:8080.
 
+### With Docker Compose (easiest for local eval)
+
+```bash
+docker compose up
+```
+
+This uses the pre-built image from GHCR, mounts your kubeconfig, and starts the dashboard on http://localhost:8080. Edit `docker-compose.yaml` to configure auth, Prometheus, or AI diagnosis.
+
 ### With Docker
 
 ```bash
 docker build -t kube-argus .
 docker run -p 8080:8080 \
-  -v ~/.kube/config:/root/.kube/config:ro \
+  -v ~/.kube/config:/home/nobody/.kube/config:ro \
   kube-argus
 ```
 

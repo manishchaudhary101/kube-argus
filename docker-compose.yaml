@@ -1,0 +1,25 @@
+services:
+  kube-argus:
+    image: ghcr.io/manishchaudhary101/kube-argus:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${KUBECONFIG:-~/.kube/config}:/home/nobody/.kube/config:ro
+    environment:
+      - CLUSTER_NAME=${CLUSTER_NAME:-my-cluster}
+      - DEFAULT_ROLE=${DEFAULT_ROLE:-admin}
+      # ── Authentication (optional) ──
+      # - GOOGLE_CLIENT_ID=
+      # - GOOGLE_CLIENT_SECRET=
+      # - OIDC_ISSUER=
+      # - OIDC_CLIENT_ID=
+      # - OIDC_CLIENT_SECRET=
+      # ── Prometheus metrics (optional) ──
+      # - PROMETHEUS_URL=http://prometheus:9090
+      # - PROMETHEUS_USER=
+      # - PROMETHEUS_KEY=
+      # ── AI diagnosis (optional) ──
+      # - LLM_GATEWAY_URL=
+      # - LLM_GATEWAY_KEY=
+      # - LLM_GATEWAY_MODEL=
+    restart: unless-stopped
