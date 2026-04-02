@@ -17,7 +17,7 @@ COPY cmd/server/ ./cmd/server/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-s -w" -o kube-argus ./cmd/server
 
 # ── Stage 3: Final image ────────────────────────────────────────────
-FROM alpine:3.19
+FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=backend /app/kube-argus .
