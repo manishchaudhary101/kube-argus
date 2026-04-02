@@ -2,6 +2,18 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.1.3] — 2026-04-02
+
+### Refactor
+
+- **Backend restructured** — Split monolithic 7,000-line `main.go` into 20 domain-organized Go files under `cmd/server/` following idiomatic Go project layout
+- **Frontend restructured** — Split 6,350-line `App.tsx` into 40 TypeScript files organized by concern (types, hooks, components, views, layout)
+- **Dockerfile updated** to build from `cmd/server/`
+- **ArtifactHub listing** — Chart now includes README, annotations, and maintainer metadata
+- Zero logic changes — pure structural split, compiled output is identical
+
+---
+
 ## [v1.1.1] — 2026-04-02
 
 ### Security
