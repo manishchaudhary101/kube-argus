@@ -2,6 +2,19 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.1.4] — 2026-04-02
+
+### Security
+
+- **Alpine base image upgraded from 3.19 → 3.21**, resolving 6 CVEs in busybox and ssl_client (CVE-2024-58251, CVE-2025-46394)
+
+### Improvements
+
+- **ArtifactHub** — Added values schema for configuration table, verified publisher metadata, and all 4 screenshots
+- Updated project tagline across README and Helm chart
+
+---
+
 ## [v1.1.3] — 2026-04-02
 
 ### Refactor
