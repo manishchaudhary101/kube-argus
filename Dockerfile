@@ -24,4 +24,5 @@ COPY --from=backend /app/kube-argus .
 COPY --from=frontend /app/web/dist ./web/dist
 
 EXPOSE 8080
+USER nobody
 ENTRYPOINT ["./kube-argus"]

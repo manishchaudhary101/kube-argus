@@ -18,6 +18,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +42,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"sort"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -93,6 +96,109 @@ func envWithFallback(primary, legacy string) string {
 		return v
 	}
 	return os.Getenv(legacy)
+}
+
+// ─── Audit Trail ────────────────────────────────────────────────────
+
+type auditEntry struct {
+	Time     time.Time `json:"time"`
+	Actor    string    `json:"actor"`
+	Role     string    `json:"role"`
+	Action   string    `json:"action"`
+	Resource string    `json:"resource,omitempty"`
+	Detail   string    `json:"detail,omitempty"`
+	IP       string    `json:"ip"`
+}
+
+var auditTrail struct {
+	mu      sync.Mutex
+	entries []auditEntry
+}
+
+const auditMaxEntries = 1000
+
+// ─── Online Users ───────────────────────────────────────────────────
+
+type onlineUser struct {
+	Email    string    `json:"email"`
+	Role     string    `json:"role"`
+	LastSeen time.Time `json:"lastSeen"`
+	IP       string    `json:"ip"`
+}
+
+var onlineUsers struct {
+	mu    sync.Mutex
+	users map[string]*onlineUser
+}
+
+func trackUser(email, role, ip string) {
+	onlineUsers.mu.Lock()
+	if onlineUsers.users == nil {
+		onlineUsers.users = make(map[string]*onlineUser)
+	}
+	onlineUsers.users[email] = &onlineUser{Email: email, Role: role, LastSeen: time.Now(), IP: ip}
+	onlineUsers.mu.Unlock()
+}
+
+func getOnlineUsers() []onlineUser {
+	onlineUsers.mu.Lock()
+	defer onlineUsers.mu.Unlock()
+	cutoff := time.Now().Add(-5 * time.Minute)
+	out := make([]onlineUser, 0)
+	for k, u := range onlineUsers.users {
+		if u.LastSeen.Before(cutoff) {
+			delete(onlineUsers.users, k)
+			continue
+		}
+		out = append(out, *u)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	return out
+}
+
+func auditRecord(actor, role, action, resource, detail, ip string) {
+	e := auditEntry{
+		Time: time.Now(), Actor: actor, Role: role,
+		Action: action, Resource: resource, Detail: detail, IP: ip,
+	}
+	auditTrail.mu.Lock()
+	auditTrail.entries = append([]auditEntry{e}, auditTrail.entries...)
+	if len(auditTrail.entries) > auditMaxEntries {
+		auditTrail.entries = auditTrail.entries[:auditMaxEntries]
+	}
+	auditTrail.mu.Unlock()
+	log.Printf("audit: %s %s %s %s %s", actor, action, resource, detail, ip)
+}
+
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		parts := strings.SplitN(fwd, ",", 2)
+		return strings.TrimSpace(parts[0])
+	}
+	host, _, _ := strings.Cut(r.RemoteAddr, ":")
+	return host
+}
+
+func apiAudit(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) { return }
+	action := r.URL.Query().Get("action")
+	auditTrail.mu.Lock()
+	src := make([]auditEntry, len(auditTrail.entries))
+	copy(src, auditTrail.entries)
+	auditTrail.mu.Unlock()
+	if action != "" {
+		filtered := make([]auditEntry, 0)
+		for _, e := range src {
+			if e.Action == action { filtered = append(filtered, e) }
+		}
+		src = filtered
+	}
+	limit := 200
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= auditMaxEntries { limit = n }
+	}
+	if len(src) > limit { src = src[:limit] }
+	j(w, src)
 }
 
 func loadSecretsFromAWS() {
@@ -386,6 +492,7 @@ func authCallback(w http.ResponseWriter, r *http.Request) {
 	sd := sessionData{Email: claims.Email, Role: role, Exp: time.Now().Add(sessionTTL).Unix()}
 	setSessionCookie(w, sd)
 	log.Printf("auth: %s logged in as %s", claims.Email, role)
+	auditRecord(claims.Email, role, "login", "", "role: "+role, clientIP(r))
 
 	redirectTo := "/"
 	if rc, err := r.Cookie("kubeargus_return"); err == nil && rc.Value != "" && strings.HasPrefix(rc.Value, "/") {
@@ -396,6 +503,9 @@ func authCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func authLogout(w http.ResponseWriter, r *http.Request) {
+	if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {
+		auditRecord(sd.Email, sd.Role, "logout", "", "", clientIP(r))
+	}
 	clearSessionCookie(w)
 	if oidcIssuer != "" && oidcProvider != nil && oauthConfig != nil {
 		scheme := "https"
@@ -486,6 +596,7 @@ func authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		trackUser(sd.Email, sd.Role, clientIP(r))
 		ctx := context.WithValue(r.Context(), userCtxKey, sd)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -548,11 +659,57 @@ type configMeta struct {
 
 var cache = &clusterCache{}
 
+const sparklineMaxPoints = 30
+
+type sparklineBuffer struct {
+	mu     sync.Mutex
+	points map[string][][2]int64 // key=ns/name -> ring of [cpu_m, mem_mi]
+	idx    int
+	count  int
+}
+
+var podSparklines = &sparklineBuffer{points: map[string][][2]int64{}}
+
+func (sb *sparklineBuffer) record(podMetricsMap map[string][2]int64) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	seen := map[string]bool{}
+	for key, usage := range podMetricsMap {
+		seen[key] = true
+		ring, ok := sb.points[key]
+		if !ok {
+			ring = make([][2]int64, sparklineMaxPoints)
+			sb.points[key] = ring
+		}
+		ring[sb.idx] = usage
+	}
+	for key := range sb.points {
+		if !seen[key] { delete(sb.points, key) }
+	}
+	sb.idx = (sb.idx + 1) % sparklineMaxPoints
+	if sb.count < sparklineMaxPoints { sb.count++ }
+}
+
+func (sb *sparklineBuffer) snapshot() map[string][][2]int64 {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	out := make(map[string][][2]int64, len(sb.points))
+	for key, ring := range sb.points {
+		n := sb.count
+		ordered := make([][2]int64, 0, n)
+		start := (sb.idx - n + sparklineMaxPoints) % sparklineMaxPoints
+		for i := 0; i < n; i++ {
+			ordered = append(ordered, ring[(start+i)%sparklineMaxPoints])
+		}
+		out[key] = ordered
+	}
+	return out
+}
+
 func (c *clusterCache) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var wg sync.WaitGroup
 	var nodes *corev1.NodeList
 	var pods *corev1.PodList
 	var deps *appsv1.DeploymentList
@@ -572,30 +729,91 @@ func (c *clusterCache) refresh() {
 	var pdbs *policyv1.PodDisruptionBudgetList
 	var rsList *appsv1.ReplicaSetList
 
-	wg.Add(15)
-	go func() { defer wg.Done(); nodes, _ = clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{}) }()
-	go func() { defer wg.Done(); pods, _ = clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{}) }()
+	storeBatch := func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if nodes != nil { c.nodes = nodes }
+		if pods != nil { c.pods = pods }
+		if deps != nil { c.deployments = deps }
+		if sts != nil { c.statefulsets = sts }
+		if ds != nil { c.daemonsets = ds }
+		if svcs != nil { c.services = svcs }
+		if jobs != nil { c.jobs = jobs }
+		if cjobs != nil { c.cronjobs = cjobs }
+		if nsList != nil { c.namespaces = nsList }
+		if events != nil { c.events = events }
+		if ings != nil { c.ingresses = ings }
+		if hpas != nil { c.hpas = hpas }
+		if cmMeta != nil { c.configMeta = cmMeta }
+		if secMeta != nil { c.secretMeta = secMeta }
+		if nodeMetrics != nil { c.nodeMetrics = nodeMetrics }
+		if podMetrics != nil { c.podMetrics = podMetrics }
+		if pdbs != nil { c.pdbs = pdbs }
+		if rsList != nil { c.replicasets = rsList }
+		c.lastRefresh = time.Now()
+	}
+
+	// Batch 1: critical path — nodes, pods, metrics, namespaces (overview needs these)
+	var wg1 sync.WaitGroup
+	wg1.Add(5)
+	go func() { defer wg1.Done(); nodes, _ = clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg1.Done(); pods, _ = clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg1.Done(); nsList, _ = clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{}) }()
 	go func() {
-		defer wg.Done()
+		defer wg1.Done()
+		if metricsCl != nil { nodeMetrics, _ = metricsCl.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{}) }
+	}()
+	go func() {
+		defer wg1.Done()
+		if metricsCl != nil { podMetrics, _ = metricsCl.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{}) }
+	}()
+	wg1.Wait()
+	storeBatch()
+
+	if podMetrics != nil {
+		pm := map[string][2]int64{}
+		for _, m := range podMetrics.Items {
+			var cpu, mem int64
+			for _, c := range m.Containers {
+				cpu += c.Usage.Cpu().MilliValue()
+				mem += c.Usage.Memory().Value() / (1024 * 1024)
+			}
+			pm[m.Namespace+"/"+m.Name] = [2]int64{cpu, mem}
+		}
+		podSparklines.record(pm)
+	}
+
+	runtime.Gosched()
+
+	// Batch 2: workloads + events
+	var wg2 sync.WaitGroup
+	wg2.Add(6)
+	go func() {
+		defer wg2.Done()
 		deps, _ = clientset.AppsV1().Deployments("").List(ctx, metav1.ListOptions{})
 		sts, _ = clientset.AppsV1().StatefulSets("").List(ctx, metav1.ListOptions{})
 		ds, _ = clientset.AppsV1().DaemonSets("").List(ctx, metav1.ListOptions{})
 	}()
+	go func() { defer wg2.Done(); svcs, _ = clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{}) }()
 	go func() {
-		defer wg.Done()
-		svcs, _ = clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
-	}()
-	go func() {
-		defer wg.Done()
+		defer wg2.Done()
 		jobs, _ = clientset.BatchV1().Jobs("").List(ctx, metav1.ListOptions{})
 		cjobs, _ = clientset.BatchV1().CronJobs("").List(ctx, metav1.ListOptions{})
 	}()
-	go func() { defer wg.Done(); nsList, _ = clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{}) }()
-	go func() { defer wg.Done(); events, _ = clientset.CoreV1().Events("").List(ctx, metav1.ListOptions{}) }()
-	go func() { defer wg.Done(); ings, _ = clientset.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{}) }()
-	go func() { defer wg.Done(); hpas, _ = clientset.AutoscalingV2().HorizontalPodAutoscalers("").List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg2.Done(); events, _ = clientset.CoreV1().Events("").List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg2.Done(); rsList, _ = clientset.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg2.Done(); pdbs, _ = clientset.PolicyV1().PodDisruptionBudgets("").List(ctx, metav1.ListOptions{}) }()
+	wg2.Wait()
+	storeBatch()
+	runtime.Gosched()
+
+	// Batch 3: secondary resources — configs, secrets, ingresses, HPAs
+	var wg3 sync.WaitGroup
+	wg3.Add(4)
+	go func() { defer wg3.Done(); ings, _ = clientset.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg3.Done(); hpas, _ = clientset.AutoscalingV2().HorizontalPodAutoscalers("").List(ctx, metav1.ListOptions{}) }()
 	go func() {
-		defer wg.Done()
+		defer wg3.Done()
 		if result, err := clientset.CoreV1().ConfigMaps("").List(ctx, metav1.ListOptions{}); err == nil {
 			meta := make([]configMeta, 0, len(result.Items))
 			for _, cm := range result.Items {
@@ -618,7 +836,7 @@ func (c *clusterCache) refresh() {
 		}
 	}()
 	go func() {
-		defer wg.Done()
+		defer wg3.Done()
 		if result, err := clientset.CoreV1().Secrets("").List(ctx, metav1.ListOptions{}); err == nil {
 			meta := make([]configMeta, 0, len(result.Items))
 			for _, s := range result.Items {
@@ -638,43 +856,8 @@ func (c *clusterCache) refresh() {
 			secMeta = meta
 		}
 	}()
-	go func() {
-		defer wg.Done()
-		if metricsCl != nil {
-			nodeMetrics, _ = metricsCl.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		if metricsCl != nil {
-			podMetrics, _ = metricsCl.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{})
-		}
-	}()
-	go func() { defer wg.Done(); pdbs, _ = clientset.PolicyV1().PodDisruptionBudgets("").List(ctx, metav1.ListOptions{}) }()
-	go func() { defer wg.Done(); rsList, _ = clientset.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{}) }()
-	wg.Wait()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if nodes != nil { c.nodes = nodes }
-	if pods != nil { c.pods = pods }
-	if deps != nil { c.deployments = deps }
-	if sts != nil { c.statefulsets = sts }
-	if ds != nil { c.daemonsets = ds }
-	if svcs != nil { c.services = svcs }
-	if jobs != nil { c.jobs = jobs }
-	if cjobs != nil { c.cronjobs = cjobs }
-	if nsList != nil { c.namespaces = nsList }
-	if events != nil { c.events = events }
-	if ings != nil { c.ingresses = ings }
-	if hpas != nil { c.hpas = hpas }
-	if cmMeta != nil { c.configMeta = cmMeta }
-	if secMeta != nil { c.secretMeta = secMeta }
-	if nodeMetrics != nil { c.nodeMetrics = nodeMetrics }
-	if podMetrics != nil { c.podMetrics = podMetrics }
-	if pdbs != nil { c.pdbs = pdbs }
-	if rsList != nil { c.replicasets = rsList }
-	c.lastRefresh = time.Now()
+	wg3.Wait()
+	storeBatch()
 }
 
 func startCacheLoop() {
@@ -1670,6 +1853,8 @@ func estimateOnDemandHourly(instanceType string) float64 {
 }
 
 func main() {
+	loadSecretsFromAWS()
+
 	cfg, err := kubeConfig()
 	if err != nil {
 		log.Fatalf("kubeconfig: %v", err)
@@ -1682,7 +1867,10 @@ func main() {
 	metricsCl, _ = metricsv.NewForConfig(cfg)
 
 	log.Println("warming cache...")
+	prevGC := debug.SetGCPercent(400) // reduce GC frequency during large initial allocation
 	startCacheLoop()
+	debug.SetGCPercent(prevGC)
+	runtime.GC() // single compaction after initial cache is populated
 	log.Println("cache ready")
 
 	startSpotAdvisorLoop()
@@ -1705,6 +1893,7 @@ func main() {
 	mux.HandleFunc("/api/workloads/", apiWorkloadAction)
 	mux.HandleFunc("/api/search", apiSearch)
 	mux.HandleFunc("/api/pods", apiPods)
+	mux.HandleFunc("/api/pod-sparklines", apiPodSparklines)
 	mux.HandleFunc("/api/pods/", apiPodDetail)
 	mux.HandleFunc("/api/ingresses", apiIngresses)
 	mux.HandleFunc("/api/ingresses/", apiIngressDescribe)
@@ -1715,6 +1904,7 @@ func main() {
 	mux.HandleFunc("/api/configs/", apiConfigData)
 	mux.HandleFunc("/api/exec", apiExec)
 	mux.HandleFunc("/api/spot-advisor", apiSpotAdvisor)
+	mux.HandleFunc("/api/spot-interruptions", apiSpotInterruptions)
 	mux.HandleFunc("/api/topology-spread", apiTopologySpread)
 	mux.HandleFunc("/api/metrics/node", apiMetricsNode)
 	mux.HandleFunc("/api/metrics/pod", apiMetricsPod)
@@ -1729,6 +1919,14 @@ func main() {
 	mux.HandleFunc("/api/namespaces", apiNamespaces)
 	mux.HandleFunc("/api/cluster-info", func(w http.ResponseWriter, r *http.Request) {
 		j(w, map[string]string{"name": clusterName})
+	})
+	mux.HandleFunc("/api/storage", apiStorage)
+	mux.HandleFunc("/api/config-drift", apiConfigDrift)
+	mux.HandleFunc("/api/yaml/", apiYaml)
+	mux.HandleFunc("/api/audit", apiAudit)
+	mux.HandleFunc("/api/online-users", func(w http.ResponseWriter, r *http.Request) {
+		if !requireAdmin(w, r) { return }
+		j(w, getOnlineUsers())
 	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1768,7 +1966,7 @@ func main() {
 		addr = ":" + p
 	}
 	log.Printf("kube-argus listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, authMiddleware(corsWrap(mux))))
+	log.Fatal(http.ListenAndServe(addr, gzipWrap(authMiddleware(corsWrap(mux)))))
 }
 
 func kubeConfig() (*rest.Config, error) {
@@ -1817,21 +2015,42 @@ func corsWrap(h http.Handler) http.Handler {
 	})
 }
 
+type gzResponseWriter struct {
+	http.ResponseWriter
+	gz *gzip.Writer
+}
+
+func (g *gzResponseWriter) Write(b []byte) (int, error) { return g.gz.Write(b) }
+
+func gzipWrap(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			h.ServeHTTP(w, r)
+			return
+		}
+		p := r.URL.Path
+		if p == "/api/exec" || p == "/api/events" || p == "/api/ai/diagnose" || strings.HasSuffix(p, "/agglogs") || r.URL.Query().Get("follow") == "true" || (strings.HasSuffix(p, "/drain") && r.URL.Query().Get("stream") == "true") {
+			h.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(p, "/api/") {
+			w.Header().Set("Content-Encoding", "gzip")
+			gz := gzip.NewWriter(w)
+			defer gz.Close()
+			h.ServeHTTP(&gzResponseWriter{ResponseWriter: w, gz: gz}, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
 func j(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
 }
 
-func jGz(w http.ResponseWriter, r *http.Request, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		w.Header().Set("Content-Encoding", "gzip")
-		gz := gzip.NewWriter(w)
-		defer gz.Close()
-		json.NewEncoder(gz).Encode(v)
-		return
-	}
-	json.NewEncoder(w).Encode(v)
+func jGz(w http.ResponseWriter, _ *http.Request, v interface{}) {
+	j(w, v)
 }
 
 func ctx() (context.Context, context.CancelFunc) {
@@ -2244,13 +2463,13 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 						readyCt++
 					}
 				}
-				pods = append(pods, podSummary{
-					Name:   p.Name,
-					NS:     p.Namespace,
-					Status: string(p.Status.Phase),
-					Ready:  fmt.Sprintf("%d/%d", readyCt, totalCt),
-					Age:    shortDur(time.Since(p.CreationTimestamp.Time)),
-				})
+			pods = append(pods, podSummary{
+				Name:   p.Name,
+				NS:     p.Namespace,
+				Status: podDisplayStatus(p),
+				Ready:  fmt.Sprintf("%d/%d", readyCt, totalCt),
+				Age:    shortDur(time.Since(p.CreationTimestamp.Time)),
+			})
 			}
 		}
 
@@ -2330,12 +2549,202 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method != "POST" {
+	if action == "pod-usage" {
+		cache.mu.RLock()
+		defer cache.mu.RUnlock()
+
+		var allocCPU, allocMem int64
+		if cache.nodes != nil {
+			for i := range cache.nodes.Items {
+				if cache.nodes.Items[i].Name == name {
+					allocCPU = cache.nodes.Items[i].Status.Allocatable.Cpu().MilliValue()
+					allocMem = cache.nodes.Items[i].Status.Allocatable.Memory().Value() / (1024 * 1024)
+					break
+				}
+			}
+		}
+		if allocCPU == 0 {
+			http.Error(w, "node not found", 404)
+			return
+		}
+
+		pmMap := map[string][2]int64{}
+		if cache.podMetrics != nil {
+			for _, m := range cache.podMetrics.Items {
+				var cpu, mem int64
+				for _, ct := range m.Containers {
+					cpu += ct.Usage.Cpu().MilliValue()
+					mem += ct.Usage.Memory().Value() / (1024 * 1024)
+				}
+				pmMap[m.Namespace+"/"+m.Name] = [2]int64{cpu, mem}
+			}
+		}
+
+		type puPod struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+			CpuUsedM  int64  `json:"cpuUsedM"`
+			MemUsedMi int64  `json:"memUsedMi"`
+			CpuReqM   int64  `json:"cpuReqM"`
+			CpuLimM   int64  `json:"cpuLimM"`
+			MemReqMi  int64  `json:"memReqMi"`
+			MemLimMi  int64  `json:"memLimMi"`
+			Status    string `json:"status"`
+			Ready     string `json:"ready"`
+			Age       string `json:"age"`
+		}
+
+		var pods []puPod
+		var totalCPU, totalMem int64
+		if cache.pods != nil {
+			for _, p := range cache.pods.Items {
+				if p.Spec.NodeName != name { continue }
+				if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed { continue }
+
+				usage := pmMap[p.Namespace+"/"+p.Name]
+				var cpuReq, cpuLim, memReq, memLim int64
+				for _, ct := range p.Spec.Containers {
+					cpuReq += ct.Resources.Requests.Cpu().MilliValue()
+					cpuLim += ct.Resources.Limits.Cpu().MilliValue()
+					memReq += ct.Resources.Requests.Memory().Value() / (1024 * 1024)
+					memLim += ct.Resources.Limits.Memory().Value() / (1024 * 1024)
+				}
+
+				readyCt, totalCt := 0, len(p.Spec.Containers)
+				for _, cs := range p.Status.ContainerStatuses {
+					if cs.Ready { readyCt++ }
+				}
+
+				totalCPU += usage[0]
+				totalMem += usage[1]
+				pods = append(pods, puPod{
+					Name: p.Name, Namespace: p.Namespace,
+					CpuUsedM: usage[0], MemUsedMi: usage[1],
+					CpuReqM: cpuReq, CpuLimM: cpuLim,
+					MemReqMi: memReq, MemLimMi: memLim,
+					Status: podDisplayStatus(p),
+					Ready: fmt.Sprintf("%d/%d", readyCt, totalCt),
+					Age: shortDur(time.Since(p.CreationTimestamp.Time)),
+				})
+			}
+		}
+
+		sort.Slice(pods, func(i, k int) bool { return pods[i].CpuUsedM > pods[k].CpuUsedM })
+
+		cpuPct, memPct := 0, 0
+		if allocCPU > 0 { cpuPct = int(totalCPU * 100 / allocCPU) }
+		if allocMem > 0 { memPct = int(totalMem * 100 / allocMem) }
+
+		if pods == nil { pods = []puPod{} }
+		j(w, map[string]interface{}{
+			"node":     map[string]int64{"allocCpuM": allocCPU, "allocMemMi": allocMem},
+			"pods":     pods,
+			"pressure": map[string]int{"cpuPct": cpuPct, "memPct": memPct},
+		})
+		return
+	}
+
+	if action == "drain-preview" {
+		c, cancel := ctx()
+		defer cancel()
+		pods, err := clientset.CoreV1().Pods("").List(c, metav1.ListOptions{FieldSelector: "spec.nodeName=" + name})
+		if err != nil { http.Error(w, err.Error(), 500); return }
+
+		cache.mu.RLock()
+		pdbList := cache.pdbs
+		cache.mu.RUnlock()
+
+		type podEntry struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+			Owner     string `json:"owner"`
+			OwnerKind string `json:"ownerKind"`
+			Category  string `json:"category"`
+			Warning   string `json:"warning,omitempty"`
+			PDBName   string `json:"pdbName,omitempty"`
+			PDBAllow  int32  `json:"pdbAllow,omitempty"`
+		}
+		var entries []podEntry
+		summary := map[string]int{"total": 0, "evictable": 0, "daemonSet": 0, "standalone": 0, "localStorage": 0, "pdbBlocked": 0}
+
+		for _, p := range pods.Items {
+			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+				continue
+			}
+			summary["total"]++
+			ownerKind, ownerName := "", ""
+			for _, ref := range p.OwnerReferences {
+				ownerKind = ref.Kind
+				ownerName = ref.Name
+				break
+			}
+			if ownerKind == "DaemonSet" {
+				entries = append(entries, podEntry{Name: p.Name, Namespace: p.Namespace, Owner: ownerName, OwnerKind: ownerKind, Category: "daemonSet"})
+				summary["daemonSet"]++
+				continue
+			}
+			cat := "normal"
+			warn := ""
+			if ownerKind == "" {
+				cat = "standalone"
+				warn = "No controller — will NOT be rescheduled"
+				summary["standalone"]++
+			}
+			hasLocal := false
+			for _, v := range p.Spec.Volumes {
+				if v.EmptyDir != nil { hasLocal = true; break }
+			}
+			if hasLocal && cat == "normal" {
+				cat = "localStorage"
+				warn = "emptyDir data will be lost"
+				summary["localStorage"]++
+			}
+
+			var pdbName string
+			var pdbAllow int32
+			pdbBlocked := false
+			if pdbList != nil {
+				for _, pdb := range pdbList.Items {
+					if pdb.Namespace != p.Namespace { continue }
+					if pdb.Spec.Selector == nil || len(pdb.Spec.Selector.MatchLabels) == 0 { continue }
+					match := true
+					for k, v := range pdb.Spec.Selector.MatchLabels {
+						if p.Labels[k] != v { match = false; break }
+					}
+					if match {
+						pdbName = pdb.Name
+						pdbAllow = pdb.Status.DisruptionsAllowed
+						if pdbAllow == 0 {
+							pdbBlocked = true
+						}
+						break
+					}
+				}
+			}
+			if pdbBlocked && cat == "normal" {
+				cat = "pdbBlocked"
+				warn = fmt.Sprintf("PDB %s allows 0 disruptions", pdbName)
+				summary["pdbBlocked"]++
+			}
+			if cat == "normal" {
+				summary["evictable"]++
+			}
+			entry := podEntry{Name: p.Name, Namespace: p.Namespace, Owner: ownerName, OwnerKind: ownerKind, Category: cat, Warning: warn}
+			if pdbName != "" { entry.PDBName = pdbName; entry.PDBAllow = pdbAllow }
+			entries = append(entries, entry)
+		}
+		if entries == nil { entries = []podEntry{} }
+		j(w, map[string]interface{}{"pods": entries, "summary": summary})
+		return
+	}
+
+	isStreamDrain := action == "drain" && r.URL.Query().Get("stream") == "true"
+	if r.Method != "POST" && !isStreamDrain {
 		http.Error(w, "POST only", 405)
 		return
 	}
 	if !requireAdmin(w, r) { return }
-	c, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	c, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	switch action {
@@ -2356,32 +2765,53 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 		go cache.refresh()
 		j(w, map[string]string{"ok": "uncordoned"})
 	case "drain":
+		stream := r.URL.Query().Get("stream") == "true"
 		_ = patchUnschedulable(c, name, true)
 		pods, err := clientset.CoreV1().Pods("").List(c, metav1.ListOptions{FieldSelector: "spec.nodeName=" + name})
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		evicted := 0
-		for _, p := range pods.Items {
-			skip := false
-			for _, ref := range p.OwnerReferences {
-				if ref.Kind == "DaemonSet" {
-					skip = true
+		if stream {
+			flusher, ok := w.(http.Flusher)
+			if !ok { http.Error(w, "streaming not supported", 500); return }
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			evicted, failed := 0, 0
+			for _, p := range pods.Items {
+				if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed { continue }
+				isDaemon := false
+				for _, ref := range p.OwnerReferences { if ref.Kind == "DaemonSet" { isDaemon = true; break } }
+				if isDaemon { continue }
+				ev := &policyv1.Eviction{ObjectMeta: metav1.ObjectMeta{Name: p.Name, Namespace: p.Namespace}}
+				fmt.Fprintf(w, "data: {\"pod\":%q,\"ns\":%q,\"status\":\"evicting\"}\n\n", p.Name, p.Namespace)
+				flusher.Flush()
+				if err := clientset.CoreV1().Pods(p.Namespace).EvictV1(c, ev); err != nil {
+					fmt.Fprintf(w, "data: {\"pod\":%q,\"ns\":%q,\"status\":\"failed\",\"error\":%q}\n\n", p.Name, p.Namespace, err.Error())
+					flusher.Flush()
+					failed++
+				} else {
+					fmt.Fprintf(w, "data: {\"pod\":%q,\"ns\":%q,\"status\":\"evicted\"}\n\n", p.Name, p.Namespace)
+					flusher.Flush()
+					evicted++
 				}
 			}
-			if skip {
-				continue
+			fmt.Fprintf(w, "data: {\"done\":true,\"evicted\":%d,\"failed\":%d}\n\n", evicted, failed)
+			flusher.Flush()
+			go cache.refresh()
+		} else {
+			evicted := 0
+			for _, p := range pods.Items {
+				skip := false
+				for _, ref := range p.OwnerReferences { if ref.Kind == "DaemonSet" { skip = true } }
+				if skip { continue }
+				ev := &policyv1.Eviction{ObjectMeta: metav1.ObjectMeta{Name: p.Name, Namespace: p.Namespace}}
+				if err := clientset.CoreV1().Pods(p.Namespace).EvictV1(c, ev); err == nil { evicted++ }
 			}
-			ev := &policyv1.Eviction{
-				ObjectMeta: metav1.ObjectMeta{Name: p.Name, Namespace: p.Namespace},
-			}
-			if err := clientset.CoreV1().Pods(p.Namespace).EvictV1(c, ev); err == nil {
-				evicted++
-			}
+			go cache.refresh()
+			j(w, map[string]interface{}{"ok": "drained", "evicted": evicted})
 		}
-		go cache.refresh()
-		j(w, map[string]interface{}{"ok": "drained", "evicted": evicted})
 	default:
 		http.Error(w, "unknown action", 400)
 	}
@@ -2391,6 +2821,149 @@ func patchUnschedulable(c context.Context, name string, val bool) error {
 	patch := fmt.Sprintf(`{"spec":{"unschedulable":%t}}`, val)
 	_, err := clientset.CoreV1().Nodes().Patch(c, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	return err
+}
+
+// ─── Storage (PVs, PVCs, StorageClasses) ────────────────────────────
+
+func apiStorage(w http.ResponseWriter, r *http.Request) {
+	c, cancel := ctx()
+	defer cancel()
+	nsFilter := r.URL.Query().Get("namespace")
+
+	type pvcWorkload struct {
+		Kind string `json:"kind"`
+		Name string `json:"name"`
+	}
+	type pvcEntry struct {
+		Name         string       `json:"name"`
+		Namespace    string       `json:"namespace"`
+		Status       string       `json:"status"`
+		VolumeName   string       `json:"volumeName"`
+		StorageClass string       `json:"storageClass"`
+		Capacity     string       `json:"capacity"`
+		AccessModes  []string     `json:"accessModes"`
+		Age          string       `json:"age"`
+		Workload     *pvcWorkload `json:"workload,omitempty"`
+	}
+	type pvEntry struct {
+		Name          string `json:"name"`
+		Status        string `json:"status"`
+		Capacity      string `json:"capacity"`
+		ReclaimPolicy string `json:"reclaimPolicy"`
+		StorageClass  string `json:"storageClass"`
+		ClaimRef      string `json:"claimRef"`
+		Age           string `json:"age"`
+		Source        string `json:"source"`
+	}
+	type scEntry struct {
+		Name          string `json:"name"`
+		Provisioner   string `json:"provisioner"`
+		ReclaimPolicy string `json:"reclaimPolicy"`
+		BindingMode   string `json:"bindingMode"`
+		IsDefault     bool   `json:"isDefault"`
+	}
+
+	var wg sync.WaitGroup
+	var pvcList *corev1.PersistentVolumeClaimList
+	var pvList *corev1.PersistentVolumeList
+	var scList *storagev1.StorageClassList
+	var podList *corev1.PodList
+
+	wg.Add(4)
+	go func() { defer wg.Done(); pvcList, _ = clientset.CoreV1().PersistentVolumeClaims("").List(c, metav1.ListOptions{}) }()
+	go func() { defer wg.Done(); pvList, _ = clientset.CoreV1().PersistentVolumes().List(c, metav1.ListOptions{}) }()
+	go func() { defer wg.Done(); scList, _ = clientset.StorageV1().StorageClasses().List(c, metav1.ListOptions{}) }()
+	go func() { defer wg.Done(); podList, _ = clientset.CoreV1().Pods("").List(c, metav1.ListOptions{}) }()
+	wg.Wait()
+
+	pvcToWorkload := map[string]*pvcWorkload{}
+	if podList != nil {
+		for _, p := range podList.Items {
+			if p.Status.Phase != corev1.PodRunning && p.Status.Phase != corev1.PodPending { continue }
+			ownerKind, ownerName := "", ""
+			for _, ref := range p.OwnerReferences {
+				ownerKind = ref.Kind
+				ownerName = ref.Name
+				break
+			}
+			for _, vol := range p.Spec.Volumes {
+				if vol.PersistentVolumeClaim != nil {
+					key := p.Namespace + "/" + vol.PersistentVolumeClaim.ClaimName
+					if _, exists := pvcToWorkload[key]; !exists {
+						if ownerKind != "" {
+							pvcToWorkload[key] = &pvcWorkload{Kind: ownerKind, Name: ownerName}
+						} else {
+							pvcToWorkload[key] = &pvcWorkload{Kind: "Pod", Name: p.Name}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	pvcs := []pvcEntry{}
+	if pvcList != nil {
+		for _, pvc := range pvcList.Items {
+			if nsFilter != "" && pvc.Namespace != nsFilter { continue }
+			sc := ""
+			if pvc.Spec.StorageClassName != nil { sc = *pvc.Spec.StorageClassName }
+			cap := ""
+			if s, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok { cap = s.String() }
+			if cap == "" {
+				if s, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok { cap = s.String() }
+			}
+			modes := []string{}
+			for _, m := range pvc.Spec.AccessModes { modes = append(modes, string(m)) }
+			entry := pvcEntry{
+				Name: pvc.Name, Namespace: pvc.Namespace,
+				Status: string(pvc.Status.Phase), VolumeName: pvc.Spec.VolumeName,
+				StorageClass: sc, Capacity: cap, AccessModes: modes,
+				Age: shortDur(time.Since(pvc.CreationTimestamp.Time)),
+			}
+			if wl, ok := pvcToWorkload[pvc.Namespace+"/"+pvc.Name]; ok { entry.Workload = wl }
+			pvcs = append(pvcs, entry)
+		}
+	}
+
+	pvs := []pvEntry{}
+	if pvList != nil {
+		for _, pv := range pvList.Items {
+			claim := ""
+			if pv.Spec.ClaimRef != nil { claim = pv.Spec.ClaimRef.Namespace + "/" + pv.Spec.ClaimRef.Name }
+			cap := ""
+			if s, ok := pv.Spec.Capacity[corev1.ResourceStorage]; ok { cap = s.String() }
+			sc := pv.Spec.StorageClassName
+			source := "unknown"
+			if pv.Spec.CSI != nil { source = pv.Spec.CSI.Driver }
+			if pv.Spec.AWSElasticBlockStore != nil { source = "aws-ebs" }
+			if pv.Spec.NFS != nil { source = "nfs" }
+			if pv.Spec.HostPath != nil { source = "hostPath" }
+			pvs = append(pvs, pvEntry{
+				Name: pv.Name, Status: string(pv.Status.Phase), Capacity: cap,
+				ReclaimPolicy: string(pv.Spec.PersistentVolumeReclaimPolicy),
+				StorageClass: sc, ClaimRef: claim,
+				Age: shortDur(time.Since(pv.CreationTimestamp.Time)), Source: source,
+			})
+		}
+	}
+
+	scs := []scEntry{}
+	if scList != nil {
+		for _, sc := range scList.Items {
+			rp := "Delete"
+			if sc.ReclaimPolicy != nil { rp = string(*sc.ReclaimPolicy) }
+			bm := "Immediate"
+			if sc.VolumeBindingMode != nil { bm = string(*sc.VolumeBindingMode) }
+			isDef := false
+			if sc.Annotations["storageclass.kubernetes.io/is-default-class"] == "true" { isDef = true }
+			scs = append(scs, scEntry{
+				Name: sc.Name, Provisioner: sc.Provisioner,
+				ReclaimPolicy: rp, BindingMode: bm, IsDefault: isDef,
+			})
+		}
+	}
+
+	j(w, map[string]interface{}{"pvcs": pvcs, "pvs": pvs, "storageClasses": scs})
 }
 
 // ─── Workloads ───────────────────────────────────────────────────────
@@ -2405,6 +2978,12 @@ func apiWorkloads(w http.ResponseWriter, r *http.Request) {
 		Status             string `json:"status"`
 		DisruptionsAllowed int32  `json:"disruptionsAllowed"`
 	}
+	type wlStrategy struct {
+		Type           string `json:"type"`
+		MaxSurge       string `json:"maxSurge,omitempty"`
+		MaxUnavailable string `json:"maxUnavailable,omitempty"`
+		Partition      *int32 `json:"partition,omitempty"`
+	}
 	type wl struct {
 		Kind      string      `json:"kind"`
 		Name      string      `json:"name"`
@@ -2414,6 +2993,7 @@ func apiWorkloads(w http.ResponseWriter, r *http.Request) {
 		Age       string      `json:"age"`
 		Images    string      `json:"images"`
 		PDB       *pdbStatus  `json:"pdb,omitempty"`
+		Strategy  *wlStrategy `json:"strategy,omitempty"`
 		CpuReqM   int64       `json:"cpuReqM"`
 		CpuLimM   int64       `json:"cpuLimM"`
 		CpuUsedM  int64       `json:"cpuUsedM"`
@@ -2489,6 +3069,12 @@ func apiWorkloads(w http.ResponseWriter, r *http.Request) {
 			cpuUsed, memUsed := sumPodUsage(d.Namespace, d.Spec.Selector.MatchLabels)
 			entry := wl{Kind: "Deployment", Name: d.Name, NS: d.Namespace, Ready: d.Status.ReadyReplicas, Desired: desired, Age: shortDur(time.Since(d.CreationTimestamp.Time)), Images: strings.Join(imgs, ", "), CpuReqM: cpuReq, CpuLimM: cpuLim, CpuUsedM: cpuUsed, MemReqMi: memReq, MemLimMi: memLim, MemUsedMi: memUsed}
 			entry.PDB = matchPDB(d.Namespace, d.Spec.Template.Labels)
+			st := &wlStrategy{Type: string(d.Spec.Strategy.Type)}
+			if d.Spec.Strategy.RollingUpdate != nil {
+				if d.Spec.Strategy.RollingUpdate.MaxSurge != nil { st.MaxSurge = d.Spec.Strategy.RollingUpdate.MaxSurge.String() }
+				if d.Spec.Strategy.RollingUpdate.MaxUnavailable != nil { st.MaxUnavailable = d.Spec.Strategy.RollingUpdate.MaxUnavailable.String() }
+			}
+			entry.Strategy = st
 			out = append(out, entry)
 		}
 	}
@@ -2509,6 +3095,12 @@ func apiWorkloads(w http.ResponseWriter, r *http.Request) {
 			cpuUsed, memUsed := sumPodUsage(s.Namespace, s.Spec.Selector.MatchLabels)
 			entry := wl{Kind: "StatefulSet", Name: s.Name, NS: s.Namespace, Ready: s.Status.ReadyReplicas, Desired: desired, Age: shortDur(time.Since(s.CreationTimestamp.Time)), Images: strings.Join(imgs, ", "), CpuReqM: cpuReq, CpuLimM: cpuLim, CpuUsedM: cpuUsed, MemReqMi: memReq, MemLimMi: memLim, MemUsedMi: memUsed}
 			entry.PDB = matchPDB(s.Namespace, s.Spec.Template.Labels)
+			st := &wlStrategy{Type: string(s.Spec.UpdateStrategy.Type)}
+			if s.Spec.UpdateStrategy.RollingUpdate != nil && s.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+				p := *s.Spec.UpdateStrategy.RollingUpdate.Partition
+				st.Partition = &p
+			}
+			entry.Strategy = st
 			out = append(out, entry)
 		}
 	}
@@ -2527,6 +3119,12 @@ func apiWorkloads(w http.ResponseWriter, r *http.Request) {
 			cpuUsed, memUsed := sumPodUsage(d.Namespace, d.Spec.Selector.MatchLabels)
 			entry := wl{Kind: "DaemonSet", Name: d.Name, NS: d.Namespace, Ready: d.Status.NumberReady, Desired: d.Status.DesiredNumberScheduled, Age: shortDur(time.Since(d.CreationTimestamp.Time)), Images: strings.Join(imgs, ", "), CpuReqM: cpuReq, CpuLimM: cpuLim, CpuUsedM: cpuUsed, MemReqMi: memReq, MemLimMi: memLim, MemUsedMi: memUsed}
 			entry.PDB = matchPDB(d.Namespace, d.Spec.Template.Labels)
+			st := &wlStrategy{Type: string(d.Spec.UpdateStrategy.Type)}
+			if d.Spec.UpdateStrategy.RollingUpdate != nil {
+				if d.Spec.UpdateStrategy.RollingUpdate.MaxSurge != nil { st.MaxSurge = d.Spec.UpdateStrategy.RollingUpdate.MaxSurge.String() }
+				if d.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable != nil { st.MaxUnavailable = d.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.String() }
+			}
+			entry.Strategy = st
 			out = append(out, entry)
 		}
 	}
@@ -2577,7 +3175,12 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["readyReplicas"] = d.Status.ReadyReplicas
 			result["updatedReplicas"] = d.Status.UpdatedReplicas
 			result["availableReplicas"] = d.Status.AvailableReplicas
-			result["strategy"] = string(d.Spec.Strategy.Type)
+			strat := map[string]interface{}{"type": string(d.Spec.Strategy.Type)}
+			if d.Spec.Strategy.RollingUpdate != nil {
+				if d.Spec.Strategy.RollingUpdate.MaxSurge != nil { strat["maxSurge"] = d.Spec.Strategy.RollingUpdate.MaxSurge.String() }
+				if d.Spec.Strategy.RollingUpdate.MaxUnavailable != nil { strat["maxUnavailable"] = d.Spec.Strategy.RollingUpdate.MaxUnavailable.String() }
+			}
+			result["strategy"] = strat
 			result["selector"] = d.Spec.Selector.MatchLabels
 			result["labels"] = d.Labels
 			result["annotations"] = d.Annotations
@@ -2652,6 +3255,11 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["annotations"] = s.Annotations
 			result["age"] = shortDur(time.Since(s.CreationTimestamp.Time))
 			result["serviceName"] = s.Spec.ServiceName
+			sStrat := map[string]interface{}{"type": string(s.Spec.UpdateStrategy.Type)}
+			if s.Spec.UpdateStrategy.RollingUpdate != nil && s.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+				sStrat["partition"] = *s.Spec.UpdateStrategy.RollingUpdate.Partition
+			}
+			result["strategy"] = sStrat
 			containers := []map[string]interface{}{}
 			for _, ct := range s.Spec.Template.Spec.Containers {
 				cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
@@ -2668,6 +3276,12 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["labels"] = d.Labels
 			result["annotations"] = d.Annotations
 			result["age"] = shortDur(time.Since(d.CreationTimestamp.Time))
+			dStrat := map[string]interface{}{"type": string(d.Spec.UpdateStrategy.Type)}
+			if d.Spec.UpdateStrategy.RollingUpdate != nil {
+				if d.Spec.UpdateStrategy.RollingUpdate.MaxSurge != nil { dStrat["maxSurge"] = d.Spec.UpdateStrategy.RollingUpdate.MaxSurge.String() }
+				if d.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable != nil { dStrat["maxUnavailable"] = d.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.String() }
+			}
+			result["strategy"] = dStrat
 			containers := []map[string]interface{}{}
 			for _, ct := range d.Spec.Template.Spec.Containers {
 				cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
@@ -2811,11 +3425,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 				}
 				if !matched { continue }
 
-				status := string(p.Status.Phase)
-				for _, cs := range p.Status.ContainerStatuses {
-					if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" { status = cs.State.Waiting.Reason; break }
-					if cs.State.Terminated != nil && cs.State.Terminated.Reason != "" { status = cs.State.Terminated.Reason }
-				}
+			status := podDisplayStatus(p)
 				readyCount, totalCount := 0, len(p.Status.ContainerStatuses)
 				var restarts int32
 				for _, cs := range p.Status.ContainerStatuses {
@@ -3046,6 +3656,90 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if action == "agglogs" {
+		kind := r.URL.Query().Get("kind")
+		tail := int64(100)
+		if t := r.URL.Query().Get("tail"); t != "" {
+			fmt.Sscanf(t, "%d", &tail)
+		}
+		follow := r.URL.Query().Get("follow") == "true"
+
+		var labelSel map[string]string
+		switch kind {
+		case "Deployment":
+			d, err := clientset.AppsV1().Deployments(ns).Get(c, name, metav1.GetOptions{})
+			if err != nil { http.Error(w, err.Error(), 500); return }
+			labelSel = d.Spec.Selector.MatchLabels
+		case "StatefulSet":
+			s, err := clientset.AppsV1().StatefulSets(ns).Get(c, name, metav1.GetOptions{})
+			if err != nil { http.Error(w, err.Error(), 500); return }
+			labelSel = s.Spec.Selector.MatchLabels
+		case "DaemonSet":
+			d, err := clientset.AppsV1().DaemonSets(ns).Get(c, name, metav1.GetOptions{})
+			if err != nil { http.Error(w, err.Error(), 500); return }
+			labelSel = d.Spec.Selector.MatchLabels
+		default:
+			http.Error(w, "agglogs only supports Deployment, StatefulSet, DaemonSet", 400)
+			return
+		}
+
+		selParts := []string{}
+		for k, v := range labelSel {
+			selParts = append(selParts, k+"="+v)
+		}
+		podList, err := clientset.CoreV1().Pods(ns).List(c, metav1.ListOptions{
+			LabelSelector: strings.Join(selParts, ","),
+		})
+		if err != nil { http.Error(w, err.Error(), 500); return }
+		if len(podList.Items) == 0 { http.Error(w, "no pods found", 404); return }
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		flusher, ok := w.(http.Flusher)
+		if !ok { http.Error(w, "streaming not supported", 500); return }
+
+		type logLine struct {
+			Pod  string `json:"pod"`
+			Line string `json:"line"`
+		}
+		ch := make(chan logLine, 256)
+		var wg sync.WaitGroup
+
+		ctx, ctxCancel := context.WithCancel(r.Context())
+		defer ctxCancel()
+
+		for _, pod := range podList.Items {
+			wg.Add(1)
+			go func(podName string) {
+				defer wg.Done()
+				opts := &corev1.PodLogOptions{TailLines: &tail, Follow: follow}
+				stream, err := clientset.CoreV1().Pods(ns).GetLogs(podName, opts).Stream(ctx)
+				if err != nil { return }
+				defer stream.Close()
+				scanner := bufio.NewScanner(stream)
+				scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
+				for scanner.Scan() {
+					select {
+					case ch <- logLine{Pod: podName, Line: scanner.Text()}:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}(pod.Name)
+		}
+
+		go func() { wg.Wait(); close(ch) }()
+
+		for ll := range ch {
+			b, _ := json.Marshal(ll)
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			flusher.Flush()
+		}
+		return
+	}
+
 	if r.Method != "POST" {
 		http.Error(w, "POST only", 405)
 		return
@@ -3080,6 +3774,9 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		go cache.refresh()
+		if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {
+			auditRecord(sd.Email, sd.Role, "workload.scale", fmt.Sprintf("Deployment %s/%s", ns, name), fmt.Sprintf("replicas: %d", replicas), clientIP(r))
+		}
 		j(w, map[string]interface{}{"ok": "scaled", "replicas": replicas})
 	default:
 		http.Error(w, "use restart or scale", 400)
@@ -3106,22 +3803,32 @@ func apiPods(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	type ctState struct {
+		Name   string `json:"name"`
+		State  string `json:"state"`
+		Reason string `json:"reason,omitempty"`
+	}
 	type pd struct {
-		Name       string `json:"name"`
-		NS         string `json:"namespace"`
-		Status     string `json:"status"`
-		Restarts   int32  `json:"restarts"`
-		Age        string `json:"age"`
-		Node       string `json:"node"`
-		Ready      string `json:"ready"`
-		CpuReq     int64  `json:"cpuReqM"`
-		CpuLim     int64  `json:"cpuLimM"`
-		CpuUsed    int64  `json:"cpuUsedM"`
-		MemReq     int64  `json:"memReqMi"`
-		MemLim     int64  `json:"memLimMi"`
-		MemUsed    int64  `json:"memUsedMi"`
-		CpuSizing  string `json:"cpuSizing"`
-		MemSizing  string `json:"memSizing"`
+		Name       string            `json:"name"`
+		NS         string            `json:"namespace"`
+		Status     string            `json:"status"`
+		Restarts   int32             `json:"restarts"`
+		Age        string            `json:"age"`
+		Node       string            `json:"node"`
+		Ready      string            `json:"ready"`
+		PodIP      string            `json:"podIP,omitempty"`
+		OwnerKind  string            `json:"ownerKind,omitempty"`
+		OwnerName  string            `json:"ownerName,omitempty"`
+		CpuReq     int64             `json:"cpuReqM"`
+		CpuLim     int64             `json:"cpuLimM"`
+		CpuUsed    int64             `json:"cpuUsedM"`
+		MemReq     int64             `json:"memReqMi"`
+		MemLim     int64             `json:"memLimMi"`
+		MemUsed    int64             `json:"memUsedMi"`
+		CpuSizing  string            `json:"cpuSizing"`
+		MemSizing  string            `json:"memSizing"`
+		Labels     map[string]string `json:"labels,omitempty"`
+		ContStates []ctState         `json:"containerStates,omitempty"`
 	}
 	out := make([]pd, 0)
 	for _, p := range cache.pods.Items {
@@ -3141,22 +3848,103 @@ func apiPods(w http.ResponseWriter, r *http.Request) {
 		}
 		usage := podMetricsMap[p.Namespace+"/"+p.Name]
 		cpuSizing, memSizing := "unknown", "unknown"
-		if usage[0] > 0 && cpuReq > 0 {
-			ratio := float64(usage[0]) / float64(cpuReq)
-			if ratio > 0.9 { cpuSizing = "under" } else if ratio < 0.2 { cpuSizing = "over" } else { cpuSizing = "ok" }
+		if usage[0] > 0 {
+			if cpuLim > 0 && float64(usage[0]) >= float64(cpuLim)*0.8 {
+				cpuSizing = "under"
+			} else if cpuReq > 0 && float64(usage[0]) < float64(cpuReq)*0.2 {
+				cpuSizing = "over"
+			} else if cpuReq > 0 {
+				cpuSizing = "ok"
+			}
 		}
-		if usage[1] > 0 && memReq > 0 {
-			ratio := float64(usage[1]) / float64(memReq)
-			if ratio > 0.9 { memSizing = "under" } else if ratio < 0.2 { memSizing = "over" } else { memSizing = "ok" }
+		if usage[1] > 0 {
+			if memLim > 0 && float64(usage[1]) >= float64(memLim)*0.8 {
+				memSizing = "under"
+			} else if memReq > 0 && float64(usage[1]) < float64(memReq)*0.2 {
+				memSizing = "over"
+			} else if memReq > 0 {
+				memSizing = "ok"
+			}
+		}
+		curated := map[string]string{}
+		interestingKeys := []string{"app", "app.kubernetes.io/name", "app.kubernetes.io/version", "version", "app.kubernetes.io/component"}
+		for _, k := range interestingKeys {
+			if v, ok := p.Labels[k]; ok { curated[k] = v }
+		}
+		var cstates []ctState
+		allRunning := true
+		for _, cs := range p.Status.ContainerStatuses {
+			st := ctState{Name: cs.Name}
+			if cs.State.Running != nil {
+				st.State = "running"
+			} else if cs.State.Waiting != nil {
+				st.State = "waiting"
+				st.Reason = cs.State.Waiting.Reason
+				allRunning = false
+			} else if cs.State.Terminated != nil {
+				st.State = "terminated"
+				st.Reason = cs.State.Terminated.Reason
+				allRunning = false
+			}
+			cstates = append(cstates, st)
+		}
+		if allRunning && len(cstates) <= 1 {
+			cstates = nil
+		}
+		var ownerKind, ownerName string
+		for _, ref := range p.OwnerReferences {
+			if ref.Controller != nil && *ref.Controller {
+				ownerKind = ref.Kind
+				ownerName = ref.Name
+				if ownerKind == "ReplicaSet" {
+					for _, rs := range cache.replicasets.Items {
+						if rs.Name == ownerName && rs.Namespace == p.Namespace {
+							for _, rsRef := range rs.OwnerReferences {
+								if rsRef.Controller != nil && *rsRef.Controller {
+									ownerKind = rsRef.Kind
+									ownerName = rsRef.Name
+								}
+							}
+						}
+					}
+				}
+				break
+			}
 		}
 		out = append(out, pd{
 			Name: p.Name, NS: p.Namespace, Status: podDisplayStatus(p),
 			Restarts: restarts, Age: shortDur(time.Since(p.CreationTimestamp.Time)),
 			Node: p.Spec.NodeName, Ready: fmt.Sprintf("%d/%d", readyCt, totalCt),
+			PodIP: p.Status.PodIP, OwnerKind: ownerKind, OwnerName: ownerName,
 			CpuReq: cpuReq, CpuLim: cpuLim, CpuUsed: usage[0],
 			MemReq: memReq, MemLim: memLim, MemUsed: usage[1],
 			CpuSizing: cpuSizing, MemSizing: memSizing,
+			Labels: curated, ContStates: cstates,
 		})
+	}
+	jGz(w, r, out)
+}
+
+func apiPodSparklines(w http.ResponseWriter, r *http.Request) {
+	ns := r.URL.Query().Get("namespace")
+	snap := podSparklines.snapshot()
+	type sparkEntry struct {
+		CPU [][2]int64 `json:"cpu"`
+		MEM [][2]int64 `json:"mem"`
+	}
+	out := map[string]sparkEntry{}
+	for key, pts := range snap {
+		if ns != "" {
+			slashIdx := strings.Index(key, "/")
+			if slashIdx < 0 || key[:slashIdx] != ns { continue }
+		}
+		cpuArr := make([][2]int64, len(pts))
+		memArr := make([][2]int64, len(pts))
+		for i, p := range pts {
+			cpuArr[i] = [2]int64{int64(i), p[0]}
+			memArr[i] = [2]int64{int64(i), p[1]}
+		}
+		out[key] = sparkEntry{CPU: cpuArr, MEM: memArr}
 	}
 	jGz(w, r, out)
 }
@@ -3236,27 +4024,60 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 			out = append(out, ev{e.Type, e.Reason, e.Message, age, e.Count})
 		}
 		j(w, out)
+	case "previous-logs":
+		container := r.URL.Query().Get("container")
+		if container == "" {
+			http.Error(w, "container param required", 400)
+			return
+		}
+		tail := int64(200)
+		prev := true
+		opts := &corev1.PodLogOptions{TailLines: &tail, Previous: prev, Container: container}
+		stream, err := clientset.CoreV1().Pods(ns).GetLogs(name, opts).Stream(context.Background())
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer stream.Close()
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		io.Copy(w, stream)
+
 	case "describe":
 		pod, err := clientset.CoreV1().Pods(ns).Get(c, name, metav1.GetOptions{})
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		type probeInfo struct {
+			Type             string `json:"type"`
+			Path             string `json:"path,omitempty"`
+			Port             string `json:"port,omitempty"`
+			Command          string `json:"command,omitempty"`
+			PeriodSeconds    int32  `json:"periodSeconds,omitempty"`
+			FailureThreshold int32  `json:"failureThreshold,omitempty"`
+		}
 		type containerInfo struct {
-			Name     string `json:"name"`
-			Image    string `json:"image"`
-			Ready    bool   `json:"ready"`
-			State    string `json:"state"`
-			Reason   string `json:"reason"`
-			Message  string `json:"message"`
-			Restarts int32  `json:"restarts"`
-			Started  bool   `json:"started"`
-			CpuReq   int64  `json:"cpuReqM"`
-			CpuLim   int64  `json:"cpuLimM"`
-			CpuUsed  int64  `json:"cpuUsedM"`
-			MemReq   int64  `json:"memReqMi"`
-			MemLim   int64  `json:"memLimMi"`
-			MemUsed  int64  `json:"memUsedMi"`
+			Name                  string     `json:"name"`
+			Image                 string     `json:"image"`
+			Ready                 bool       `json:"ready"`
+			State                 string     `json:"state"`
+			Reason                string     `json:"reason"`
+			Message               string     `json:"message"`
+			Restarts              int32      `json:"restarts"`
+			Started               bool       `json:"started"`
+			CpuReq                int64      `json:"cpuReqM"`
+			CpuLim                int64      `json:"cpuLimM"`
+			CpuUsed               int64      `json:"cpuUsedM"`
+			MemReq                int64      `json:"memReqMi"`
+			MemLim                int64      `json:"memLimMi"`
+			MemUsed               int64      `json:"memUsedMi"`
+			LastTermReason        string     `json:"lastTermReason,omitempty"`
+			LastTermExitCode      *int32     `json:"lastTermExitCode,omitempty"`
+			LastTermMessage       string     `json:"lastTermMessage,omitempty"`
+			LastTermAt            string     `json:"lastTermAt,omitempty"`
+			LivenessProbe         *probeInfo `json:"livenessProbe,omitempty"`
+			ReadinessProbe        *probeInfo `json:"readinessProbe,omitempty"`
+			StartupProbe          *probeInfo `json:"startupProbe,omitempty"`
 		}
 
 		containerMetrics := map[string][2]int64{}
@@ -3285,6 +4106,26 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 			icsMap[cs.Name] = cs
 		}
 
+		makeProbe := func(p *corev1.Probe) *probeInfo {
+			if p == nil { return nil }
+			pi := &probeInfo{PeriodSeconds: p.PeriodSeconds, FailureThreshold: p.FailureThreshold}
+			if p.HTTPGet != nil {
+				pi.Type = "httpGet"
+				pi.Path = p.HTTPGet.Path
+				pi.Port = p.HTTPGet.Port.String()
+			} else if p.TCPSocket != nil {
+				pi.Type = "tcpSocket"
+				pi.Port = p.TCPSocket.Port.String()
+			} else if p.Exec != nil {
+				pi.Type = "exec"
+				pi.Command = strings.Join(p.Exec.Command, " ")
+			} else if p.GRPC != nil {
+				pi.Type = "grpc"
+				pi.Port = fmt.Sprintf("%d", p.GRPC.Port)
+			}
+			return pi
+		}
+
 		populateCI := func(ct corev1.Container, statusMap map[string]corev1.ContainerStatus) containerInfo {
 			ci := containerInfo{
 				Name:   ct.Name,
@@ -3293,6 +4134,9 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 				CpuLim: ct.Resources.Limits.Cpu().MilliValue(),
 				MemReq: ct.Resources.Requests.Memory().Value() / (1024 * 1024),
 				MemLim: ct.Resources.Limits.Memory().Value() / (1024 * 1024),
+				LivenessProbe:  makeProbe(ct.LivenessProbe),
+				ReadinessProbe: makeProbe(ct.ReadinessProbe),
+				StartupProbe:   makeProbe(ct.StartupProbe),
 			}
 			if m, ok := containerMetrics[ct.Name]; ok {
 				ci.CpuUsed = m[0]
@@ -3315,8 +4159,18 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 					ci.Reason = cs.State.Terminated.Reason
 					ci.Message = cs.State.Terminated.Message
 				}
-				if ci.Reason == "" && cs.LastTerminationState.Terminated != nil {
-					ci.Reason = "last: " + cs.LastTerminationState.Terminated.Reason
+				if cs.LastTerminationState.Terminated != nil {
+					lt := cs.LastTerminationState.Terminated
+					ci.LastTermReason = lt.Reason
+					ec := lt.ExitCode
+					ci.LastTermExitCode = &ec
+					ci.LastTermMessage = lt.Message
+					if !lt.FinishedAt.IsZero() {
+						ci.LastTermAt = shortDur(time.Since(lt.FinishedAt.Time)) + " ago"
+					}
+				}
+				if ci.Reason == "" && ci.LastTermReason != "" {
+					ci.Reason = "last: " + ci.LastTermReason
 				}
 			}
 			return ci
@@ -3337,17 +4191,48 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 				"message": cond.Message,
 			})
 		}
+		ownerKind, ownerName := "", ""
+		for _, or := range pod.OwnerReferences {
+			ownerKind = or.Kind
+			ownerName = or.Name
+			break
+		}
+		if ownerKind == "ReplicaSet" && ownerName != "" {
+			if rs, err := clientset.AppsV1().ReplicaSets(ns).Get(c, ownerName, metav1.GetOptions{}); err == nil {
+				for _, rsOwner := range rs.OwnerReferences {
+					if rsOwner.Kind == "Deployment" {
+						ownerKind = "Deployment"
+						ownerName = rsOwner.Name
+						break
+					}
+				}
+			}
+		}
+		if ownerKind == "Job" && ownerName != "" {
+			if jb, err := clientset.BatchV1().Jobs(ns).Get(c, ownerName, metav1.GetOptions{}); err == nil {
+				for _, jOwner := range jb.OwnerReferences {
+					if jOwner.Kind == "CronJob" {
+						ownerKind = "CronJob"
+						ownerName = jOwner.Name
+						break
+					}
+				}
+			}
+		}
+
 		j(w, map[string]interface{}{
 			"name":           pod.Name,
 			"namespace":      pod.Namespace,
 			"node":           pod.Spec.NodeName,
-			"status":         string(pod.Status.Phase),
+			"status":         podDisplayStatus(*pod),
 			"ip":             pod.Status.PodIP,
 			"qos":            string(pod.Status.QOSClass),
 			"age":            shortDur(time.Since(pod.CreationTimestamp.Time)),
 			"containers":     containers,
 			"initContainers": initContainers,
 			"conditions":     conditions,
+			"ownerKind":      ownerKind,
+			"ownerName":      ownerName,
 		})
 	case "delete":
 		if r.Method != "POST" {
@@ -3361,6 +4246,9 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		go cache.refresh()
+		if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {
+			auditRecord(sd.Email, sd.Role, "pod.delete", fmt.Sprintf("Pod %s/%s", ns, name), "", clientIP(r))
+		}
 		j(w, map[string]string{"ok": "deleted"})
 	default:
 		http.Error(w, "use /logs, /events, /describe, or /delete", 400)
@@ -3614,6 +4502,208 @@ func apiServices(w http.ResponseWriter, r *http.Request) {
 }
 
 // ─── Events (cluster-wide) ──────────────────────────────────────────
+
+// ─── Spot Disruption Visibility ─────────────────────────────────────
+
+func apiSpotInterruptions(w http.ResponseWriter, r *http.Request) {
+	nsFilter := r.URL.Query().Get("namespace")
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	// Build node metadata maps
+	nodeCapMap := map[string]string{}   // node -> "spot" / "on-demand" / ""
+	nodePoolMap := map[string]string{}  // node -> nodepool
+	nodeInstMap := map[string]string{}  // node -> instance type
+	nodeZoneMap := map[string]string{}  // node -> zone
+	if cache.nodes != nil {
+		for _, n := range cache.nodes.Items {
+			cap := n.Labels["karpenter.sh/capacity-type"]
+			if cap == "" { cap = strings.ToLower(n.Labels["eks.amazonaws.com/capacityType"]) }
+			if cap == "" { cap = "unknown" }
+			nodeCapMap[n.Name] = cap
+			if v := n.Labels["karpenter.sh/nodepool"]; v != "" { nodePoolMap[n.Name] = v }
+			inst := n.Labels["node.kubernetes.io/instance-type"]
+			if inst == "" { inst = n.Labels["beta.kubernetes.io/instance-type"] }
+			nodeInstMap[n.Name] = inst
+			zone := n.Labels["topology.kubernetes.io/zone"]
+			if zone == "" { zone = n.Labels["failure-domain.beta.kubernetes.io/zone"] }
+			nodeZoneMap[n.Name] = zone
+		}
+	}
+
+	// Count pods per node for affected-pods count
+	nodePodCount := map[string]int{}
+	if cache.pods != nil {
+		for _, p := range cache.pods.Items {
+			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed { continue }
+			nodePodCount[p.Spec.NodeName]++
+		}
+	}
+
+	// --- Spot Interruption Feed ---
+	spotReasons := map[string]bool{
+		"SpotInterrupted": true, "TerminatingOnInterruption": true,
+		"FailedDraining": true, "InstanceTerminating": true,
+		"Unconsolidatable": true, "DisruptionBlocked": true,
+	}
+
+	activeNodes := map[string]bool{}
+	if cache.nodes != nil {
+		for _, n := range cache.nodes.Items { activeNodes[n.Name] = true }
+	}
+
+	type spotEvt struct {
+		Reason       string `json:"reason"`
+		Node         string `json:"node"`
+		Nodepool     string `json:"nodepool"`
+		InstanceType string `json:"instanceType"`
+		Zone         string `json:"zone"`
+		Message      string `json:"message"`
+		Age          string `json:"age"`
+		Timestamp    string `json:"timestamp"`
+		AffectedPods int    `json:"affectedPods"`
+		Active       bool   `json:"active"`
+	}
+	var events []spotEvt
+	if cache.events != nil {
+		for _, e := range cache.events.Items {
+			if !spotReasons[e.Reason] { continue }
+			if e.InvolvedObject.Kind != "Node" && e.InvolvedObject.Kind != "Machine" { continue }
+			nodeName := e.InvolvedObject.Name
+			if !activeNodes[nodeName] { continue }
+			ts := e.LastTimestamp.Time
+			if ts.IsZero() { ts = e.EventTime.Time }
+			if ts.IsZero() { ts = e.CreationTimestamp.Time }
+			events = append(events, spotEvt{
+				Reason: e.Reason, Node: nodeName,
+				Nodepool: nodePoolMap[nodeName], InstanceType: nodeInstMap[nodeName],
+				Zone: nodeZoneMap[nodeName], Message: e.Message,
+				Age: shortDur(time.Since(ts)), Timestamp: ts.Format(time.RFC3339),
+				AffectedPods: nodePodCount[nodeName], Active: true,
+			})
+		}
+	}
+	sort.Slice(events, func(i, k int) bool { return events[i].Timestamp > events[k].Timestamp })
+	if events == nil { events = []spotEvt{} }
+
+	// --- Workload Resilience Score ---
+	type resEntry struct {
+		Name              string `json:"name"`
+		Namespace         string `json:"namespace"`
+		Kind              string `json:"kind"`
+		Replicas          int    `json:"replicas"`
+		SpotPods          int    `json:"spotPods"`
+		OnDemandPods      int    `json:"onDemandPods"`
+		UniqueNodes       int    `json:"uniqueNodes"`
+		UniqueZones       int    `json:"uniqueZones"`
+		UniqueInstTypes   int    `json:"uniqueInstTypes"`
+		RecentDisruptions int    `json:"recentDisruptions"`
+		Score             int    `json:"score"`
+		Rating            string `json:"rating"`
+	}
+
+	labelsMatch := func(selector map[string]string, podLabels map[string]string) bool {
+		for k, v := range selector {
+			if podLabels[k] != v { return false }
+		}
+		return true
+	}
+
+	var resilience []resEntry
+
+	type wlMeta struct {
+		name, ns, kind string
+		replicas       int
+		selector       map[string]string
+	}
+	var workloads []wlMeta
+	if cache.deployments != nil {
+		for _, d := range cache.deployments.Items {
+			if nsFilter != "" && d.Namespace != nsFilter { continue }
+			r := 1; if d.Spec.Replicas != nil { r = int(*d.Spec.Replicas) }
+			sel := map[string]string{}; if d.Spec.Selector != nil { sel = d.Spec.Selector.MatchLabels }
+			workloads = append(workloads, wlMeta{d.Name, d.Namespace, "Deployment", r, sel})
+		}
+	}
+	if cache.statefulsets != nil {
+		for _, s := range cache.statefulsets.Items {
+			if nsFilter != "" && s.Namespace != nsFilter { continue }
+			r := 1; if s.Spec.Replicas != nil { r = int(*s.Spec.Replicas) }
+			sel := map[string]string{}; if s.Spec.Selector != nil { sel = s.Spec.Selector.MatchLabels }
+			workloads = append(workloads, wlMeta{s.Name, s.Namespace, "StatefulSet", r, sel})
+		}
+	}
+	if cache.daemonsets != nil {
+		for _, d := range cache.daemonsets.Items {
+			if nsFilter != "" && d.Namespace != nsFilter { continue }
+			sel := map[string]string{}; if d.Spec.Selector != nil { sel = d.Spec.Selector.MatchLabels }
+			workloads = append(workloads, wlMeta{d.Name, d.Namespace, "DaemonSet", int(d.Status.DesiredNumberScheduled), sel})
+		}
+	}
+
+	for _, wl := range workloads {
+		if len(wl.selector) == 0 { continue }
+		spotCount, odCount, disrupted := 0, 0, 0
+		nodeSet := map[string]bool{}
+		instSet := map[string]bool{}
+		zoneSet := map[string]bool{}
+		if cache.pods != nil {
+			for _, p := range cache.pods.Items {
+				if p.Namespace != wl.ns { continue }
+				if !labelsMatch(wl.selector, p.Labels) { continue }
+				nodeName := p.Spec.NodeName
+				cap := nodeCapMap[nodeName]
+				if cap == "spot" { spotCount++ } else { odCount++ }
+				if nodeName != "" {
+					nodeSet[nodeName] = true
+					if it := nodeInstMap[nodeName]; it != "" { instSet[it] = true }
+					if z := nodeZoneMap[nodeName]; z != "" { zoneSet[z] = true }
+				}
+				st := podDisplayStatus(p)
+				if st != "Running" && st != "Succeeded" && st != "Completed" { disrupted++ }
+				for _, cs := range p.Status.ContainerStatuses {
+					if cs.RestartCount > 3 { disrupted++; break }
+				}
+			}
+		}
+		if spotCount == 0 { continue }
+
+		totalPods := spotCount + odCount
+		score := 100
+
+		// Replica count factor: single replica on spot is very risky
+		if totalPods <= 1 { score -= 40 } else if totalPods == 2 { score -= 15 }
+
+		// Node spread: all pods on 1 node = bad
+		if len(nodeSet) <= 1 && totalPods > 1 { score -= 30 } else if len(nodeSet) < totalPods && totalPods > 2 { score -= 10 }
+
+		// Instance type diversity: all same type = more likely to get evicted together
+		if len(instSet) <= 1 && totalPods > 1 { score -= 10 }
+
+		// Zone spread: single zone = correlated failure risk
+		if len(zoneSet) <= 1 && totalPods > 1 { score -= 10 }
+
+		// Disruption penalty: each disruption weighs heavily
+		score -= disrupted * 20
+
+		rating := "high"
+		if score <= 30 { rating = "low" } else if score <= 60 { rating = "medium" }
+
+		if score < 0 { score = 0 }
+		resilience = append(resilience, resEntry{
+			Name: wl.name, Namespace: wl.ns, Kind: wl.kind,
+			Replicas: wl.replicas, SpotPods: spotCount, OnDemandPods: odCount,
+			UniqueNodes: len(nodeSet), UniqueZones: len(zoneSet), UniqueInstTypes: len(instSet),
+			RecentDisruptions: disrupted, Score: score, Rating: rating,
+		})
+	}
+
+	ratingOrder := map[string]int{"low": 0, "medium": 1, "high": 2}
+	sort.Slice(resilience, func(i, k int) bool { return ratingOrder[resilience[i].Rating] < ratingOrder[resilience[k].Rating] })
+	if resilience == nil { resilience = []resEntry{} }
+
+	j(w, map[string]interface{}{"events": events, "resilience": resilience})
+}
 
 // ─── Topology Spread Violations ─────────────────────────────────────
 
@@ -3987,6 +5077,38 @@ func apiSearch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if len(out) < 50 && cache.statefulsets != nil {
+		for _, s := range cache.statefulsets.Items {
+			if strings.Contains(strings.ToLower(s.Name), q) || strings.Contains(strings.ToLower(s.Namespace), q) {
+				out = append(out, result{"StatefulSet", s.Name, s.Namespace})
+				if len(out) >= 50 { break }
+			}
+		}
+	}
+	if len(out) < 50 && cache.daemonsets != nil {
+		for _, d := range cache.daemonsets.Items {
+			if strings.Contains(strings.ToLower(d.Name), q) || strings.Contains(strings.ToLower(d.Namespace), q) {
+				out = append(out, result{"DaemonSet", d.Name, d.Namespace})
+				if len(out) >= 50 { break }
+			}
+		}
+	}
+	if len(out) < 50 && cache.jobs != nil {
+		for _, jb := range cache.jobs.Items {
+			if strings.Contains(strings.ToLower(jb.Name), q) || strings.Contains(strings.ToLower(jb.Namespace), q) {
+				out = append(out, result{"Job", jb.Name, jb.Namespace})
+				if len(out) >= 50 { break }
+			}
+		}
+	}
+	if len(out) < 50 && cache.cronjobs != nil {
+		for _, cj := range cache.cronjobs.Items {
+			if strings.Contains(strings.ToLower(cj.Name), q) || strings.Contains(strings.ToLower(cj.Namespace), q) {
+				out = append(out, result{"CronJob", cj.Name, cj.Namespace})
+				if len(out) >= 50 { break }
+			}
+		}
+	}
 	if len(out) < 50 && cache.services != nil {
 		for _, s := range cache.services.Items {
 			if strings.Contains(strings.ToLower(s.Name), q) || strings.Contains(strings.ToLower(s.Namespace), q) {
@@ -4112,6 +5234,150 @@ func apiHPA(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Namespace+out[i].Name < out[j].Namespace+out[j].Name })
 	jGz(w, r, out)
+}
+
+// ─── Config Drift Detection ─────────────────────────────────────────
+
+func apiConfigDrift(w http.ResponseWriter, r *http.Request) {
+	nsFilter := r.URL.Query().Get("namespace")
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	type driftPod struct {
+		Name       string `json:"name"`
+		Namespace  string `json:"namespace"`
+		StartedAgo string `json:"startedAgo"`
+		Workload   string `json:"workload"`
+	}
+	type driftEntry struct {
+		Kind         string    `json:"kind"`
+		Name         string    `json:"name"`
+		Namespace    string    `json:"namespace"`
+		LastModified string    `json:"lastModified"`
+		ModifiedAgo  string    `json:"modifiedAgo"`
+		DriftedPods  []driftPod `json:"driftedPods"`
+		TotalPods    int       `json:"totalPods"`
+		DriftedCount int       `json:"driftedCount"`
+	}
+
+	type cfgKey struct {
+		kind, ns, name string
+	}
+	refPods := map[cfgKey][]corev1.Pod{}
+
+	if cache.pods != nil {
+		for _, p := range cache.pods.Items {
+			if p.Status.Phase != corev1.PodRunning { continue }
+			if nsFilter != "" && p.Namespace != nsFilter { continue }
+			seen := map[cfgKey]bool{}
+			for _, vol := range p.Spec.Volumes {
+				if vol.ConfigMap != nil {
+					k := cfgKey{"ConfigMap", p.Namespace, vol.ConfigMap.Name}
+					if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+				}
+				if vol.Secret != nil {
+					k := cfgKey{"Secret", p.Namespace, vol.Secret.SecretName}
+					if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+				}
+				if vol.Projected != nil {
+					for _, src := range vol.Projected.Sources {
+						if src.ConfigMap != nil {
+							k := cfgKey{"ConfigMap", p.Namespace, src.ConfigMap.Name}
+							if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+						}
+						if src.Secret != nil {
+							k := cfgKey{"Secret", p.Namespace, src.Secret.Name}
+							if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+						}
+					}
+				}
+			}
+			for _, ct := range p.Spec.Containers {
+				for _, ef := range ct.EnvFrom {
+					if ef.ConfigMapRef != nil {
+						k := cfgKey{"ConfigMap", p.Namespace, ef.ConfigMapRef.Name}
+						if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+					}
+					if ef.SecretRef != nil {
+						k := cfgKey{"Secret", p.Namespace, ef.SecretRef.Name}
+						if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+					}
+				}
+				for _, ev := range ct.Env {
+					if ev.ValueFrom != nil {
+						if ev.ValueFrom.ConfigMapKeyRef != nil {
+							k := cfgKey{"ConfigMap", p.Namespace, ev.ValueFrom.ConfigMapKeyRef.Name}
+							if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+						}
+						if ev.ValueFrom.SecretKeyRef != nil {
+							k := cfgKey{"Secret", p.Namespace, ev.ValueFrom.SecretKeyRef.Name}
+							if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+						}
+					}
+				}
+			}
+			for _, ct := range p.Spec.InitContainers {
+				for _, ef := range ct.EnvFrom {
+					if ef.ConfigMapRef != nil {
+						k := cfgKey{"ConfigMap", p.Namespace, ef.ConfigMapRef.Name}
+						if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+					}
+					if ef.SecretRef != nil {
+						k := cfgKey{"Secret", p.Namespace, ef.SecretRef.Name}
+						if !seen[k] { seen[k] = true; refPods[k] = append(refPods[k], p) }
+					}
+				}
+			}
+		}
+	}
+
+	podOwner := func(p corev1.Pod) string {
+		for _, ref := range p.OwnerReferences {
+			return ref.Name
+		}
+		return ""
+	}
+
+	var out []driftEntry
+
+	checkDrift := func(kind string, metas []configMeta) {
+		for _, m := range metas {
+			if nsFilter != "" && m.Namespace != nsFilter { continue }
+			k := cfgKey{kind, m.Namespace, m.Name}
+			pods := refPods[k]
+			if len(pods) == 0 { continue }
+			var drifted []driftPod
+			for _, p := range pods {
+				if p.Status.StartTime == nil { continue }
+				if m.LastModified.After(p.Status.StartTime.Time) {
+					drifted = append(drifted, driftPod{
+						Name:       p.Name,
+						Namespace:  p.Namespace,
+						StartedAgo: shortDur(time.Since(p.Status.StartTime.Time)),
+						Workload:   podOwner(p),
+					})
+				}
+			}
+			if len(drifted) > 0 {
+				out = append(out, driftEntry{
+					Kind:         kind,
+					Name:         m.Name,
+					Namespace:    m.Namespace,
+					LastModified: m.LastModified.Format(time.RFC3339),
+					ModifiedAgo:  shortDur(time.Since(m.LastModified)),
+					DriftedPods:  drifted,
+					TotalPods:    len(pods),
+					DriftedCount: len(drifted),
+				})
+			}
+		}
+	}
+
+	checkDrift("ConfigMap", cache.configMeta)
+	checkDrift("Secret", cache.secretMeta)
+
+	if out == nil { out = []driftEntry{} }
+	j(w, out)
 }
 
 // ─── ConfigMaps & Secrets ──────────────────────────────────────────────
@@ -4288,6 +5554,9 @@ func apiExec(w http.ResponseWriter, r *http.Request) {
 	if ns == "" || name == "" {
 		http.Error(w, "namespace and pod required", 400)
 		return
+	}
+	if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {
+		auditRecord(sd.Email, sd.Role, "pod.exec", fmt.Sprintf("Pod %s/%s", ns, name), "container: "+container, clientIP(r))
 	}
 
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
@@ -5217,7 +6486,7 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 	}
 	reqBody, _ := json.Marshal(payload)
 
-	log.Printf("ai: POST LLM gateway (model=%s, body_len=%d)", llmGatewayModel, len(reqBody))
+	log.Printf("ai: POST %s (model=%s, body_len=%d)", llmGatewayURL, llmGatewayModel, len(reqBody))
 
 	req, err := http.NewRequest("POST", llmGatewayURL, bytes.NewReader(reqBody))
 	if err != nil {
@@ -5277,6 +6546,121 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 	}
 	fmt.Fprintf(w, "data: {\"done\":true}\n\n")
 	flusher.Flush()
+}
+
+// ─── YAML View/Edit ─────────────────────────────────────────────────
+
+func apiYaml(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/yaml/"), "/"), "/")
+	if len(parts) != 3 {
+		http.Error(w, "use /api/yaml/{kind}/{ns}/{name}", 400)
+		return
+	}
+	kind, ns, name := parts[0], parts[1], parts[2]
+	c, cancel := ctx()
+	defer cancel()
+
+	if r.Method == "GET" {
+		var obj interface{}
+		var err error
+		switch kind {
+		case "Pod":
+			obj, err = clientset.CoreV1().Pods(ns).Get(c, name, metav1.GetOptions{})
+		case "Deployment":
+			obj, err = clientset.AppsV1().Deployments(ns).Get(c, name, metav1.GetOptions{})
+		case "StatefulSet":
+			obj, err = clientset.AppsV1().StatefulSets(ns).Get(c, name, metav1.GetOptions{})
+		case "DaemonSet":
+			obj, err = clientset.AppsV1().DaemonSets(ns).Get(c, name, metav1.GetOptions{})
+		case "Job":
+			obj, err = clientset.BatchV1().Jobs(ns).Get(c, name, metav1.GetOptions{})
+		case "CronJob":
+			obj, err = clientset.BatchV1().CronJobs(ns).Get(c, name, metav1.GetOptions{})
+		case "Service":
+			obj, err = clientset.CoreV1().Services(ns).Get(c, name, metav1.GetOptions{})
+		case "Ingress":
+			obj, err = clientset.NetworkingV1().Ingresses(ns).Get(c, name, metav1.GetOptions{})
+		case "ConfigMap":
+			obj, err = clientset.CoreV1().ConfigMaps(ns).Get(c, name, metav1.GetOptions{})
+		case "Secret":
+			obj, err = clientset.CoreV1().Secrets(ns).Get(c, name, metav1.GetOptions{})
+		case "HPA":
+			obj, err = clientset.AutoscalingV2().HorizontalPodAutoscalers(ns).Get(c, name, metav1.GetOptions{})
+		default:
+			http.Error(w, "unsupported kind: "+kind, 400)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		j(w, obj)
+		return
+	}
+
+	if r.Method == "PUT" {
+		if !requireAdmin(w, r) { return }
+		body, err := io.ReadAll(io.LimitReader(r.Body, 2*1024*1024))
+		if err != nil {
+			http.Error(w, "read body: "+err.Error(), 400)
+			return
+		}
+
+		var updateErr error
+		switch kind {
+		case "Deployment":
+			var o appsv1.Deployment
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.AppsV1().Deployments(ns).Update(c, &o, metav1.UpdateOptions{})
+		case "StatefulSet":
+			var o appsv1.StatefulSet
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.AppsV1().StatefulSets(ns).Update(c, &o, metav1.UpdateOptions{})
+		case "DaemonSet":
+			var o appsv1.DaemonSet
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.AppsV1().DaemonSets(ns).Update(c, &o, metav1.UpdateOptions{})
+		case "Service":
+			var o corev1.Service
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.CoreV1().Services(ns).Update(c, &o, metav1.UpdateOptions{})
+		case "ConfigMap":
+			var o corev1.ConfigMap
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.CoreV1().ConfigMaps(ns).Update(c, &o, metav1.UpdateOptions{})
+		case "Secret":
+			var o corev1.Secret
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.CoreV1().Secrets(ns).Update(c, &o, metav1.UpdateOptions{})
+		case "CronJob":
+			var o batchv1.CronJob
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.BatchV1().CronJobs(ns).Update(c, &o, metav1.UpdateOptions{})
+		case "Job":
+			var o batchv1.Job
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.BatchV1().Jobs(ns).Update(c, &o, metav1.UpdateOptions{})
+		case "HPA":
+			var o autov2.HorizontalPodAutoscaler
+			if err := json.Unmarshal(body, &o); err != nil { http.Error(w, "invalid json: "+err.Error(), 400); return }
+			_, updateErr = clientset.AutoscalingV2().HorizontalPodAutoscalers(ns).Update(c, &o, metav1.UpdateOptions{})
+		default:
+			http.Error(w, "edit not supported for: "+kind, 400)
+			return
+		}
+		if updateErr != nil {
+			http.Error(w, updateErr.Error(), 500)
+			return
+		}
+		if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {
+			auditRecord(sd.Email, sd.Role, "resource.edit", fmt.Sprintf("%s %s/%s", kind, ns, name), "", clientIP(r))
+		}
+		go cache.refresh()
+		j(w, map[string]string{"ok": "updated"})
+		return
+	}
+
+	http.Error(w, "GET or PUT only", 405)
 }
 
 // ─── AI: API Handlers ────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # Kube-Argus
 
-**The real-time Kubernetes dashboard that SREs actually need.** Live cluster state every 10 seconds, streaming pod logs, interactive shell, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
+**The real-time Kubernetes dashboard that SREs actually need.** Live cluster state every 10 seconds, streaming pod logs, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
 
 ![Go](https://img.shields.io/badge/Go-1.19+-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
@@ -53,10 +53,15 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 
 - **10-second auto-refresh** — every view updates automatically, no manual reload
 - **Live log streaming** — tail pod logs in real-time via Server-Sent Events, with container selector and init container support
+- **Aggregated workload logs** — stream logs from all pods of a Deployment/StatefulSet/DaemonSet into one color-coded view
 - **Interactive web shell** — exec into any pod over WebSocket, full xterm.js terminal in the browser
+- **Pod sparklines** — inline CPU/MEM trend charts in the pods table, updated every 10 seconds
 - **Instant action feedback** — cordon, drain, restart, scale, and delete trigger immediate cache refresh so you see the result in seconds, not minutes
 - **Streaming AI diagnosis** — LLM responses stream token-by-token as they're generated
 - **Troubled pods view with fullscreen mode** — dedicated NOC screen for wall-mounted monitors showing CrashLoopBackOff, OOMKilled, Pending pods live
+- **Drain wizard** — preview affected pods with PDB awareness before draining, with real-time SSE streaming progress
+- **YAML viewer/editor** — view and edit raw YAML for 11 resource kinds directly from the dashboard
+- **Config drift detection** — identify pods running stale ConfigMaps/Secrets after changes
 
 ### Feature comparison
 
@@ -77,6 +82,15 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 | Prometheus metrics (node, pod, workload) | **Yes** | — | Partial | — | — |
 | Workload dependency graph | **Yes** | — | — | — | — |
 | PDB status inline on workloads | **Yes** | — | — | — | — |
+| Drain wizard with PDB preview & streaming | **Yes** | — | — | — | — |
+| YAML view/edit (11 resource kinds) | **Yes** | — | Yes | Yes | **Yes** |
+| Config drift detection | **Yes** | — | — | — | — |
+| Pod sparklines (CPU/MEM trends) | **Yes** | — | — | — | — |
+| Aggregated workload logs | **Yes** | — | — | — | — |
+| Storage dashboard (PVC/PV/StorageClass) | **Yes** | Partial | Yes | Partial | **Yes** |
+| Audit trail & online users | **Yes** | — | — | — | — |
+| Node pod heatmap (noisy neighbors) | **Yes** | — | — | — | — |
+| Spot interruption resilience scoring | **Yes** | — | — | — | — |
 | Troubled pods / NOC screen mode | **Yes** | — | — | — | — |
 | Web-based (sharable, no install) | **Yes** | Yes | No | Yes | No |
 | Open source (Apache 2.0) | **Yes** | Yes | Freemium | Yes | Yes |
@@ -96,30 +110,47 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 ### Node Management
 - All nodes with status, instance type, capacity, allocatable resources, and age
 - Click any node for `kubectl describe`-style detail with live events (Karpenter, spot interruptions, drain failures)
+- **Drain wizard** — preview which pods will be evicted, check PDB budgets, and stream progress in real-time
+- **Pod heatmap** — "noisy neighbors" visualization showing per-pod resource usage on a node
 - **Admin actions**: cordon, uncordon, drain — with instant feedback
 - Per-node Prometheus metrics: CPU, memory, disk, and network
 
 ### Workloads
 - Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs in one filterable view
+- **Restart and scale** directly from the workload detail page
+- **Aggregated logs** — stream logs from all pods of a workload in one color-coded view
 - ReplicaSet history (last 5) inside Deployments
+- Rolling update strategy details (maxSurge, maxUnavailable, partition)
 - PodDisruptionBudget (PDB) status badges inline on workload rows
 - Prometheus CPU and memory metrics with selectable time ranges (1h, 6h, 12h, 24h)
 - Resource right-sizing recommendations based on 7-day average usage
-- Interactive dependency graph showing linked HPA, Services, Ingress, ConfigMaps, and Secrets
+- Interactive dependency graph with **config drift** detection (stale ConfigMaps/Secrets highlighted)
 
 ### Pod Management
 - All pods with phase, restarts, resource usage bars, and node placement
+- **Table and card views** with search, status filters, owner filters, and sortable columns
+- **Pod sparklines** — inline CPU/MEM trend charts updated every 10 seconds
+- **Owner navigation** — click through from pod to parent Deployment/StatefulSet/DaemonSet
 - **Live log streaming** with container selector (including init containers)
+- **Previous container logs** — view logs from crashed/restarted containers
 - **Interactive web shell** — exec into any pod directly from the browser
 - **AI-powered diagnosis** for unhealthy pods (streams response in real-time)
+- Health probe details (liveness, readiness, startup) and last termination info
 - Per-pod CPU and memory metrics
 
 ### Networking
 - Services (ClusterIP, NodePort, LoadBalancer) with ports and selectors
 - Ingress rules with hosts, paths, TLS status, and backend services
 
+### Storage
+- **PersistentVolumeClaims** with status, capacity, StorageClass, and bound PV details
+- **PersistentVolumes** with reclaim policy and capacity
+- **StorageClasses** with provisioner and parameters
+- Expandable rows showing pod-to-PVC mapping
+
 ### Configuration
 - ConfigMaps and Secrets with last-modified timestamps
+- **Config drift detection** — identify when a ConfigMap or Secret has been modified but pods are still running the old version
 - Data key inspection (Secrets are masked)
 
 ### Cost & Optimisation
@@ -134,16 +165,27 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 
 ### Troubled Pods (NOC Screen)
 - Non-running pods (CrashLoopBackOff, ImagePullBackOff, Pending, OOMKilled) in one dedicated view
+- **Spot interruptions** — track disruption events with per-reason filtering
+- **Pod resilience scoring** — workload resilience scores (0-100) with deductions for single replica, zone, node, and disruptions
 - **Fullscreen mode** designed for wall-mounted NOC/SRE monitoring screens
 - Auto-refreshes — put it on a TV and walk away
+
+### YAML Viewer/Editor
+- View raw YAML for 11 resource kinds (Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, Services, Ingresses, ConfigMaps, Secrets, HPAs)
+- **Edit and apply** changes directly from the dashboard (admin only)
+- Syntax highlighting and copy-to-clipboard
+- managedFields auto-stripped for readability
 
 ### Events
 - Cluster events filtered by namespace with type, reason, source, and message
 
-### Security
+### Security & Observability
 - **Three auth modes**: Google SSO, generic OIDC (Okta, Auth0, Keycloak, Azure AD, Dex), or no login
 - Role-based access: admin vs viewer (via OIDC groups or email allowlist)
+- **Audit trail** — track logins, logouts, pod deletions, scaling actions, exec sessions, and YAML edits
+- **Online users** — see who's currently viewing the dashboard with presence indicators
 - Session cookies with HMAC signing
+- Container runs as non-root (`USER nobody`)
 
 ---
 

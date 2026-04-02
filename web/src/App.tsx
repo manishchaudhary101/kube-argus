@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef, createContext, useContext, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, createContext, useContext, useMemo, Fragment } from 'react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts'
+import yaml from 'js-yaml'
 
 // ─── Auth Context ────────────────────────────────────────────────────
-type UserInfo = { email: string; role: string; authMode: string }
+type UserInfo = { email: string; role: string; authMode?: string }
 const AuthCtx = createContext<UserInfo>({ email: 'anonymous', role: 'viewer', authMode: 'none' })
 const useAuth = () => useContext(AuthCtx)
 
@@ -19,11 +20,12 @@ type OverviewData = {
   warnings?: { type: string; reason: string; object: string; message: string; age: string; ns: string }[]
 }
 type NodeDetail = { name: string; ready: boolean; cordoned: boolean; nodepool: string; age: string; allocCpuM: number; allocMemMi: number; usedCpuM: number; usedMemMi: number; pods: number; podCapacity: number; instanceType: string; zone: string; capacityType: string; arch: string; kubelet: string; runtime: string; internalIp: string; taints: number; conditions: string[] }
-type Workload = { kind: string; name: string; namespace: string; ready: number; desired: number; age: string; images: string; pdb?: { name: string; status: string; disruptionsAllowed: number }; cpuReqM: number; cpuLimM: number; cpuUsedM: number; memReqMi: number; memLimMi: number; memUsedMi: number }
-type Pod = { name: string; namespace: string; status: string; restarts: number; age: string; node: string; ready: string; cpuReqM: number; cpuLimM: number; cpuUsedM: number; memReqMi: number; memLimMi: number; memUsedMi: number; cpuSizing: string; memSizing: string }
+type Workload = { kind: string; name: string; namespace: string; ready: number; desired: number; age: string; images: string; pdb?: { name: string; status: string; disruptionsAllowed: number }; strategy?: { type: string; maxSurge?: string; maxUnavailable?: string; partition?: number }; cpuReqM: number; cpuLimM: number; cpuUsedM: number; memReqMi: number; memLimMi: number; memUsedMi: number }
+type Pod = { name: string; namespace: string; status: string; restarts: number; age: string; node: string; ready: string; podIP?: string; ownerKind?: string; ownerName?: string; cpuReqM: number; cpuLimM: number; cpuUsedM: number; memReqMi: number; memLimMi: number; memUsedMi: number; cpuSizing: string; memSizing: string; labels?: Record<string, string>; containerStates?: { name: string; state: string; reason?: string }[] }
 type Evt = { type: string; reason: string; message: string; age: string; count: number }
-type ContainerInfo = { name: string; image: string; ready: boolean; state: string; reason: string; message: string; restarts: number; started: boolean; cpuReqM: number; cpuLimM: number; cpuUsedM: number; memReqMi: number; memLimMi: number; memUsedMi: number }
-type PodDescribe = { name: string; namespace: string; node: string; status: string; ip: string; qos: string; age: string; containers: ContainerInfo[]; initContainers?: ContainerInfo[]; conditions: { type: string; status: string; reason: string; message: string }[] }
+type ProbeInfo = { type: string; path?: string; port?: string; command?: string; periodSeconds?: number; failureThreshold?: number }
+type ContainerInfo = { name: string; image: string; ready: boolean; state: string; reason: string; message: string; restarts: number; started: boolean; cpuReqM: number; cpuLimM: number; cpuUsedM: number; memReqMi: number; memLimMi: number; memUsedMi: number; lastTermReason?: string; lastTermExitCode?: number; lastTermMessage?: string; lastTermAt?: string; livenessProbe?: ProbeInfo; readinessProbe?: ProbeInfo; startupProbe?: ProbeInfo }
+type PodDescribe = { name: string; namespace: string; node: string; status: string; ip: string; qos: string; age: string; containers: ContainerInfo[]; initContainers?: ContainerInfo[]; conditions: { type: string; status: string; reason: string; message: string }[]; ownerKind?: string; ownerName?: string }
 type IngressRule = { host: string; path: string; backend: string; port: string }
 type Ingress = { name: string; namespace: string; class: string; hosts: string[]; addresses: string[]; tls: boolean; rules: IngressRule[]; age: string }
 type IngressDescData = {
@@ -293,7 +295,7 @@ function Celld({ k, changed, className, children }: { k: string; changed: Set<st
 // ─── Overview (k9s Node View style) ─────────────────────────────────
 
 function OverviewView({ onNodeTap, onTab }: { onNodeTap: (n: string) => void; onTab: (t: string, kind?: string) => void }) {
-  const { data, err, loading } = useFetch<OverviewData>('/api/overview', 10000)
+  const { data, err, loading } = useFetch<OverviewData>('/api/overview', 5000)
   const prevRef = useRef<OverviewData | null>(null)
   const [changed, setChanged] = useState<Set<string>>(new Set())
   const podTrend = useRef<Map<string, 'up' | 'down' | null>>(new Map())
@@ -571,14 +573,253 @@ function OverviewView({ onNodeTap, onTab }: { onNodeTap: (n: string) => void; on
   )
 }
 
+// ─── Drain Wizard Modal ─────────────────────────────────────────────
+type DrainPodEntry = { name: string; namespace: string; owner: string; ownerKind: string; category: string; warning?: string; pdbName?: string; pdbAllow?: number }
+type DrainPreview = { pods: DrainPodEntry[]; summary: Record<string, number> }
+
+type BgDrain = { node: string; evicted: number; failed: number; total: number; done: boolean }
+
+function useDrainBg() {
+  const [bg, setBg] = useState<BgDrain | null>(null)
+  const start = useCallback((nodeName: string, totalPods: number) => {
+    setBg({ node: nodeName, evicted: 0, failed: 0, total: totalPods, done: false })
+    const es = new EventSource(`/api/nodes/${nodeName}/drain?stream=true`)
+    es.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        if (d.done) {
+          setBg(prev => prev ? { ...prev, evicted: d.evicted, failed: d.failed, done: true } : null)
+          es.close()
+          setTimeout(() => setBg(null), 8000)
+        } else if (d.status === 'evicted') {
+          setBg(prev => prev ? { ...prev, evicted: prev.evicted + 1 } : null)
+        } else if (d.status === 'failed') {
+          setBg(prev => prev ? { ...prev, failed: prev.failed + 1 } : null)
+        }
+      } catch {}
+    }
+    es.onerror = () => { es.close(); setBg(prev => prev ? { ...prev, done: true } : null); setTimeout(() => setBg(null), 8000) }
+  }, [])
+  const dismiss = useCallback(() => setBg(null), [])
+  return { bg, start, dismiss }
+}
+
+function DrainBgBanner({ bg, onDismiss }: { bg: BgDrain; onDismiss: () => void }) {
+  const pct = bg.total > 0 ? Math.round(((bg.evicted + bg.failed) / bg.total) * 100) : 0
+  return (
+    <div className="fixed top-2 right-2 z-[60] rounded-xl border border-hull-600/60 bg-hull-900/95 shadow-2xl backdrop-blur-sm px-4 py-2.5 flex items-center gap-3 text-[11px] min-w-[280px]">
+      {!bg.done && <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-hull-600 border-t-neon-cyan shrink-0" />}
+      {bg.done && <span className={`text-sm shrink-0 ${bg.failed === 0 ? 'text-neon-green' : 'text-neon-amber'}`}>{bg.failed === 0 ? '✓' : '⚠'}</span>}
+      <div className="flex-1 min-w-0">
+        <p className="text-white font-medium truncate">Draining <span className="text-neon-cyan font-mono">{bg.node}</span></p>
+        {!bg.done ? (
+          <div className="flex items-center gap-2 mt-1">
+            <div className="flex-1 h-1.5 rounded-full bg-hull-700 overflow-hidden">
+              <div className="h-full rounded-full bg-neon-cyan transition-all duration-300" style={{width:`${pct}%`}} />
+            </div>
+            <span className="text-gray-500 tabular-nums shrink-0">{bg.evicted + bg.failed}/{bg.total}</span>
+          </div>
+        ) : (
+          <p className="text-gray-400 mt-0.5"><span className="text-neon-green font-bold">{bg.evicted} evicted</span>{bg.failed > 0 && <span className="text-neon-red font-bold ml-2">{bg.failed} failed</span>}</p>
+        )}
+      </div>
+      {bg.done && <button type="button" onClick={onDismiss} className="text-gray-500 hover:text-white text-sm ml-1">&times;</button>}
+    </div>
+  )
+}
+
+function DrainWizardModal({ nodeName, onClose, onDrained, onBackground }: { nodeName: string; onClose: () => void; onDrained: () => void; onBackground: (totalPods: number) => void }) {
+  const [step, setStep] = useState<'preview' | 'draining' | 'done'>('preview')
+  const [preview, setPreview] = useState<DrainPreview | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ pod: string; ns: string; status: string; error?: string }[]>([])
+  const [result, setResult] = useState<{ evicted: number; failed: number } | null>(null)
+  const esRef = useRef<EventSource | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/nodes/${nodeName}/drain-preview`)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then(d => setPreview(d))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [nodeName])
+
+  const startDrain = () => {
+    setStep('draining')
+    setProgress([])
+    const es = new EventSource(`/api/nodes/${nodeName}/drain?stream=true`)
+    esRef.current = es
+    es.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        if (d.done) {
+          setResult({ evicted: d.evicted, failed: d.failed })
+          setStep('done')
+          es.close()
+          onDrained()
+        } else {
+          setProgress(prev => {
+            const idx = prev.findIndex(p => p.pod === d.pod && p.ns === d.ns)
+            if (idx >= 0) { const next = [...prev]; next[idx] = d; return next }
+            return [...prev, d]
+          })
+        }
+      } catch {}
+    }
+    es.onerror = () => { es.close(); setStep('done') }
+  }
+
+  const goBackground = () => {
+    if (esRef.current) { esRef.current.close() }
+    onBackground(preview?.summary.evictable ?? progress.length)
+    onClose()
+  }
+
+  const catOrder = ['standalone', 'pdbBlocked', 'localStorage', 'normal', 'daemonSet']
+  const catMeta: Record<string, { label: string; color: string; bg: string }> = {
+    standalone:   { label: 'Standalone (no controller)', color: 'text-neon-red', bg: 'bg-red-950/40 border-red-900/30' },
+    pdbBlocked:   { label: 'PDB Blocked',               color: 'text-neon-amber', bg: 'bg-amber-950/40 border-amber-900/30' },
+    localStorage: { label: 'Local Storage (data loss)',  color: 'text-orange-400', bg: 'bg-orange-950/40 border-orange-900/30' },
+    normal:       { label: 'Safe to Evict',              color: 'text-neon-green', bg: 'bg-green-950/40 border-green-900/30' },
+    daemonSet:    { label: 'DaemonSet (will remain)',     color: 'text-gray-500', bg: 'bg-hull-800/40 border-hull-700/30' },
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={step !== 'draining' ? onClose : undefined}>
+      <div className="w-full max-w-xl mx-4 max-h-[85vh] flex flex-col rounded-2xl border border-hull-600/60 bg-hull-950 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-hull-700/40">
+          <div className="flex items-center gap-2">
+            <span className="text-neon-amber text-lg">⚠</span>
+            <h2 className="text-sm font-bold text-white">Drain Node: <span className="text-neon-cyan font-mono">{nodeName}</span></h2>
+          </div>
+          <button onClick={step === 'draining' ? goBackground : onClose} className="text-gray-500 hover:text-white transition-colors text-lg">&times;</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {loading && <Spinner />}
+          {error && <p className="text-neon-red text-xs">{error}</p>}
+
+          {step === 'preview' && preview && (
+            <>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                {[
+                  { label: 'Total', val: preview.summary.total, color: 'text-white' },
+                  { label: 'Evictable', val: preview.summary.evictable, color: 'text-neon-green' },
+                  { label: 'DaemonSet', val: preview.summary.daemonSet, color: 'text-gray-500' },
+                  { label: 'Standalone', val: preview.summary.standalone, color: 'text-neon-red' },
+                  { label: 'Local Storage', val: preview.summary.localStorage, color: 'text-orange-400' },
+                  { label: 'PDB Blocked', val: preview.summary.pdbBlocked, color: 'text-neon-amber' },
+                ].map(s => (
+                  <div key={s.label} className="stat-card p-2 text-center">
+                    <p className={`text-base font-extrabold tabular-nums ${s.color}`}>{s.val}</p>
+                    <p className="text-[8px] text-gray-500 uppercase tracking-widest">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {preview.summary.standalone > 0 && (
+                <div className="rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-[11px] text-neon-red">
+                  <strong>Warning:</strong> {preview.summary.standalone} standalone pod(s) have no controller and will NOT be rescheduled after eviction.
+                </div>
+              )}
+              {preview.summary.localStorage > 0 && (
+                <div className="rounded-lg border border-orange-900/40 bg-orange-950/20 px-3 py-2 text-[11px] text-orange-400">
+                  <strong>Warning:</strong> {preview.summary.localStorage} pod(s) use emptyDir volumes. Data will be lost on eviction.
+                </div>
+              )}
+              {preview.summary.pdbBlocked > 0 && (
+                <div className="rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-[11px] text-neon-amber">
+                  <strong>Notice:</strong> {preview.summary.pdbBlocked} pod(s) are protected by PDBs that currently allow 0 disruptions. Eviction may fail.
+                </div>
+              )}
+
+              {catOrder.map(cat => {
+                const pods = preview.pods.filter(p => p.category === cat)
+                if (pods.length === 0) return null
+                const meta = catMeta[cat]
+                return (
+                  <div key={cat}>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${meta.color}`}>{meta.label} ({pods.length})</p>
+                    <div className="space-y-1">
+                      {pods.map(p => (
+                        <div key={`${p.namespace}/${p.name}`} className={`rounded-lg border px-3 py-2 text-[11px] ${meta.bg}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-white truncate">{p.name}</span>
+                            <span className="text-[9px] text-gray-500 shrink-0 ml-2">{p.namespace}</span>
+                          </div>
+                          {p.owner && <p className="text-[9px] text-gray-600 mt-0.5">{p.ownerKind}/{p.owner}</p>}
+                          {p.warning && <p className={`text-[9px] mt-0.5 ${meta.color}`}>{p.warning}</p>}
+                          {p.pdbName && cat !== 'pdbBlocked' && <p className="text-[9px] text-gray-600 mt-0.5">PDB: {p.pdbName} (allows {p.pdbAllow})</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+
+          {step === 'draining' && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-hull-600 border-t-neon-cyan" />
+                <p className="text-xs text-gray-400">Draining in progress…</p>
+              </div>
+              {progress.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 text-[11px]">
+                  {p.status === 'evicting' && <span className="h-3 w-3 animate-spin rounded-full border border-hull-600 border-t-neon-cyan shrink-0" />}
+                  {p.status === 'evicted' && <span className="text-neon-green shrink-0">✓</span>}
+                  {p.status === 'failed' && <span className="text-neon-red shrink-0">✗</span>}
+                  <span className="font-mono text-white truncate">{p.pod}</span>
+                  <span className="text-gray-600 text-[9px] shrink-0">{p.ns}</span>
+                  {p.error && <span className="text-neon-red text-[9px] truncate ml-1">{p.error}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {step === 'done' && result && (
+            <div className="text-center space-y-3 py-4">
+              <p className="text-3xl">{result.failed === 0 ? '✓' : '⚠'}</p>
+              <p className="text-sm font-bold text-white">Drain Complete</p>
+              <div className="flex justify-center gap-6 text-sm">
+                <span className="text-neon-green font-bold">{result.evicted} evicted</span>
+                {result.failed > 0 && <span className="text-neon-red font-bold">{result.failed} failed</span>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-hull-700/40">
+          {step === 'preview' && (
+            <>
+              <Btn small onClick={onClose}>Cancel</Btn>
+              <Btn small variant="danger" onClick={startDrain} disabled={loading || !!error || (preview?.summary.total ?? 0) === 0}>
+                Confirm Drain
+              </Btn>
+            </>
+          )}
+          {step === 'draining' && (
+            <Btn small onClick={goBackground}>Run in Background</Btn>
+          )}
+          {step === 'done' && <Btn small onClick={onClose}>Close</Btn>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Nodes ──────────────────────────────────────────────────────────
-function NodesView({ onNode }: { onNode: (name: string) => void }) {
+function NodesView({ onNode, poolFilter, onPoolChange }: { onNode: (name: string) => void; poolFilter: string; onPoolChange: (pool: string) => void }) {
   const { role } = useAuth()
   const isAdmin = role === 'admin'
   const { data, err, loading, refetch } = useFetch<NodeDetail[]>('/api/nodes', 10000)
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const [poolFilter, setPoolFilter] = useState('')
+  const [drainTarget, setDrainTarget] = useState<string | null>(null)
+  const drainBg = useDrainBg()
+  const setPoolFilter = onPoolChange
 
   const act = async (name: string, action: string) => {
     setBusy(`${name}/${action}`)
@@ -736,8 +977,8 @@ function NodesView({ onNode }: { onNode: (name: string) => void }) {
                   <Btn small onClick={() => act(n.name, 'cordon')} disabled={!!busy}>
                     {busy === `${n.name}/cordon` ? '…' : 'Cordon'}
                   </Btn>
-                  <Btn small variant="danger" onClick={() => act(n.name, 'drain')} disabled={!!busy}>
-                    {busy === `${n.name}/drain` ? '…' : 'Drain'}
+                  <Btn small variant="danger" onClick={() => setDrainTarget(n.name)}>
+                    Drain
                   </Btn>
                 </>
               )}
@@ -745,6 +986,8 @@ function NodesView({ onNode }: { onNode: (name: string) => void }) {
           </div>
         )
       })}
+      {drainBg.bg && <DrainBgBanner bg={drainBg.bg} onDismiss={drainBg.dismiss} />}
+      {drainTarget && <DrainWizardModal nodeName={drainTarget} onClose={() => setDrainTarget(null)} onDrained={() => { refetch(); setToast(`${drainTarget} drain complete`) }} onBackground={(total) => { drainBg.start(drainTarget, total); setDrainTarget(null) }} />}
     </div>
   )
 }
@@ -850,7 +1093,14 @@ function WorkloadsView({ namespace, initialKind, onWorkload }: { namespace: stri
                 <Pill color={`border ${w.kind === 'Deployment' ? 'bg-blue-950/30 text-blue-400 border-blue-900/30' : w.kind === 'StatefulSet' ? 'bg-purple-950/30 text-purple-400 border-purple-900/30' : w.kind === 'Job' ? 'bg-sky-950/30 text-sky-400 border-sky-900/30' : w.kind === 'CronJob' ? 'bg-sky-950/30 text-sky-300 border-sky-900/30' : 'bg-hull-700/50 text-gray-400 border-hull-600/50'}`}>{w.kind === 'CronJob' ? 'CRON' : w.kind.slice(0, 3).toUpperCase()}</Pill>
               </div>
             </div>
-            <p className="mt-1 truncate text-gray-600 font-mono text-[9px]">{w.images}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <p className="truncate text-gray-600 font-mono text-[9px] flex-1">{w.images}</p>
+              {w.strategy && (
+                <span className="shrink-0 rounded border border-hull-600/50 bg-hull-800/40 px-1.5 py-0.5 text-[8px] font-mono text-gray-500" title={`${w.strategy.type}${w.strategy.maxSurge ? ` surge=${w.strategy.maxSurge}` : ''}${w.strategy.maxUnavailable ? ` unavail=${w.strategy.maxUnavailable}` : ''}${w.strategy.partition !== undefined ? ` partition=${w.strategy.partition}` : ''}`}>
+                  {w.strategy.type === 'RollingUpdate' ? `Rolling ${w.strategy.maxSurge || ''}/${w.strategy.maxUnavailable || ''}` : w.strategy.type}
+                </span>
+              )}
+            </div>
             {(w.cpuReqM > 0 || w.cpuUsedM > 0 || w.memReqMi > 0 || w.memUsedMi > 0) && (
               <div className="mt-1.5 grid grid-cols-2 gap-3">
                 <ResourceBar used={w.cpuUsedM} req={w.cpuReqM} lim={w.cpuLimM} label="CPU" unit="m" />
@@ -878,8 +1128,29 @@ function WorkloadsView({ namespace, initialKind, onWorkload }: { namespace: stri
 // ─── Workload Detail ─────────────────────────────────────────────────
 
 function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: string; name: string; kind: string; onBack: () => void; onPod: (ns: string, name: string) => void }) {
-  const { data, err, loading } = useFetch<any>(`/api/workloads/${ns}/${name}/describe?kind=${kind}`, 10000)
-  const [activeSection, setActiveSection] = useState<'overview' | 'pods' | 'containers' | 'events' | 'labels' | 'metrics' | 'replicasets'>('overview')
+  const { role } = useAuth()
+  const isAdmin = role === 'admin'
+  const { data, err, loading, refetch } = useFetch<any>(`/api/workloads/${ns}/${name}/describe?kind=${kind}`, 10000)
+  const [activeSection, setActiveSection] = useState<'overview' | 'pods' | 'containers' | 'events' | 'labels' | 'metrics' | 'replicasets' | 'agglogs'>('overview')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [scaleOpen, setScaleOpen] = useState(false)
+  const [scaleVal, setScaleVal] = useState(0)
+  const [showYaml, setShowYaml] = useState(false)
+
+  const doRestart = async () => {
+    setBusy('restart')
+    try { await post(`/api/workloads/${ns}/${name}/restart`); setToast(`${name} restarting`); refetch() }
+    catch (e: any) { setToast(`Error: ${e.message}`) }
+    finally { setBusy(null); setTimeout(() => setToast(null), 3000) }
+  }
+
+  const doScale = async () => {
+    setBusy('scale')
+    try { await post(`/api/workloads/${ns}/${name}/scale?replicas=${scaleVal}`); setToast(`${name} scaled to ${scaleVal}`); setScaleOpen(false); refetch() }
+    catch (e: any) { setToast(`Error: ${e.message}`) }
+    finally { setBusy(null); setTimeout(() => setToast(null), 3000) }
+  }
 
   if (loading) return <div className="p-4"><Spinner /></div>
   if (err) return <p className="p-4 text-neon-red">{err}</p>
@@ -896,6 +1167,7 @@ function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: string; nam
   const sections = [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'metrics' as const, label: 'Metrics' },
+    ...(['Deployment', 'StatefulSet', 'DaemonSet'].includes(kind) ? [{ id: 'agglogs' as const, label: 'Agg Logs' }] : []),
     ...(kind === 'Deployment' && replicaSets.length > 0 ? [{ id: 'replicasets' as const, label: `ReplicaSets (${replicaSets.length})` }] : []),
     { id: 'pods' as const, label: `Pods (${wlPods.length})` },
     { id: 'containers' as const, label: `Containers (${containers.length})` },
@@ -907,13 +1179,52 @@ function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: string; nam
 
   return (
     <div className="flex h-full flex-col">
+      {toast && <div className="fixed top-4 right-4 z-[100] rounded-lg border border-hull-600 bg-hull-900 px-4 py-2 text-xs text-white shadow-xl">{toast}</div>}
+
+      {scaleOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center" onClick={() => setScaleOpen(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative z-10 w-72 rounded-2xl border border-hull-600 bg-hull-900 p-5 text-center shadow-2xl" onClick={e => e.stopPropagation()}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Scale</p>
+            <p className="mt-1 truncate text-sm font-bold text-white">{name}</p>
+            <p className="mt-0.5 text-[10px] text-gray-600">{ns}</p>
+            <div className="mt-4 flex items-center justify-center gap-4">
+              <button onClick={() => setScaleVal(Math.max(0, scaleVal - 1))} className="flex h-10 w-10 items-center justify-center rounded-lg border border-hull-600 bg-hull-800 text-lg font-bold text-white transition-colors hover:bg-hull-700 active:bg-hull-600">−</button>
+              <span className="min-w-[3rem] text-center text-3xl font-bold tabular-nums text-neon-cyan">{scaleVal}</span>
+              <button onClick={() => setScaleVal(Math.min(100, scaleVal + 1))} className="flex h-10 w-10 items-center justify-center rounded-lg border border-hull-600 bg-hull-800 text-lg font-bold text-white transition-colors hover:bg-hull-700 active:bg-hull-600">+</button>
+            </div>
+            <p className="mt-2 text-center text-[10px] text-gray-600">current: {data.replicas ?? 0}</p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setScaleOpen(false)} className="flex-1 rounded-lg border border-hull-600 py-2 text-xs text-gray-400 transition-colors hover:text-white">Cancel</button>
+              <button onClick={doScale} disabled={busy === 'scale'} className="flex-1 rounded-lg border border-blue-900/50 bg-blue-950/60 py-2 text-xs font-medium text-neon-blue transition-colors hover:bg-blue-900/40 disabled:opacity-40">
+                {busy === 'scale' ? 'Scaling…' : 'Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="shrink-0 border-b border-hull-700/40 bg-hull-900/60 px-3 py-2 flex items-center gap-2">
         <button onClick={onBack} className="rounded-lg bg-hull-800 border border-hull-700/50 px-2.5 py-1 text-[10px] text-gray-400 hover:text-white transition-colors">← Back</button>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold text-white truncate">{name}</p>
           <p className="text-[10px] text-gray-500">{ns} · <span className={kindColor}>{kind}</span>{data.age ? ` · ${data.age}` : ''}</p>
         </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={() => setShowYaml(true)} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors">YAML</button>
+          {kind === 'Deployment' && isAdmin && (
+            <>
+              <button onClick={doRestart} disabled={busy === 'restart'} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors disabled:opacity-40">
+                {busy === 'restart' ? 'Restarting…' : '↻ Restart'}
+              </button>
+              <button onClick={() => { setScaleVal(data.replicas ?? 0); setScaleOpen(true) }} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors">
+                ⇕ Scale
+              </button>
+            </>
+          )}
+        </div>
       </div>
+      {showYaml && <YamlModal kind={kind} ns={ns} name={name} onClose={() => setShowYaml(false)} />}
 
       <div className="flex gap-1 px-3 py-2 overflow-x-auto scrollbar-hide border-b border-hull-800/50">
         {sections.map(s => (
@@ -932,13 +1243,14 @@ function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: string; nam
                   <div><span className="text-gray-500">Replicas</span><p className="font-mono text-white">{data.readyReplicas ?? 0}/{data.replicas}</p></div>
                   <div><span className="text-gray-500">Updated</span><p className="font-mono text-white">{data.updatedReplicas ?? 0}</p></div>
                   <div><span className="text-gray-500">Available</span><p className="font-mono text-white">{data.availableReplicas ?? 0}</p></div>
-                  <div><span className="text-gray-500">Strategy</span><p className="font-mono text-gray-300">{data.strategy}</p></div>
+                  <div><span className="text-gray-500">Strategy</span><p className="font-mono text-gray-300">{typeof data.strategy === 'object' ? `${data.strategy.type}${data.strategy.maxSurge ? ` (surge=${data.strategy.maxSurge}, unavail=${data.strategy.maxUnavailable})` : ''}` : data.strategy}</p></div>
                 </div>
               )}
               {kind === 'StatefulSet' && (
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div><span className="text-gray-500">Replicas</span><p className="font-mono text-white">{data.readyReplicas ?? 0}/{data.replicas}</p></div>
                   <div><span className="text-gray-500">Service</span><p className="font-mono text-gray-300">{data.serviceName}</p></div>
+                  {data.strategy && <div><span className="text-gray-500">Strategy</span><p className="font-mono text-gray-300">{data.strategy.type}{data.strategy.partition !== undefined ? ` (partition=${data.strategy.partition})` : ''}</p></div>}
                 </div>
               )}
               {kind === 'DaemonSet' && (
@@ -946,6 +1258,7 @@ function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: string; nam
                   <div><span className="text-gray-500">Desired</span><p className="font-mono text-white">{data.desiredNumberScheduled}</p></div>
                   <div><span className="text-gray-500">Current</span><p className="font-mono text-white">{data.currentNumberScheduled}</p></div>
                   <div><span className="text-gray-500">Ready</span><p className="font-mono text-neon-green">{data.numberReady}</p></div>
+                  {data.strategy && <div><span className="text-gray-500">Strategy</span><p className="font-mono text-gray-300">{data.strategy.type}{data.strategy.maxUnavailable ? ` (unavail=${data.strategy.maxUnavailable})` : ''}</p></div>}
                 </div>
               )}
               {kind === 'CronJob' && (
@@ -1107,6 +1420,10 @@ function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: string; nam
           ) : <p className="text-center text-[11px] text-gray-600 py-8">No ReplicaSets found</p>
         )}
 
+        {activeSection === 'agglogs' && (
+          <AggLogsView ns={ns} name={name} kind={kind} />
+        )}
+
         {activeSection === 'labels' && (
           <>
             {Object.keys(labels).length > 0 && (
@@ -1143,9 +1460,128 @@ function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: string; nam
   )
 }
 
+// ─── Aggregated Log Viewer ──────────────────────────────────────────
+const AGG_LOG_COLORS = ['#06d6e0', '#00ff88', '#f59e0b', '#a78bfa', '#f472b6', '#38bdf8', '#fb923c', '#34d399', '#e879f9', '#fbbf24']
+
+function AggLogsView({ ns, name, kind }: { ns: string; name: string; kind: string }) {
+  const [lines, setLines] = useState<{ pod: string; line: string }[]>([])
+  const [status, setStatus] = useState<'connecting' | 'streaming' | 'ended' | 'error'>('connecting')
+  const [tail, setTail] = useState(100)
+  const [paused, setPaused] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [autoScroll, setAutoScroll] = useState(true)
+  const podColorMap = useRef<Map<string, string>>(new Map())
+  const pausedRef = useRef(false)
+  const bufferRef = useRef<{ pod: string; line: string }[]>([])
+
+  useEffect(() => { pausedRef.current = paused }, [paused])
+
+  useEffect(() => {
+    setLines([])
+    setStatus('connecting')
+    podColorMap.current = new Map()
+    bufferRef.current = []
+    const es = new EventSource(`/api/workloads/${ns}/${name}/agglogs?kind=${kind}&tail=${tail}&follow=true`)
+    es.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data) as { pod: string; line: string }
+        if (pausedRef.current) {
+          bufferRef.current.push(d)
+          if (bufferRef.current.length > 5000) bufferRef.current = bufferRef.current.slice(-3000)
+          return
+        }
+        setLines(prev => {
+          const next = [...prev, d]
+          return next.length > 5000 ? next.slice(-3000) : next
+        })
+        setStatus('streaming')
+      } catch {}
+    }
+    es.onerror = () => { setStatus(s => s === 'streaming' ? 'ended' : 'error'); es.close() }
+    return () => es.close()
+  }, [ns, name, kind, tail])
+
+  useEffect(() => {
+    if (!paused && bufferRef.current.length > 0) {
+      setLines(prev => {
+        const combined = [...prev, ...bufferRef.current]
+        bufferRef.current = []
+        return combined.length > 5000 ? combined.slice(-3000) : combined
+      })
+    }
+  }, [paused])
+
+  useEffect(() => {
+    if (autoScroll && endRef.current) endRef.current.scrollIntoView({ behavior: 'smooth' })
+  }, [lines, autoScroll])
+
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 60)
+  }, [])
+
+  const getPodColor = (pod: string) => {
+    if (!podColorMap.current.has(pod)) {
+      podColorMap.current.set(pod, AGG_LOG_COLORS[podColorMap.current.size % AGG_LOG_COLORS.length])
+    }
+    return podColorMap.current.get(pod)!
+  }
+
+  const shortPod = (p: string) => {
+    const parts = p.split('-')
+    return parts.length > 2 ? parts.slice(-2).join('-') : p
+  }
+
+  return (
+    <div className="flex flex-col h-full -m-3">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-hull-700/40 bg-hull-900/60 shrink-0">
+        <span className={`h-1.5 w-1.5 rounded-full ${status === 'streaming' ? 'bg-neon-green animate-pulse' : status === 'connecting' ? 'bg-neon-amber animate-pulse' : status === 'ended' ? 'bg-gray-600' : 'bg-neon-red'}`} />
+        <span className="text-[10px] text-gray-500 capitalize">{status}{paused ? ' (paused)' : ''}</span>
+        <div className="ml-auto flex items-center gap-2">
+          <select value={tail} onChange={e => setTail(Number(e.target.value))} className="rounded border border-hull-600 bg-hull-800 px-1.5 py-0.5 text-[10px] text-gray-300">
+            <option value={100}>100 lines</option>
+            <option value={300}>300 lines</option>
+            <option value={1000}>1000 lines</option>
+          </select>
+          <button onClick={() => setPaused(v => !v)} className={`rounded border px-2 py-0.5 text-[10px] font-medium transition-colors ${paused ? 'border-neon-amber/50 bg-amber-950/40 text-neon-amber' : 'border-hull-600 bg-hull-800 text-gray-400 hover:text-white'}`}>
+            {paused ? '▶ Resume' : '⏸ Pause'}
+          </button>
+          <button onClick={() => setLines([])} className="rounded border border-hull-600 bg-hull-800 px-2 py-0.5 text-[10px] text-gray-400 hover:text-white transition-colors">Clear</button>
+        </div>
+      </div>
+      <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-auto bg-hull-950 p-2 font-mono text-[11px] leading-relaxed min-h-[300px]">
+        {lines.length === 0 && status === 'connecting' && <div className="flex items-center justify-center py-12"><Spinner /></div>}
+        {lines.length === 0 && status !== 'connecting' && <p className="text-center text-gray-600 py-12">No logs</p>}
+        {lines.map((l, i) => (
+          <div key={i} className="flex gap-0 hover:bg-hull-800/30">
+            <span className="shrink-0 w-[140px] truncate text-right pr-2 select-none" style={{ color: getPodColor(l.pod) }}>{shortPod(l.pod)}</span>
+            <span className="text-gray-400 select-none px-1">│</span>
+            <span className="text-gray-300 break-all flex-1">{l.line}</span>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+      {!autoScroll && lines.length > 0 && (
+        <button onClick={() => { setAutoScroll(true); endRef.current?.scrollIntoView({ behavior: 'smooth' }) }} className="absolute bottom-4 right-4 rounded-lg border border-hull-600 bg-hull-800 px-3 py-1.5 text-[10px] text-gray-300 shadow-xl hover:text-white transition-colors">
+          ↓ Scroll to bottom
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Dependency Resource Map ─────────────────────────────────────────
 function DependencyGraph({ ns, name, kind }: { ns: string; name: string; kind: string }) {
   const { data, err, loading } = useFetch<any>(`/api/workloads/${ns}/${name}/dependencies?kind=${kind}`, 30000)
+  const { data: driftData } = useFetch<DriftEntry[]>(`/api/config-drift?namespace=${encodeURIComponent(ns)}`, 30000)
+
+  const driftMap = useMemo(() => {
+    const m = new Map<string, DriftEntry>()
+    if (driftData) driftData.forEach(d => m.set(`${d.kind}-${d.name}`, d))
+    return m
+  }, [driftData])
 
   if (loading) return <div className="stat-card p-3"><Spinner /></div>
   if (err) return null
@@ -1176,7 +1612,7 @@ function DependencyGraph({ ns, name, kind }: { ns: string; name: string; kind: s
     }
   }
 
-  type DepItem = { kind: string; name: string; relation: string; detail: string; onClick?: () => void }
+  type DepItem = { kind: string; name: string; relation: string; detail: string; onClick?: () => void; drift?: DriftEntry }
   const items: DepItem[] = []
 
   ings.forEach((ing: any) => {
@@ -1207,10 +1643,12 @@ function DependencyGraph({ ns, name, kind }: { ns: string; name: string; kind: s
     })
   }
   cfgs.forEach((c: any) => {
+    const d = driftMap.get(`${c.kind}-${c.name}`)
     items.push({
       kind: c.kind, name: c.name, relation: `← ${c.source}`,
-      detail: `${c.kind} mounted via ${c.source}`,
+      detail: d ? `Modified ${d.modifiedAgo} ago · ${d.driftedCount}/${d.totalPods} pods stale` : `${c.kind} mounted via ${c.source}`,
       onClick: () => navigate(`/config`),
+      drift: d,
     })
   })
 
@@ -1233,15 +1671,16 @@ function DependencyGraph({ ns, name, kind }: { ns: string; name: string; kind: s
           return (
             <div key={`${item.kind}-${item.name}-${i}`}
               onClick={item.onClick}
-              className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all ${s.bg} ${s.border} ${item.onClick ? 'cursor-pointer hover:brightness-125 hover:border-opacity-80 active:scale-[0.99]' : ''}`}>
-              <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${s.dot}`} />
+              className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all ${item.drift ? 'bg-amber-950/20 border-amber-900/40' : `${s.bg} ${s.border}`} ${item.onClick ? 'cursor-pointer hover:brightness-125 hover:border-opacity-80 active:scale-[0.99]' : ''}`}>
+              <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${item.drift ? 'bg-neon-amber animate-pulse' : s.dot}`} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className={`text-[9px] font-bold uppercase ${s.text}`}>{item.kind}</span>
                   <span className="text-[9px] text-gray-600">{item.relation}</span>
+                  {item.drift && <span className="rounded bg-amber-950/50 border border-amber-900/30 px-1 py-0.5 text-[8px] font-bold text-neon-amber">STALE</span>}
                 </div>
                 <p className="text-[11px] font-mono text-white font-medium truncate">{item.name}</p>
-                <p className="text-[10px] text-gray-500 truncate">{item.detail}</p>
+                <p className={`text-[10px] truncate ${item.drift ? 'text-neon-amber' : 'text-gray-500'}`}>{item.detail}</p>
               </div>
               {item.onClick && <span className="text-gray-600 text-sm shrink-0">›</span>}
             </div>
@@ -1338,43 +1777,247 @@ function ResourceBar({ used, req, lim, label, unit }: { used: number; req: numbe
 }
 
 // ─── Pods ────────────────────────────────────────────────────────────
+type SparklineData = Record<string, { cpu: number[][]; mem: number[][] }>
+
+function fmtMetric(v: number, unit: string) {
+  if (unit === 'Mi') return v >= 1024 ? `${(v / 1024).toFixed(1)}Gi` : `${v}Mi`
+  return `${v}${unit}`
+}
+
+function MiniSparkline({ points, color, used, limit, unit }: { points: number[]; color: string; used: number; limit: number; unit: string }) {
+  const W = 36, H = 18
+  const hasGraph = points && points.length >= 2
+  const mx = hasGraph ? Math.max(...points, 1) : 1
+  const mn = hasGraph ? Math.min(...points, 0) : 0
+  const rng = mx - mn || 1
+  const coords = hasGraph ? points.map((v, i) => [
+    1 + (i / (points.length - 1)) * (W - 2),
+    1 + (H - 2) - ((v - mn) / rng) * (H - 2)
+  ]) : []
+  const linePath = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+  const areaPath = linePath + (coords.length ? ` L${coords[coords.length - 1][0].toFixed(1)},${H} L${coords[0][0].toFixed(1)},${H} Z` : '')
+  const tooltip = limit > 0 ? `${fmtMetric(used, unit)} / ${fmtMetric(limit, unit)}` : fmtMetric(used, unit)
+  const label = limit > 0 ? `${fmtMetric(used, unit)}/${fmtMetric(limit, unit)}` : used > 0 ? fmtMetric(used, unit) : '—'
+  const gradId = `sg-${color.replace('#', '')}`
+  return (
+    <div className="flex items-center gap-1 overflow-hidden" title={tooltip}>
+      {hasGraph && (
+        <svg width={W} height={H} className="shrink-0">
+          <defs><linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.35" /><stop offset="100%" stopColor={color} stopOpacity="0.05" /></linearGradient></defs>
+          <path d={areaPath} fill={`url(#${gradId})`} />
+          <path d={linePath} fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+      <span className="text-[9px] text-gray-400 tabular-nums truncate">{label}</span>
+    </div>
+  )
+}
+
 function PodsView({ namespace, onPod }: { namespace: string; onPod: (ns: string, name: string) => void }) {
   const q = namespace ? `?namespace=${namespace}` : ''
   const { data, err, loading } = useFetch<Pod[]>(`/api/pods${q}`, 8000)
+  const { data: sparkData } = useFetch<SparklineData>(`/api/pod-sparklines${q}`, 8000)
+  const [view, setView] = useState<'cards' | 'table'>(() => {
+    try { return (localStorage.getItem('pods-view') as 'cards' | 'table') || 'table' } catch { return 'table' }
+  })
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState('')
+  type PodSortCol = 'name' | 'ns' | 'status' | 'restarts' | 'age' | 'cpu' | 'mem'
+  const [sortCol, setSortCol] = useState<PodSortCol>('name')
+  const [sortAsc, setSortAsc] = useState(true)
+
+  const toggleView = (v: 'cards' | 'table') => { setView(v); try { localStorage.setItem('pods-view', v) } catch {} }
+  const toggleSort = (col: PodSortCol) => {
+    if (sortCol === col) setSortAsc(p => !p)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+
   if (loading) return <Spinner />
   if (err) return <p className="p-4 text-neon-red">{err}</p>
+
+  const all = data ?? []
+  const owners = [...new Set(all.filter(p => p.ownerName).map(p => `${p.ownerKind}/${p.ownerName}`))].sort()
+  const statuses = [...new Set(all.map(p => p.status))].sort()
+
+  const filtered = all.filter(p => {
+    if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.namespace.toLowerCase().includes(search.toLowerCase())) return false
+    if (statusFilter && p.status !== statusFilter) return false
+    if (ownerFilter && `${p.ownerKind}/${p.ownerName}` !== ownerFilter) return false
+    return true
+  })
+
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0
+    switch (sortCol) {
+      case 'name': cmp = a.name.localeCompare(b.name); break
+      case 'ns': cmp = a.namespace.localeCompare(b.namespace); break
+      case 'status': cmp = a.status.localeCompare(b.status); break
+      case 'restarts': cmp = a.restarts - b.restarts; break
+      case 'age': cmp = a.age.localeCompare(b.age); break
+      case 'cpu': cmp = a.cpuUsedM - b.cpuUsedM; break
+      case 'mem': cmp = a.memUsedMi - b.memUsedMi; break
+    }
+    return sortAsc ? cmp : -cmp
+  })
+
+  const running = all.filter(p => p.status === 'Running').length
+  const pending = all.filter(p => p.status === 'Pending' || p.status === 'ContainerCreating').length
+  const failed = all.filter(p => p.status !== 'Running' && p.status !== 'Pending' && p.status !== 'Succeeded' && p.status !== 'Completed' && p.status !== 'ContainerCreating').length
+  const totalCpu = all.reduce((s, p) => s + p.cpuUsedM, 0)
+  const totalMem = all.reduce((s, p) => s + p.memUsedMi, 0)
+  const totalRestarts = all.reduce((s, p) => s + p.restarts, 0)
+
   const statusColor = (s: string) => s === 'Running' ? 'text-neon-green' : s === 'Succeeded' || s === 'Completed' ? 'text-gray-500' : s === 'Pending' || s === 'ContainerCreating' ? 'text-neon-amber' : 'text-neon-red'
+  const arrow = (col: PodSortCol) => sortCol === col ? (sortAsc ? ' ▴' : ' ▾') : ''
+  const thCls = (col: PodSortCol) => `px-2 py-2 text-left font-medium cursor-pointer select-none whitespace-nowrap transition-colors hover:text-gray-300 ${sortCol === col ? 'text-neon-cyan' : ''}`
+
+  const cpuSpark = (p: Pod) => sparkData?.[`${p.namespace}/${p.name}`]?.cpu?.map(pt => pt[1]) ?? []
+  const memSpark = (p: Pod) => sparkData?.[`${p.namespace}/${p.name}`]?.mem?.map(pt => pt[1]) ?? []
+
   return (
     <div className="space-y-2 p-3">
-      {data?.map((p, i) => (
-        <button key={`${p.namespace}-${p.name}`} onClick={() => onPod(p.namespace, p.name)} className="w-full stat-card px-3 py-2.5 text-left anim-in" style={{ animationDelay: `${i * 25}ms` }}>
-          <div className="flex items-center gap-2.5">
-            <StatusDot ok={p.status === 'Running'} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white">{p.name}</p>
-              <p className="text-[10px] text-gray-600">{p.namespace} · {p.node}</p>
-            </div>
-            <div className="shrink-0 text-right text-[10px]">
-              <span className={`font-medium ${statusColor(p.status)}`}>{p.status}</span>
-              <p className="text-gray-600">{p.ready} · {p.age}</p>
-              {p.restarts > 0 && <p className="text-neon-amber font-medium">{p.restarts}x restart</p>}
-            </div>
-            <span className="text-gray-700 text-sm">›</span>
-          </div>
-          {(p.cpuUsedM > 0 || p.memUsedMi > 0 || p.cpuReqM > 0 || p.memReqMi > 0) && (
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <ResourceBar used={p.cpuUsedM} req={p.cpuReqM} lim={p.cpuLimM} label="CPU" unit="m" />
-              <ResourceBar used={p.memUsedMi} req={p.memReqMi} lim={p.memLimMi} label="MEM" unit="Mi" />
-            </div>
-          )}
-          {(p.cpuSizing !== 'unknown' || p.memSizing !== 'unknown') && (
-            <div className="mt-1.5 flex gap-1.5">
-              {p.cpuSizing !== 'unknown' && <SizingBadge resource="CPU" sizing={p.cpuSizing} />}
-              {p.memSizing !== 'unknown' && <SizingBadge resource="MEM" sizing={p.memSizing} />}
-            </div>
-          )}
-        </button>
-      ))}
+      {/* Summary strip */}
+      <div className="flex flex-wrap gap-2 text-[10px]">
+        <div className="stat-card px-3 py-1.5 flex items-center gap-1.5"><span className="text-gray-500">Total</span><span className="text-white font-bold tabular-nums">{all.length}</span></div>
+        <div className="stat-card px-3 py-1.5 flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-neon-green" /><span className="text-gray-500">Running</span><span className="text-neon-green font-bold tabular-nums">{running}</span></div>
+        {pending > 0 && <div className="stat-card px-3 py-1.5 flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-neon-amber" /><span className="text-gray-500">Pending</span><span className="text-neon-amber font-bold tabular-nums">{pending}</span></div>}
+        {failed > 0 && <div className="stat-card px-3 py-1.5 flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-neon-red" /><span className="text-gray-500">Failed</span><span className="text-neon-red font-bold tabular-nums">{failed}</span></div>}
+        {totalRestarts > 0 && <div className="stat-card px-3 py-1.5 flex items-center gap-1.5"><span className="text-gray-500">Restarts</span><span className="text-neon-amber font-bold tabular-nums">{totalRestarts}</span></div>}
+        <div className="stat-card px-3 py-1.5 flex items-center gap-1.5"><span className="text-gray-500">CPU</span><span className="text-neon-cyan font-bold tabular-nums">{totalCpu > 1000 ? `${(totalCpu / 1000).toFixed(1)} cores` : `${totalCpu}m`}</span></div>
+        <div className="stat-card px-3 py-1.5 flex items-center gap-1.5"><span className="text-gray-500">MEM</span><span className="text-neon-cyan font-bold tabular-nums">{totalMem > 1024 ? `${(totalMem / 1024).toFixed(1)} Gi` : `${totalMem} Mi`}</span></div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search pods…"
+          className="rounded-lg border border-hull-600/50 bg-hull-800/60 px-2.5 py-1.5 text-[11px] text-gray-300 outline-none placeholder:text-gray-600 w-48 focus:border-neon-cyan/40 transition-colors" />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-hull-600/50 bg-hull-800/60 px-2 py-1.5 text-[10px] text-gray-300 outline-none">
+          <option value="">All Status</option>
+          {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}
+          className="rounded-lg border border-hull-600/50 bg-hull-800/60 px-2 py-1.5 text-[10px] text-gray-300 outline-none max-w-[220px]">
+          <option value="">All Owners</option>
+          {owners.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <span className="text-[10px] text-gray-600 tabular-nums ml-auto">{sorted.length} pod{sorted.length !== 1 ? 's' : ''}</span>
+        <div className="flex rounded-lg border border-hull-600/50 overflow-hidden">
+          <button type="button" onClick={() => toggleView('cards')} className={`px-2 py-1 text-[10px] transition-colors ${view === 'cards' ? 'bg-hull-700 text-white' : 'text-gray-500 hover:text-gray-300'}`}>◫ Cards</button>
+          <button type="button" onClick={() => toggleView('table')} className={`px-2 py-1 text-[10px] transition-colors ${view === 'table' ? 'bg-hull-700 text-white' : 'text-gray-500 hover:text-gray-300'}`}>☰ Table</button>
+        </div>
+      </div>
+
+      {/* Table view */}
+      {view === 'table' && (() => {
+        const hasNs = !namespace
+        return (
+        <div className="rounded-lg border border-hull-700 overflow-hidden">
+          <table className="w-full font-mono text-[11px] table-fixed">
+            <colgroup>
+              <col style={{width:'24px'}} />
+              <col style={{width: hasNs ? '22%' : '30%'}} />
+              {hasNs && <col style={{width:'11%'}} />}
+              <col style={{width:'7%'}} />
+              <col style={{width:'4.5%'}} />
+              <col style={{width:'5.5%'}} />
+              <col style={{width:'4%'}} />
+              <col style={{width:'9%'}} />
+              <col style={{width: hasNs ? '14%' : '16%'}} />
+              <col style={{width:'10%'}} />
+              <col style={{width:'10%'}} />
+            </colgroup>
+            <thead className="bg-hull-800 uppercase tracking-wider sticky top-0 z-10 text-gray-500 text-[10px]">
+              <tr>
+                <th className="pl-2 py-2"></th>
+                <th className={`${thCls('name')}`} onClick={() => toggleSort('name')}>Name{arrow('name')}</th>
+                {hasNs && <th className={`${thCls('ns')}`} onClick={() => toggleSort('ns')}>NS{arrow('ns')}</th>}
+                <th className={`${thCls('status')}`} onClick={() => toggleSort('status')}>Status{arrow('status')}</th>
+                <th className="px-2 py-2 text-left font-medium">Ready</th>
+                <th className={`${thCls('restarts')}`} onClick={() => toggleSort('restarts')}>Restarts{arrow('restarts')}</th>
+                <th className={`${thCls('age')}`} onClick={() => toggleSort('age')}>Age{arrow('age')}</th>
+                <th className="px-2 py-2 text-left font-medium">Pod IP</th>
+                <th className="px-2 py-2 text-left font-medium">Owner</th>
+                <th className={`${thCls('cpu')}`} onClick={() => toggleSort('cpu')}>CPU{arrow('cpu')}</th>
+                <th className={`${thCls('mem')}`} onClick={() => toggleSort('mem')}>Memory{arrow('mem')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map(p => (
+                <tr key={`${p.namespace}-${p.name}`} onClick={() => onPod(p.namespace, p.name)}
+                  className="border-t border-hull-800 cursor-pointer transition-colors hover:bg-hull-800/60 active:bg-hull-700">
+                  <td className="pl-2 py-2"><span className={`inline-block h-2 w-2 rounded-full ${p.status === 'Running' ? 'bg-neon-green' : p.status === 'Pending' || p.status === 'ContainerCreating' ? 'bg-neon-amber' : p.status === 'Succeeded' || p.status === 'Completed' ? 'bg-gray-600' : 'bg-neon-red'}`} /></td>
+                  <td className="px-2 py-2 text-white truncate overflow-hidden" title={p.name}>{p.name}</td>
+                  {hasNs && <td className="px-2 py-2 text-gray-500 truncate overflow-hidden" title={p.namespace}>{p.namespace}</td>}
+                  <td className={`px-2 py-2 font-medium truncate overflow-hidden ${statusColor(p.status)}`}>{p.status}</td>
+                  <td className="px-2 py-2 text-gray-400">{p.ready}</td>
+                  <td className={`px-2 py-2 tabular-nums ${p.restarts > 0 ? 'text-neon-amber font-bold' : 'text-gray-600'}`}>{p.restarts}</td>
+                  <td className="px-2 py-2 text-gray-500">{p.age}</td>
+                  <td className="px-2 py-2 text-gray-600 font-mono truncate overflow-hidden">{p.podIP || '—'}</td>
+                  <td className="px-2 py-2 text-neon-cyan truncate overflow-hidden" title={p.ownerName ? `${p.ownerKind}/${p.ownerName}` : ''}>{p.ownerName ? `${p.ownerKind?.toLowerCase().slice(0,6)}/${p.ownerName}` : '—'}</td>
+                  <td className="px-2 py-2 overflow-hidden"><MiniSparkline points={cpuSpark(p)} color="#22d3ee" used={p.cpuUsedM} limit={p.cpuLimM} unit="m" /></td>
+                  <td className="px-2 py-2 overflow-hidden"><MiniSparkline points={memSpark(p)} color="#a78bfa" used={p.memUsedMi} limit={p.memLimMi} unit="Mi" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        )
+      })()}
+
+      {/* Cards view */}
+      {view === 'cards' && (
+        <div className="space-y-2">
+          {sorted.map((p, i) => (
+            <button key={`${p.namespace}-${p.name}`} onClick={() => onPod(p.namespace, p.name)} className="w-full stat-card px-3 py-2.5 text-left anim-in" style={{ animationDelay: `${i * 25}ms` }}>
+              <div className="flex items-center gap-2.5">
+                <StatusDot ok={p.status === 'Running'} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-white">{p.name}</p>
+                  <p className="text-[10px] text-gray-600">{p.namespace} · {p.node}{p.ownerName ? ` · ${p.ownerKind?.toLowerCase()}/${p.ownerName}` : ''}</p>
+                  {p.labels && Object.keys(p.labels).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {Object.entries(p.labels).slice(0, 3).map(([k, v]) => (
+                        <span key={k} className="rounded bg-hull-700/60 border border-hull-600/40 px-1.5 py-0 text-[8px] font-mono text-gray-400 truncate max-w-[140px]">{k.replace('app.kubernetes.io/', '')}={v}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="shrink-0 text-right text-[10px]">
+                  <span className={`font-medium ${statusColor(p.status)}`}>{p.status}</span>
+                  <p className="text-gray-600">{p.ready} · {p.age}</p>
+                  {p.restarts > 0 && <p className="text-neon-amber font-medium">{p.restarts}x restart</p>}
+                </div>
+                <span className="text-gray-700 text-sm">›</span>
+              </div>
+              {p.containerStates && p.containerStates.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {p.containerStates.map(cs => (
+                    <span key={cs.name} className="inline-flex items-center gap-1 text-[9px] font-mono" title={cs.reason || cs.state}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${cs.state === 'running' ? 'bg-neon-green' : cs.state === 'waiting' ? 'bg-neon-amber' : 'bg-neon-red'}`} />
+                      <span className="text-gray-500">{cs.name}</span>
+                      {cs.state !== 'running' && <span className={cs.state === 'waiting' ? 'text-neon-amber' : 'text-neon-red'}>{cs.reason || cs.state}</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {(p.cpuUsedM > 0 || p.memUsedMi > 0 || p.cpuReqM > 0 || p.memReqMi > 0) && (
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <ResourceBar used={p.cpuUsedM} req={p.cpuReqM} lim={p.cpuLimM} label="CPU" unit="m" />
+                  <ResourceBar used={p.memUsedMi} req={p.memReqMi} lim={p.memLimMi} label="MEM" unit="Mi" />
+                </div>
+              )}
+              {(p.cpuSizing !== 'unknown' || p.memSizing !== 'unknown') && (
+                <div className="mt-1.5 flex gap-1.5">
+                  {p.cpuSizing !== 'unknown' && <SizingBadge resource="CPU" sizing={p.cpuSizing} />}
+                  {p.memSizing !== 'unknown' && <SizingBadge resource="MEM" sizing={p.memSizing} />}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -1650,6 +2293,113 @@ function NodeMetricsPanel({ nodeName }: { nodeName: string }) {
   )
 }
 
+// ─── Node Pod Heatmap (Noisy Neighbors) ─────────────────────────────
+
+type PodUsageEntry = { name: string; namespace: string; cpuUsedM: number; memUsedMi: number; cpuReqM: number; cpuLimM: number; memReqMi: number; memLimMi: number; status: string; ready: string; age: string }
+type PodUsageData = { node: { allocCpuM: number; allocMemMi: number }; pods: PodUsageEntry[]; pressure: { cpuPct: number; memPct: number } }
+
+function NodePodHeatmap({ nodeName, highlightPod, onPod }: { nodeName: string; highlightPod?: string; onPod: (ns: string, name: string) => void }) {
+  const { data, loading } = useFetch<PodUsageData>(nodeName ? `/api/nodes/${encodeURIComponent(nodeName)}/pod-usage` : null, 15000)
+
+  if (!nodeName || loading || !data) return null
+  const { node, pods, pressure } = data
+  if (pods.length === 0) return null
+
+  const pressureColor = (pct: number) => pct > 85 ? 'text-neon-red' : pct > 70 ? 'text-neon-amber' : 'text-neon-green'
+  const pressureBarBg = (pct: number) => pct > 85 ? 'bg-neon-red' : pct > 70 ? 'bg-neon-amber' : 'bg-neon-green'
+
+  const heatBg = (used: number, alloc: number) => {
+    if (alloc <= 0) return ''
+    const pct = (used / alloc) * 100
+    if (pct > 40) return 'bg-red-950/50 text-red-300'
+    if (pct > 20) return 'bg-amber-950/40 text-amber-300'
+    if (pct > 5) return 'bg-emerald-950/30 text-emerald-300'
+    return 'text-gray-400'
+  }
+
+  return (
+    <div className="rounded border border-hull-700 bg-hull-900 overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-hull-700 bg-hull-800 px-2 py-1.5">
+        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Pods</span>
+        <span className="text-[10px] text-gray-500">({pods.length})</span>
+        <div className="ml-auto flex items-center gap-3 text-[10px]">
+          <span className={pressureColor(pressure.cpuPct)}>CPU {pressure.cpuPct}%</span>
+          <span className={pressureColor(pressure.memPct)}>MEM {pressure.memPct}%</span>
+        </div>
+      </div>
+      <div className="p-2 space-y-2">
+          {(pressure.cpuPct > 80 || pressure.memPct > 85) && (
+            <div className="rounded-lg border border-amber-900/30 bg-amber-950/20 px-3 py-1.5 text-[10px] text-neon-amber font-medium">
+              {pressure.cpuPct > 80 && pressure.memPct > 85
+                ? 'High CPU and Memory pressure — contention likely'
+                : pressure.cpuPct > 80 ? 'High CPU pressure — pods may be throttled' : 'High Memory pressure — OOM risk'}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <div className="flex-1 rounded bg-hull-800 p-2">
+              <div className="flex items-center justify-between text-[10px] mb-1">
+                <span className="text-gray-500">CPU</span>
+                <span className={pressureColor(pressure.cpuPct)}>{pressure.cpuPct}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-hull-700 overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${pressureBarBg(pressure.cpuPct)}`} style={{ width: `${Math.min(pressure.cpuPct, 100)}%` }} />
+              </div>
+            </div>
+            <div className="flex-1 rounded bg-hull-800 p-2">
+              <div className="flex items-center justify-between text-[10px] mb-1">
+                <span className="text-gray-500">Memory</span>
+                <span className={pressureColor(pressure.memPct)}>{pressure.memPct}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-hull-700 overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${pressureBarBg(pressure.memPct)}`} style={{ width: `${Math.min(pressure.memPct, 100)}%` }} />
+              </div>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[10px]">
+              <thead>
+                <tr className="text-gray-500 border-b border-hull-700">
+                  <th className="text-left py-1 px-1.5 font-medium">Pod</th>
+                  <th className="text-left py-1 px-1.5 font-medium">Namespace</th>
+                  <th className="text-left py-1 px-1.5 font-medium">Status</th>
+                  <th className="text-right py-1 px-1.5 font-medium">CPU Used</th>
+                  <th className="text-right py-1 px-1.5 font-medium">MEM Used</th>
+                  <th className="text-right py-1 px-1.5 font-medium">CPU Req/Lim</th>
+                  <th className="text-right py-1 px-1.5 font-medium">MEM Req/Lim</th>
+                  <th className="text-left py-1 px-1.5 font-medium">Ready</th>
+                  <th className="text-left py-1 px-1.5 font-medium">Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pods.map(p => {
+                  const isHighlight = highlightPod === p.name
+                  return (
+                    <tr key={`${p.namespace}/${p.name}`}
+                      onClick={() => onPod(p.namespace, p.name)}
+                      className={`border-b border-hull-800 cursor-pointer transition-colors hover:bg-hull-800 ${isHighlight ? 'ring-1 ring-blue-500/50 bg-blue-950/20' : ''}`}>
+                      <td className="py-1.5 px-1.5 font-mono text-white truncate max-w-[200px]">
+                        {isHighlight && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 mr-1.5 shrink-0" />}
+                        {p.name}
+                      </td>
+                      <td className="py-1.5 px-1.5 text-gray-500 truncate max-w-[120px]">{p.namespace}</td>
+                      <td className={`py-1.5 px-1.5 ${p.status === 'Running' ? 'text-neon-green' : p.status === 'Pending' ? 'text-neon-amber' : p.status === 'Terminating' ? 'text-gray-500' : 'text-neon-red'}`}>{p.status}</td>
+                      <td className={`py-1.5 px-1.5 text-right font-mono rounded ${heatBg(p.cpuUsedM, node.allocCpuM)}`}>{p.cpuUsedM}m</td>
+                      <td className={`py-1.5 px-1.5 text-right font-mono rounded ${heatBg(p.memUsedMi, node.allocMemMi)}`}>{p.memUsedMi}Mi</td>
+                      <td className="py-1.5 px-1.5 text-right text-gray-600 font-mono">{p.cpuReqM || '-'}/{p.cpuLimM || '-'}</td>
+                      <td className="py-1.5 px-1.5 text-right text-gray-600 font-mono">{p.memReqMi || '-'}/{p.memLimMi || '-'}</td>
+                      <td className="py-1.5 px-1.5 text-gray-400">{p.ready}</td>
+                      <td className="py-1.5 px-1.5 text-gray-600">{p.age}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+    </div>
+  )
+}
+
 type ContainerResources = { container: string; cpuReqM: number; cpuLimM: number; memReqMi: number; memLimMi: number }
 type PodMetricsResponse = MetricsData & { resources?: ContainerResources[] }
 
@@ -1892,7 +2642,7 @@ function WorkloadMetricsPanel({ namespace, name, kind }: { namespace: string; na
 }
 
 // ─── Pod Detail (Logs + Events + Containers + Delete) ───────────────
-function PodDetailView({ ns, name, onBack }: { ns: string; name: string; onBack: () => void }) {
+function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; name: string; onBack: () => void; onWorkload?: (ns: string, name: string, kind: string) => void }) {
   const { role } = useAuth()
   const isAdmin = role === 'admin'
   const [tab, setTab] = useState<'logs' | 'events' | 'info' | 'metrics'>('info')
@@ -1907,7 +2657,11 @@ function PodDetailView({ ns, name, onBack }: { ns: string; name: string; onBack:
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
   const [showShell, setShowShell] = useState(false)
+  const [showYaml, setShowYaml] = useState(false)
   const [logContainer, setLogContainer] = useState('')
+  const [prevLogContainer, setPrevLogContainer] = useState<string | null>(null)
+  const [prevLog, setPrevLog] = useState<string | null>(null)
+  const [prevLogLoading, setPrevLogLoading] = useState(false)
 
   useEffect(() => {
     setLogs([])
@@ -1954,10 +2708,24 @@ function PodDetailView({ ns, name, onBack }: { ns: string; name: string; onBack:
     }
   }
 
+  const fetchPrevLog = async (container: string) => {
+    setPrevLogContainer(container)
+    setPrevLogLoading(true)
+    setPrevLog(null)
+    try {
+      const r = await fetch(`/api/pods/${ns}/${name}/previous-logs?container=${container}`)
+      if (!r.ok) throw new Error(await r.text())
+      setPrevLog(await r.text())
+    } catch (e: any) {
+      setPrevLog(`Error: ${e.message}`)
+    } finally { setPrevLogLoading(false) }
+  }
+
   const tabs = ['info', 'logs', 'events', 'metrics'] as const
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {showShell && <PodShell ns={ns} name={name} onClose={() => setShowShell(false)} />}
+      {showYaml && <YamlModal kind="Pod" ns={ns} name={name} onClose={() => setShowYaml(false)} />}
       {toast && <div className="border-b border-hull-700 bg-hull-800 px-4 py-2 text-xs text-gray-300">{toast}</div>}
       <div className="flex items-center gap-2 border-b border-hull-700 bg-hull-900 px-4 py-2">
         <button onClick={onBack} className="rounded bg-hull-700 px-2 py-1 text-xs text-gray-400 hover:text-white">←</button>
@@ -1965,8 +2733,10 @@ function PodDetailView({ ns, name, onBack }: { ns: string; name: string; onBack:
           <p className="truncate text-sm font-medium text-white">{name}</p>
           <p className="text-[10px] text-gray-600">{ns}{desc ? ` · ${desc.status} · ${desc.node}` : ''}</p>
         </div>
+        <div className="flex gap-1.5">
+          <button onClick={() => setShowYaml(true)} className="rounded-md border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors">YAML</button>
         {isAdmin && (
-          <div className="flex gap-1.5">
+          <>
             <button onClick={() => setShowShell(true)} className="rounded-md border border-cyan-900/40 bg-cyan-950/40 px-2.5 py-1 text-[10px] font-medium text-neon-cyan transition-colors hover:bg-cyan-900/30">Shell</button>
             {!confirmDelete ? (
               <button onClick={() => setConfirmDelete(true)} className="rounded-md border border-red-900/40 bg-red-950/40 px-2.5 py-1 text-[10px] font-medium text-neon-red transition-colors hover:bg-red-900/40">Delete</button>
@@ -1978,8 +2748,9 @@ function PodDetailView({ ns, name, onBack }: { ns: string; name: string; onBack:
                 </button>
               </>
             )}
-          </div>
+          </>
         )}
+        </div>
       </div>
       <div className="flex gap-1 border-b border-hull-700 bg-hull-900 px-4 py-1">
         {tabs.map(t => (
@@ -2006,6 +2777,18 @@ function PodDetailView({ ns, name, onBack }: { ns: string; name: string; onBack:
             </div>
             {desc.ip && <p className="text-[10px] text-gray-600">Pod IP: <span className="font-mono text-gray-400">{desc.ip}</span></p>}
 
+            {desc.ownerKind && desc.ownerName && (
+              <div className="flex items-center gap-2 rounded-lg border border-hull-700 bg-hull-800/60 px-3 py-2">
+                <span className="text-[10px] text-gray-500">Owned by</span>
+                <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase ${desc.ownerKind === 'Deployment' ? 'bg-blue-950/30 text-blue-400 border-blue-900/30' : desc.ownerKind === 'StatefulSet' ? 'bg-purple-950/30 text-purple-400 border-purple-900/30' : desc.ownerKind === 'DaemonSet' ? 'bg-indigo-950/30 text-indigo-400 border-indigo-900/30' : desc.ownerKind === 'CronJob' ? 'bg-sky-950/30 text-sky-300 border-sky-900/30' : desc.ownerKind === 'Job' ? 'bg-sky-950/30 text-sky-400 border-sky-900/30' : 'bg-hull-700/50 text-gray-400 border-hull-600/50'}`}>{desc.ownerKind}</span>
+                {onWorkload && ['Deployment', 'StatefulSet', 'DaemonSet', 'CronJob', 'Job'].includes(desc.ownerKind) ? (
+                  <button onClick={() => onWorkload(ns, desc.ownerName!, desc.ownerKind!)} className="text-[11px] font-medium text-neon-cyan hover:underline transition-colors">{desc.ownerName}</button>
+                ) : (
+                  <span className="text-[11px] font-medium text-gray-300">{desc.ownerName}</span>
+                )}
+              </div>
+            )}
+
             {/* AI Diagnose */}
             {desc.status !== 'Running' && desc.status !== 'Completed' && desc.status !== 'Succeeded' && (
               <AIDiagnoseButton namespace={ns} pod={name} />
@@ -2021,10 +2804,43 @@ function PodDetailView({ ns, name, onBack }: { ns: string; name: string; onBack:
                   <ContainerStateBadge state={ct.state} reason={ct.reason} />
                 </div>
                 <p className="mt-1 truncate font-mono text-[10px] text-gray-500">{ct.image}</p>
-                <div className="mt-1.5 flex gap-3 text-[10px]">
+                <div className="mt-1.5 flex flex-wrap gap-3 text-[10px]">
                   {ct.restarts > 0 && <span className="text-neon-amber">↻ {ct.restarts} restarts</span>}
                   {ct.message && <span className="truncate text-gray-500">{ct.message}</span>}
                 </div>
+                {/* Probes */}
+                {(ct.livenessProbe || ct.readinessProbe || ct.startupProbe) && (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span className="text-[9px] text-gray-600 uppercase tracking-wider mr-0.5">Probes</span>
+                    {[{ label: 'Liveness', probe: ct.livenessProbe }, { label: 'Readiness', probe: ct.readinessProbe }, { label: 'Startup', probe: ct.startupProbe }].map(({ label, probe }) => probe ? (
+                      <span key={label} title={`${label}: ${probe.type}${probe.path ? ' ' + probe.path : ''}${probe.port ? ':' + probe.port : ''}${probe.command ? ' ' + probe.command : ''} · every ${probe.periodSeconds}s · fail after ${probe.failureThreshold} attempts`}
+                        className={`rounded border px-1.5 py-0.5 text-[9px] font-medium cursor-help ${ct.ready ? 'border-green-900/40 bg-green-950/30 text-neon-green' : 'border-amber-900/40 bg-amber-950/30 text-neon-amber'}`}>
+                        {label} ✓
+                      </span>
+                    ) : (
+                      <span key={label} className="rounded border border-hull-700 bg-hull-900/40 px-1.5 py-0.5 text-[9px] text-gray-700">{label}</span>
+                    ))}
+                  </div>
+                )}
+                {/* Restart Snapshot */}
+                {ct.restarts > 0 && ct.lastTermReason && (
+                  <div className="mt-2 rounded border border-hull-700 bg-hull-900/40 p-2 space-y-1">
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${ct.lastTermReason === 'OOMKilled' ? 'bg-red-950/50 text-neon-red border border-red-900/30' : 'bg-amber-950/50 text-neon-amber border border-amber-900/30'}`}>{ct.lastTermReason}</span>
+                      {ct.lastTermExitCode !== undefined && <span className="text-gray-500 font-mono">exit {ct.lastTermExitCode}</span>}
+                      {ct.lastTermAt && <span className="text-gray-600">{ct.lastTermAt}</span>}
+                      <button onClick={() => fetchPrevLog(ct.name)} className="ml-auto rounded border border-hull-600 bg-hull-800 px-2 py-0.5 text-[9px] text-gray-400 hover:text-white transition-colors">Prev Log</button>
+                    </div>
+                    {ct.lastTermMessage && <p className="text-[10px] text-gray-500 truncate">{ct.lastTermMessage}</p>}
+                    {prevLogContainer === ct.name && (
+                      <div className="mt-1.5">
+                        {prevLogLoading ? <Spinner /> : (
+                          <pre className="max-h-[200px] overflow-auto rounded bg-hull-950 border border-hull-700/30 p-2 font-mono text-[10px] text-gray-400 whitespace-pre-wrap">{prevLog || 'No previous logs'}</pre>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {(ct.cpuUsedM > 0 || ct.memUsedMi > 0 || ct.cpuReqM > 0 || ct.memReqMi > 0) && (
                   <div className="mt-2.5 grid grid-cols-2 gap-3">
                     <ResourceBar used={ct.cpuUsedM} req={ct.cpuReqM} lim={ct.cpuLimM} label="CPU" unit="m" />
@@ -2132,6 +2948,8 @@ function NodeDescribeView({ name, onBack, onPod }: { name: string; onBack: () =>
   const { data, err, loading, refetch } = useFetch<NodeDescData>(`/api/nodes/${name}/describe`)
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [showDrainWizard, setShowDrainWizard] = useState(false)
+  const drainBg = useDrainBg()
 
   const act = async (action: string) => {
     setBusy(action)
@@ -2161,7 +2979,7 @@ function NodeDescribeView({ name, onBack, onPod }: { name: string; onBack: () =>
           ) : (
             <>
               <Btn small onClick={() => act('cordon')} disabled={!!busy}>{busy === 'cordon' ? '…' : 'Cordon'}</Btn>
-              <Btn small variant="danger" onClick={() => act('drain')} disabled={!!busy}>{busy === 'drain' ? '…' : 'Drain'}</Btn>
+              <Btn small variant="danger" onClick={() => setShowDrainWizard(true)}>Drain</Btn>
             </>
           )}
         </div>}
@@ -2285,6 +3103,9 @@ function NodeDescribeView({ name, onBack, onPod }: { name: string; onBack: () =>
           </div>
         )}
 
+        {/* Pods on node (with resource usage heatmap) */}
+        <NodePodHeatmap nodeName={data.name} onPod={(pns, pname) => onPod(pns, pname)} />
+
         {/* Taints */}
         {data.taints.length > 0 && (
           <div className="rounded border border-hull-700 bg-hull-900">
@@ -2320,35 +3141,6 @@ function NodeDescribeView({ name, onBack, onPod }: { name: string; onBack: () =>
           </div>
         </div>
 
-        {/* Pods on node */}
-        <div className="rounded border border-hull-700 bg-hull-900">
-          <div className="border-b border-hull-700 bg-hull-800 px-2 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Pods <span className="font-normal text-gray-600">({data.pods.length})</span></div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[500px] font-mono text-[11px]">
-              <thead>
-                <tr className="border-b border-hull-700 text-left text-[10px] uppercase text-gray-500">
-                  <th className="px-2 py-1 font-medium">Name</th>
-                  <th className="px-2 py-1 font-medium">NS</th>
-                  <th className="px-2 py-1 font-medium">Status</th>
-                  <th className="px-2 py-1 font-medium">Ready</th>
-                  <th className="px-2 py-1 font-medium">Age</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.pods.map((p, i) => (
-                  <tr key={i} onClick={() => onPod(p.namespace, p.name)} className="cursor-pointer border-b border-hull-800 transition-colors hover:bg-hull-800 active:bg-hull-700 last:border-0">
-                    <td className="whitespace-nowrap px-2 py-1 text-white">{p.name}</td>
-                    <td className="whitespace-nowrap px-2 py-1 text-gray-500">{p.namespace}</td>
-                    <td className={`whitespace-nowrap px-2 py-1 ${p.status === 'Running' ? 'text-neon-green' : p.status === 'Pending' ? 'text-neon-amber' : 'text-neon-red'}`}>{p.status}</td>
-                    <td className="whitespace-nowrap px-2 py-1 text-gray-400">{p.ready}</td>
-                    <td className="whitespace-nowrap px-2 py-1 text-gray-600">{p.age}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         {/* Labels */}
         <div className="rounded border border-hull-700 bg-hull-900">
           <div className="border-b border-hull-700 bg-hull-800 px-2 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Labels <span className="font-normal text-gray-600">({Object.keys(data.labels).length})</span></div>
@@ -2374,6 +3166,8 @@ function NodeDescribeView({ name, onBack, onPod }: { name: string; onBack: () =>
           </div>
         </div>
       </div>
+      {drainBg.bg && <DrainBgBanner bg={drainBg.bg} onDismiss={drainBg.dismiss} />}
+      {showDrainWizard && <DrainWizardModal nodeName={name} onClose={() => setShowDrainWizard(false)} onDrained={() => { refetch(); setToast(`${name} drain complete`) }} onBackground={(total) => { drainBg.start(name, total); setShowDrainWizard(false) }} />}
     </div>
   )
 }
@@ -2384,6 +3178,7 @@ function ServicesView({ namespace }: { namespace: string }) {
   const { data, err, loading } = useFetch<Service[]>(url, 10000)
   const [sortCol, setSortCol] = useState<'name' | 'ns' | 'type' | 'ports' | 'age'>('name')
   const [sortAsc, setSortAsc] = useState(true)
+  const [yamlTarget, setYamlTarget] = useState<{ ns: string; name: string } | null>(null)
   const toggle = (col: typeof sortCol) => {
     if (sortCol === col) setSortAsc(!sortAsc)
     else { setSortCol(col); setSortAsc(true) }
@@ -2411,6 +3206,7 @@ function ServicesView({ namespace }: { namespace: string }) {
 
   return (
     <div className="p-3 space-y-2">
+      {yamlTarget && <YamlModal kind="Service" ns={yamlTarget.ns} name={yamlTarget.name} onClose={() => setYamlTarget(null)} />}
       <div className="flex items-center gap-2 font-mono text-[11px]">
         <span className="rounded bg-indigo-950/60 border border-indigo-900/50 px-2 py-0.5 text-indigo-400 font-bold tracking-wide">⇌ SERVICES</span>
         <span className="ml-auto tabular-nums text-gray-600">{items.length} svc{items.length !== 1 ? 's' : ''}</span>
@@ -2432,6 +3228,7 @@ function ServicesView({ namespace }: { namespace: string }) {
                 <th className="px-2 py-1.5 text-left font-medium">External</th>
                 <th className={thCls('ports')} onClick={() => toggle('ports')}>Ports{arrow('ports')}</th>
                 <th className={thCls('age')} onClick={() => toggle('age')}>Age{arrow('age')}</th>
+                <th className="px-2 py-1.5 font-medium w-8"></th>
               </tr>
             </thead>
             <tbody>
@@ -2444,6 +3241,7 @@ function ServicesView({ namespace }: { namespace: string }) {
                   <td className="px-2 py-1.5 text-neon-amber max-w-[120px] truncate text-[10px]">{s.externalIP || <span className="text-gray-700">-</span>}</td>
                   <td className="px-2 py-1.5 text-gray-300 max-w-[180px] truncate">{s.ports || '-'}</td>
                   <td className="px-2 py-1.5 text-gray-500">{s.age}</td>
+                  <td className="px-2 py-1.5"><button onClick={() => setYamlTarget({ ns: s.namespace, name: s.name })} className="rounded border border-hull-600 bg-hull-800 px-1.5 py-0.5 text-[9px] text-gray-500 hover:text-white transition-colors">YAML</button></td>
                 </tr>
               ))}
             </tbody>
@@ -2539,6 +3337,13 @@ function EventsView({ namespace }: { namespace: string }) {
 }
 
 // ─── Troubled Pods (non-healthy watch) ───────────────────────────────
+
+type SpotEvent = { reason: string; node: string; nodepool: string; instanceType: string; zone: string; message: string; age: string; timestamp: string; affectedPods: number }
+type ResilienceEntry = { name: string; namespace: string; kind: string; replicas: number; spotPods: number; onDemandPods: number; uniqueNodes: number; uniqueZones: number; uniqueInstTypes: number; recentDisruptions: number; score: number; rating: string }
+type SpotData = { events: SpotEvent[]; resilience: ResilienceEntry[] }
+
+const SPOT_REASONS = ['SpotInterrupted', 'TerminatingOnInterruption', 'FailedDraining', 'InstanceTerminating', 'Unconsolidatable', 'DisruptionBlocked'] as const
+
 function TroubledPodsView({ onPod }: { onPod: (ns: string, name: string) => void }) {
   const { data, err, loading } = useFetch<Pod[]>('/api/pods', 5000)
   const fs = useFullscreen()
@@ -2598,13 +3403,14 @@ function TroubledPodsView({ onPod }: { onPod: (ns: string, name: string) => void
 
   return (
     <div ref={fs.ref} className={`space-y-2 ${f ? 'bg-hull-950 h-screen overflow-auto p-5' : 'p-3'}`}>
-      <div className={`flex items-center gap-2 font-mono ${f ? 'text-sm' : 'text-[11px]'}`}>
-        <span className={`rounded bg-red-950/60 border border-red-900/50 text-neon-red font-bold tracking-wide ${f ? 'px-3 py-1' : 'px-2 py-0.5'}`}>⚠ TROUBLED</span>
-        <span className={f ? 'text-gray-400' : 'text-gray-500'}>pods not Running / Completed</span>
-        <span className={`ml-auto tabular-nums ${f ? 'text-gray-400' : 'text-gray-600'}`}>{troubled.length} pod{troubled.length !== 1 ? 's' : ''}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className={`font-semibold text-white ${f ? 'text-base' : 'text-sm'}`}>Troubled Pods</h2>
+          {troubled.length > 0 && <span className="rounded bg-red-950/50 border border-red-900/30 px-1.5 py-0.5 text-[10px] font-bold text-neon-red tabular-nums">{troubled.length}</span>}
+          <span className={`text-gray-600 ${f ? 'text-xs' : 'text-[9px]'}`}>— Pods that are not running or healthy</span>
+        </div>
         <FullscreenBtn active={f} onEnter={fs.enter} onExit={fs.exit} />
       </div>
-
       {troubled.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <span className="text-3xl mb-2">✓</span>
@@ -2612,8 +3418,6 @@ function TroubledPodsView({ onPod }: { onPod: (ns: string, name: string) => void
           <p className="text-gray-600 text-[11px] mt-1">No troubled pods in the cluster</p>
         </div>
       ) : (
-        <div className="space-y-2">
-        <p className={`text-gray-600 ${f ? 'text-xs' : 'text-[9px]'}`}>Click any pod for details, or use AI Diagnose in the pod detail view</p>
         <div className="overflow-x-auto rounded-lg border border-hull-700">
           <table className={`w-full font-mono ${f ? 'text-sm' : 'text-[11px]'}`}>
             <thead className={`bg-hull-800 uppercase tracking-wider sticky top-0 z-10 ${f ? 'text-gray-400 text-xs' : 'text-gray-500 text-[10px]'}`}>
@@ -2631,23 +3435,192 @@ function TroubledPodsView({ onPod }: { onPod: (ns: string, name: string) => void
               {sorted.map(p => {
                 const cp = f ? 'px-3 py-2.5' : 'px-2 py-1.5'
                 return (
-                <tr key={`${p.namespace}-${p.name}`}
-                  onClick={() => onPod(p.namespace, p.name)}
-                  className="border-t border-hull-800 cursor-pointer transition-colors hover:bg-hull-800/60 active:bg-hull-700"
-                >
-                  <td className={`${cp} ${f ? 'text-gray-300' : 'text-gray-500'} ${f ? '' : 'max-w-[90px]'} truncate`} title={p.namespace}>{p.namespace}</td>
-                  <td className={`${cp} text-white ${f ? '' : 'max-w-[200px]'} truncate`} title={p.name}>{p.name}</td>
-                  <td className={`${cp} font-bold ${statusColor(p.status)}`}>{p.status}</td>
-                  <td className={`${cp} ${f ? 'text-gray-300' : 'text-gray-400'}`}>{p.ready}</td>
-                  <td className={`${cp} tabular-nums ${p.restarts > 0 ? 'text-neon-amber font-bold' : f ? 'text-gray-400' : 'text-gray-600'}`}>{p.restarts}</td>
-                  <td className={`${cp} ${f ? 'text-gray-300' : 'text-gray-500'}`}>{p.age}</td>
-                  <td className={`${cp} ${f ? 'text-gray-300' : 'text-gray-400'} ${f ? '' : 'max-w-[200px]'} truncate`} title={p.node}>{p.node}</td>
-                </tr>
+                  <tr key={`${p.namespace}-${p.name}`}
+                    onClick={() => onPod(p.namespace, p.name)}
+                    className="border-t border-hull-800 cursor-pointer transition-colors hover:bg-hull-800/60 active:bg-hull-700"
+                  >
+                    <td className={`${cp} ${f ? 'text-gray-300' : 'text-gray-500'} ${f ? '' : 'max-w-[90px]'} truncate`} title={p.namespace}>{p.namespace}</td>
+                    <td className={`${cp} text-white ${f ? '' : 'max-w-[200px]'} truncate`} title={p.name}>{p.name}</td>
+                    <td className={`${cp} font-bold ${statusColor(p.status)}`}>{p.status}</td>
+                    <td className={`${cp} ${f ? 'text-gray-300' : 'text-gray-400'}`}>{p.ready}</td>
+                    <td className={`${cp} tabular-nums ${p.restarts > 0 ? 'text-neon-amber font-bold' : f ? 'text-gray-400' : 'text-gray-600'}`}>{p.restarts}</td>
+                    <td className={`${cp} ${f ? 'text-gray-300' : 'text-gray-500'}`}>{p.age}</td>
+                    <td className={`${cp} ${f ? 'text-gray-300' : 'text-gray-400'} ${f ? '' : 'max-w-[200px]'} truncate`} title={p.node}>{p.node}</td>
+                  </tr>
                 )
               })}
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  )
+}
+
+function SpotInterruptionsView({ onNode, hiddenReasons, onToggleReason }: { onNode: (name: string) => void; hiddenReasons: string[]; onToggleReason: (r: string) => void }) {
+  const { data: spotData } = useFetch<SpotData>('/api/spot-interruptions', 10000)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filterRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!filterOpen) return
+    const handler = (e: MouseEvent) => { if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [filterOpen])
+
+  const spotEvents = spotData?.events ?? []
+  const reasonCounts: Record<string, number> = {}
+  spotEvents.forEach(ev => { reasonCounts[ev.reason] = (reasonCounts[ev.reason] || 0) + 1 })
+
+  const filteredSpotEvents = spotEvents.filter(ev => !hiddenReasons.includes(ev.reason))
+  const activeCount = SPOT_REASONS.length - hiddenReasons.length
+
+  return (
+    <div className="space-y-2 p-3">
+      <div className="flex items-center gap-2 text-[10px]">
+        <div className="relative" ref={filterRef}>
+          <button type="button" onClick={() => setFilterOpen(v => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-hull-600/50 bg-hull-800/60 px-2.5 py-1.5 text-[10px] text-gray-300 hover:text-white transition-colors">
+            <span>Filter</span>
+            <span className="rounded bg-hull-700 px-1.5 py-0.5 text-[9px] font-bold text-neon-cyan tabular-nums">{activeCount}/{SPOT_REASONS.length}</span>
+            <span className={`text-[8px] text-gray-500 transition-transform ${filterOpen ? 'rotate-180' : ''}`}>▾</span>
+          </button>
+          {filterOpen && (
+            <div className="absolute left-0 top-full mt-1 z-50 w-64 rounded-lg border border-hull-600 bg-hull-900 shadow-xl py-1">
+              {SPOT_REASONS.map(r => {
+                const active = !hiddenReasons.includes(r)
+                const count = reasonCounts[r] || 0
+                return (
+                  <button type="button" key={r} onClick={(e) => { e.stopPropagation(); onToggleReason(r) }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-hull-800 transition-colors">
+                    <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${active ? 'bg-neon-cyan/20 border-neon-cyan/50 text-neon-cyan' : 'border-hull-600 text-transparent'}`}>
+                      {active && '✓'}
+                    </span>
+                    <span className={active ? 'text-gray-200' : 'text-gray-500'}>{r}</span>
+                    {count > 0 && <span className="ml-auto tabular-nums text-gray-600">({count})</span>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+        <span className="text-gray-600 tabular-nums">{filteredSpotEvents.length} event{filteredSpotEvents.length !== 1 ? 's' : ''}</span>
+      </div>
+      {filteredSpotEvents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <span className="text-3xl mb-2 opacity-40">◎</span>
+          <p className="text-gray-500 text-sm">No disruption events{hiddenReasons.length > 0 ? ' matching filters' : ''}</p>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-hull-700 divide-y divide-hull-800 overflow-hidden">
+          {filteredSpotEvents.map((ev, i) => (
+            <div key={`${ev.node}-${ev.reason}-${i}`} className="flex items-start gap-2.5 px-3 py-2.5 text-[11px] hover:bg-hull-800/30 transition-colors">
+              <span className={`mt-1 shrink-0 h-2 w-2 rounded-full ${ev.reason === 'SpotInterrupted' || ev.reason === 'InstanceTerminating' ? 'bg-neon-red animate-pulse' : 'bg-neon-amber'}`} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${ev.reason === 'SpotInterrupted' || ev.reason === 'InstanceTerminating' ? 'bg-red-950/40 border-red-900/30 text-red-400' : 'bg-amber-950/40 border-amber-900/30 text-amber-400'}`}>{ev.reason}</span>
+                  <button type="button" onClick={() => onNode(ev.node)} className="font-mono text-neon-cyan hover:underline cursor-pointer">{ev.node}</button>
+                  {ev.nodepool && <span className="rounded bg-hull-800 border border-hull-700/50 px-1.5 py-0.5 text-[9px] text-gray-400">{ev.nodepool}</span>}
+                  {ev.instanceType && <span className="text-gray-500">{ev.instanceType}</span>}
+                  {ev.zone && <span className="text-gray-600">{ev.zone}</span>}
+                  <span className="text-gray-600 ml-auto shrink-0">{ev.age} ago</span>
+                </div>
+                <p className="text-gray-500 mt-0.5 truncate">{ev.message}</p>
+                {ev.affectedPods > 0 && <span className="text-gray-600 text-[9px]">{ev.affectedPods} pods on this node</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PodResilienceView() {
+  const { data: spotData } = useFetch<SpotData>('/api/spot-interruptions', 15000)
+  const [nsFilter, setNsFilter] = useState('')
+  const [ratingFilter, setRatingFilter] = useState<'' | 'low' | 'medium' | 'high'>('')
+
+  const allRes = spotData?.resilience ?? []
+  const resNamespaces = [...new Set(allRes.map(r => r.namespace))].sort()
+  const filtered = allRes.filter(r =>
+    (nsFilter === '' || r.namespace === nsFilter) &&
+    (ratingFilter === '' || r.rating === ratingFilter)
+  )
+
+  return (
+    <div className="space-y-2 p-3">
+      <div className="flex items-center gap-2 flex-wrap text-[10px]">
+        <select value={nsFilter} onChange={e => setNsFilter(e.target.value)}
+          className="rounded-lg border border-hull-600/50 bg-hull-800/60 px-2 py-1 text-[10px] text-gray-300 outline-none">
+          <option value="">All namespaces</option>
+          {resNamespaces.map(ns => <option key={ns} value={ns}>{ns}</option>)}
+        </select>
+        <div className="flex gap-1">
+          <button onClick={() => setRatingFilter('')} className={`rounded-lg px-2 py-0.5 border transition-colors ${ratingFilter === '' ? 'bg-hull-700 text-white border-hull-600' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>All</button>
+          <button onClick={() => setRatingFilter(ratingFilter === 'low' ? '' : 'low')} className={`rounded-lg px-2 py-0.5 border transition-colors ${ratingFilter === 'low' ? 'bg-red-950/60 text-neon-red border-red-900/50' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>Low</button>
+          <button onClick={() => setRatingFilter(ratingFilter === 'medium' ? '' : 'medium')} className={`rounded-lg px-2 py-0.5 border transition-colors ${ratingFilter === 'medium' ? 'bg-amber-950/60 text-neon-amber border-amber-900/50' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>Medium</button>
+          <button onClick={() => setRatingFilter(ratingFilter === 'high' ? '' : 'high')} className={`rounded-lg px-2 py-0.5 border transition-colors ${ratingFilter === 'high' ? 'bg-emerald-950/60 text-neon-green border-emerald-900/50' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>High</button>
+        </div>
+        <span className="text-gray-600 ml-auto tabular-nums">{filtered.length} of {allRes.length} workloads</span>
+      </div>
+      <div className="rounded-lg border border-hull-700/50 bg-hull-800/30 px-3 py-2 text-[9px] text-gray-500 leading-relaxed">
+        <span className="font-bold text-gray-400">Score (0-100):</span>{' '}
+        Starts at 100. Deductions: single replica <span className="text-neon-amber">-40</span>, 2 replicas <span className="text-neon-amber">-15</span>,
+        all pods on 1 node <span className="text-neon-amber">-30</span>, single instance type <span className="text-neon-amber">-10</span>,
+        single zone <span className="text-neon-amber">-10</span>, each disruption <span className="text-neon-amber">-20</span>.
+        Rating: <span className="text-neon-green">HIGH</span> &gt;60 · <span className="text-neon-amber">MEDIUM</span> 31-60 · <span className="text-neon-red">LOW</span> ≤30
+      </div>
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <span className="text-3xl mb-2 opacity-40">◎</span>
+          <p className="text-gray-500 text-sm">{allRes.length === 0 ? 'No workloads on spot nodes' : 'No workloads matching filters'}</p>
+        </div>
+      ) : (
+        <div className="stat-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[10px]">
+              <thead>
+                <tr className="text-gray-500 border-b border-hull-700 bg-hull-800/50">
+                  <th className="text-left py-1.5 px-2 font-medium">Workload</th>
+                  <th className="text-left py-1.5 px-2 font-medium">Namespace</th>
+                  <th className="text-left py-1.5 px-2 font-medium">Kind</th>
+                  <th className="text-center py-1.5 px-2 font-medium">Replicas</th>
+                  <th className="text-center py-1.5 px-2 font-medium">Spot / OD</th>
+                  <th className="text-center py-1.5 px-2 font-medium">Nodes</th>
+                  <th className="text-center py-1.5 px-2 font-medium">Zones</th>
+                  <th className="text-center py-1.5 px-2 font-medium">Inst Types</th>
+                  <th className="text-center py-1.5 px-2 font-medium">Disruptions</th>
+                  <th className="text-center py-1.5 px-2 font-medium">Score</th>
+                  <th className="text-center py-1.5 px-2 font-medium">Rating</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(r => (
+                  <tr key={`${r.namespace}-${r.name}`} className="border-b border-hull-800 last:border-0">
+                    <td className="py-1.5 px-2 font-mono text-white truncate max-w-[200px]">{r.name}</td>
+                    <td className="py-1.5 px-2 text-gray-500 truncate max-w-[120px]">{r.namespace}</td>
+                    <td className="py-1.5 px-2 text-gray-500">{r.kind}</td>
+                    <td className="py-1.5 px-2 text-center text-gray-400 tabular-nums">{r.replicas}</td>
+                    <td className="py-1.5 px-2 text-center tabular-nums"><span className="text-neon-amber">{r.spotPods}</span><span className="text-gray-600"> / </span><span className="text-neon-green">{r.onDemandPods}</span></td>
+                    <td className="py-1.5 px-2 text-center text-gray-400 tabular-nums">{r.uniqueNodes}</td>
+                    <td className="py-1.5 px-2 text-center text-gray-400 tabular-nums">{r.uniqueZones}</td>
+                    <td className="py-1.5 px-2 text-center text-gray-400 tabular-nums">{r.uniqueInstTypes}</td>
+                    <td className="py-1.5 px-2 text-center tabular-nums">{r.recentDisruptions > 0 ? <span className="text-neon-red font-bold">{r.recentDisruptions}</span> : <span className="text-gray-600">0</span>}</td>
+                    <td className="py-1.5 px-2 text-center tabular-nums">
+                      <span className={`font-bold ${r.score > 60 ? 'text-neon-green' : r.score > 30 ? 'text-neon-amber' : 'text-neon-red'}`}>{r.score}</span>
+                    </td>
+                    <td className="py-1.5 px-2 text-center">
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${r.rating === 'low' ? 'bg-red-950/40 border-red-900/30 text-neon-red' : r.rating === 'medium' ? 'bg-amber-950/40 border-amber-900/30 text-neon-amber' : 'bg-emerald-950/40 border-emerald-900/30 text-neon-green'}`}>
+                        {r.rating.toUpperCase()}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -2881,6 +3854,7 @@ function TopologySpreadView() {
 function HPAView({ namespace }: { namespace: string }) {
   const q = namespace ? `?namespace=${namespace}` : ''
   const { data, err, loading } = useFetch<HPA[]>(`/api/hpa${q}`, 10000)
+  const [yamlTarget, setYamlTarget] = useState<{ ns: string; name: string } | null>(null)
 
   if (loading) return <Spinner />
   if (err) return <p className="p-4 text-neon-red">{err}</p>
@@ -2895,6 +3869,7 @@ function HPAView({ namespace }: { namespace: string }) {
 
   return (
     <div className="space-y-2 p-3">
+      {yamlTarget && <YamlModal kind="HPA" ns={yamlTarget.ns} name={yamlTarget.name} onClose={() => setYamlTarget(null)} />}
       <div className="flex items-center gap-2 text-[11px]">
         <span className="rounded bg-purple-950/60 border border-purple-900/50 px-2 py-0.5 text-purple-400 font-bold tracking-wide">⟳ HPA</span>
         <span className="text-gray-500">Horizontal Pod Autoscalers</span>
@@ -2920,6 +3895,7 @@ function HPAView({ namespace }: { namespace: string }) {
                   <span className="text-gray-400 font-mono">{h.reference}</span>
                 </div>
               </div>
+              <button onClick={() => setYamlTarget({ ns: h.namespace, name: h.name })} className="shrink-0 rounded border border-hull-600 bg-hull-800 px-1.5 py-0.5 text-[9px] text-gray-500 hover:text-white transition-colors">YAML</button>
               <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold ${health === 'capped' ? 'bg-red-950/40 border-red-900/30 text-neon-red' : health === 'starved' ? 'bg-amber-950/40 border-amber-900/30 text-neon-amber' : 'bg-green-950/40 border-green-900/30 text-neon-green'}`}>
                 {health === 'capped' ? 'AT MAX' : health === 'starved' ? 'SCALING' : 'HEALTHY'}
               </span>
@@ -3052,13 +4028,24 @@ function ConfigDataPanel({ item, onClose }: { item: ConfigItem; onClose: () => v
   )
 }
 
+type DriftEntry = { kind: string; name: string; namespace: string; lastModified: string; modifiedAgo: string; driftedPods: { name: string; namespace: string; startedAgo: string; workload: string }[]; totalPods: number; driftedCount: number }
+
 function ConfigView({ namespace }: { namespace: string }) {
   const q = namespace ? `?namespace=${namespace}` : ''
   const { data, err, loading } = useFetch<ConfigItem[]>(`/api/configs${q}`, 15000)
+  const { data: driftData } = useFetch<DriftEntry[]>(`/api/config-drift${q}`, 30000)
   const [kindFilter, setKindFilter] = useState<'' | 'ConfigMap' | 'Secret'>('')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [viewing, setViewing] = useState<ConfigItem | null>(null)
+  const [yamlTarget, setYamlTarget] = useState<{ kind: string; ns: string; name: string } | null>(null)
+
+  const driftMap = useMemo(() => {
+    const m = new Map<string, DriftEntry>()
+    if (driftData) driftData.forEach(d => m.set(`${d.kind}-${d.namespace}-${d.name}`, d))
+    return m
+  }, [driftData])
+
   if (viewing) return <ConfigDataPanel item={viewing} onClose={() => setViewing(null)} />
 
   if (loading) return <Spinner />
@@ -3071,11 +4058,14 @@ function ConfigView({ namespace }: { namespace: string }) {
   )
   const cmCount = all.filter(c => c.kind === 'ConfigMap').length
   const secCount = all.filter(c => c.kind === 'Secret').length
+  const driftCount = driftMap.size
 
   return (
     <div className="space-y-2 p-3">
+      {yamlTarget && <YamlModal kind={yamlTarget.kind} ns={yamlTarget.ns} name={yamlTarget.name} onClose={() => setYamlTarget(null)} />}
       <div className="flex items-center gap-2 text-[11px] flex-wrap">
         <span className="rounded bg-indigo-950/60 border border-indigo-900/50 px-2 py-0.5 text-indigo-400 font-bold tracking-wide">⚙ CONFIG</span>
+        {driftCount > 0 && <span className="rounded bg-amber-950/50 border border-amber-900/30 px-2 py-0.5 text-neon-amber font-bold text-[10px]">{driftCount} drifted</span>}
         <div className="flex gap-1">
           <button onClick={() => setKindFilter('')} className={`rounded-lg px-2 py-0.5 text-[10px] font-medium border transition-colors ${kindFilter === '' ? 'bg-hull-700 text-white border-hull-600' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>All ({all.length})</button>
           <button onClick={() => setKindFilter(kindFilter === 'ConfigMap' ? '' : 'ConfigMap')} className={`rounded-lg px-2 py-0.5 text-[10px] font-medium border transition-colors ${kindFilter === 'ConfigMap' ? 'bg-hull-700 text-white border-hull-600' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>CM ({cmCount})</button>
@@ -3094,8 +4084,9 @@ function ConfigView({ namespace }: { namespace: string }) {
           {filtered.map(c => {
             const key = `${c.kind}-${c.namespace}-${c.name}`
             const isExpanded = expanded === key
+            const drift = driftMap.get(key)
             return (
-              <div key={key} className="stat-card overflow-hidden">
+              <div key={key} className={`stat-card overflow-hidden ${drift ? 'ring-1 ring-amber-900/30' : ''}`}>
                 <div className="flex items-center gap-2 p-2.5 cursor-pointer hover:bg-hull-800/40 transition-colors" onClick={() => setExpanded(isExpanded ? null : key)}>
                   <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold border ${c.kind === 'Secret' ? 'bg-amber-950/40 border-amber-900/30 text-amber-400' : 'bg-sky-950/40 border-sky-900/30 text-sky-400'}`}>
                     {c.kind === 'Secret' ? 'SEC' : 'CM'}
@@ -3104,6 +4095,11 @@ function ConfigView({ namespace }: { namespace: string }) {
                     <span className="block truncate text-[12px] font-medium text-white">{c.name}</span>
                     <span className="text-[10px] text-gray-500">{c.namespace}</span>
                   </div>
+                  {drift && (
+                    <span className="shrink-0 rounded border border-amber-900/30 bg-amber-950/40 px-1.5 py-0.5 text-[9px] font-medium text-neon-amber" title={`Modified ${drift.modifiedAgo} ago — ${drift.driftedCount} of ${drift.totalPods} pods running stale data`}>
+                      {drift.driftedCount} pod{drift.driftedCount !== 1 ? 's' : ''} stale
+                    </span>
+                  )}
                   <div className="text-right shrink-0">
                     <span className="text-[11px] tabular-nums text-gray-400">{c.keyCount} key{c.keyCount !== 1 ? 's' : ''}</span>
                     <span className="block text-[9px] text-gray-600">{c.age}</span>
@@ -3112,13 +4108,31 @@ function ConfigView({ namespace }: { namespace: string }) {
                   <span className={`text-gray-600 text-[10px] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▸</span>
                 </div>
                 {isExpanded && (
-                  <div className="border-t border-hull-700/30 bg-hull-900/40 px-3 py-2">
-                    {c.type && <p className="text-[10px] text-gray-500 mb-1.5">Type: <span className="text-gray-400 font-mono">{c.type}</span></p>}
+                  <div className="border-t border-hull-700/30 bg-hull-900/40 px-3 py-2 space-y-2">
+                    {drift && (
+                      <div className="rounded-lg border border-amber-900/30 bg-amber-950/20 px-3 py-2">
+                        <p className="text-[10px] font-bold text-neon-amber mb-1.5">Drift Detected — modified {drift.modifiedAgo} ago, {drift.driftedCount}/{drift.totalPods} pods stale</p>
+                        <div className="space-y-1">
+                          {drift.driftedPods.map(dp => (
+                            <div key={dp.name} className="flex items-center gap-2 text-[10px]">
+                              <span className="h-1.5 w-1.5 rounded-full bg-neon-amber shrink-0" />
+                              <span className="font-mono text-gray-300 truncate">{dp.name}</span>
+                              {dp.workload && <span className="text-gray-600 text-[9px]">{dp.workload}</span>}
+                              <span className="text-gray-600 text-[9px] ml-auto shrink-0">started {dp.startedAgo} ago</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {c.type && <p className="text-[10px] text-gray-500">Type: <span className="text-gray-400 font-mono">{c.type}</span></p>}
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-[10px] text-gray-500">Keys:</p>
-                      <button onClick={(e) => { e.stopPropagation(); setViewing(c) }} className="rounded-lg px-2 py-0.5 text-[9px] font-medium border border-neon-cyan/30 text-neon-cyan hover:bg-cyan-950/30 transition-colors">
-                        View Data
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button onClick={(e) => { e.stopPropagation(); setYamlTarget({ kind: c.kind, ns: c.namespace, name: c.name }) }} className="rounded-lg px-2 py-0.5 text-[9px] font-medium border border-hull-600 text-gray-400 hover:text-white transition-colors">YAML</button>
+                        <button onClick={(e) => { e.stopPropagation(); setViewing(c) }} className="rounded-lg px-2 py-0.5 text-[9px] font-medium border border-neon-cyan/30 text-neon-cyan hover:bg-cyan-950/30 transition-colors">
+                          View Data
+                        </button>
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {c.keys.length === 0 ? <span className="text-[10px] text-gray-600 italic">empty</span> : c.keys.map(k => (
@@ -3219,6 +4233,229 @@ function PodShell({ ns, name, container, onClose }: { ns: string; name: string; 
         <button onClick={onClose} className="rounded-lg bg-red-950/40 border border-red-900/20 px-3 py-1 text-[11px] font-medium text-red-400 hover:bg-red-950/60 transition-colors">Close</button>
       </div>
       <div ref={termRef} className="flex-1 p-1" />
+    </div>
+  )
+}
+
+// ─── PV & PVCs View ─────────────────────────────────────────────────
+type PVCEntry = { name: string; namespace: string; status: string; volumeName: string; storageClass: string; capacity: string; accessModes: string[]; age: string; workload?: { kind: string; name: string } }
+type PVEntry = { name: string; status: string; capacity: string; reclaimPolicy: string; storageClass: string; claimRef: string; age: string; source: string }
+type SCEntry = { name: string; provisioner: string; reclaimPolicy: string; bindingMode: string; isDefault: boolean }
+type StorageData = { pvcs: PVCEntry[]; pvs: PVEntry[]; storageClasses: SCEntry[] }
+
+function PVCsView({ namespace }: { namespace: string }) {
+  const q = namespace ? `?namespace=${namespace}` : ''
+  const { data, err, loading } = useFetch<StorageData>(`/api/storage${q}`, 15000)
+  const [expandedPVC, setExpandedPVC] = useState<string | null>(null)
+  const [subTab, setSubTab] = useState<'pvcs' | 'pvs' | 'scs'>('pvcs')
+  const [showYaml, setShowYaml] = useState<{ kind: string; ns: string; name: string } | null>(null)
+
+  if (loading) return <Spinner />
+  if (err) return <p className="p-4 text-neon-red">{err}</p>
+  if (!data) return null
+
+  const pvcs = data.pvcs || []
+  const pvs = data.pvs || []
+  const scs = data.storageClasses || []
+
+  const pvcBound = pvcs.filter(p => p.status === 'Bound').length
+  const pvcPending = pvcs.filter(p => p.status === 'Pending').length
+  const pvcLost = pvcs.filter(p => p.status === 'Lost').length
+  const pvAvail = pvs.filter(p => p.status === 'Available').length
+  const pvReleased = pvs.filter(p => p.status === 'Released').length
+
+  const statusColor = (s: string) => {
+    switch (s) {
+      case 'Bound': return 'text-neon-green'
+      case 'Pending': return 'text-neon-amber'
+      case 'Available': return 'text-neon-cyan'
+      case 'Released': return 'text-gray-400'
+      case 'Lost': case 'Failed': return 'text-neon-red'
+      default: return 'text-gray-500'
+    }
+  }
+  const statusBg = (s: string) => {
+    switch (s) {
+      case 'Bound': return 'bg-green-950/40 border-green-900/30'
+      case 'Pending': return 'bg-amber-950/40 border-amber-900/30'
+      case 'Available': return 'bg-cyan-950/40 border-cyan-900/30'
+      case 'Released': return 'bg-hull-800/40 border-hull-700/30'
+      case 'Lost': case 'Failed': return 'bg-red-950/40 border-red-900/30'
+      default: return 'bg-hull-800/40 border-hull-700/30'
+    }
+  }
+
+  const sortedPVCs = [...pvcs].sort((a, b) => {
+    const order: Record<string, number> = { Pending: 0, Lost: 1, Bound: 2 }
+    return (order[a.status] ?? 3) - (order[b.status] ?? 3)
+  })
+
+  const pvByName: Record<string, PVEntry> = {}
+  pvs.forEach(pv => { pvByName[pv.name] = pv })
+
+  return (
+    <div className="space-y-2.5 p-3">
+      {showYaml && <YamlModal kind={showYaml.kind} ns={showYaml.ns} name={showYaml.name} onClose={() => setShowYaml(null)} />}
+
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-1 text-[11px]">
+        <button onClick={() => setSubTab('pvcs')} className={`rounded-lg px-3 py-1 font-medium border transition-colors ${subTab === 'pvcs' ? 'bg-hull-700 text-white border-hull-600' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>
+          PVCs <span className="ml-1 tabular-nums text-[10px]">({pvcs.length})</span>
+          {(pvcPending > 0 || pvcLost > 0) && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-neon-amber" />}
+        </button>
+        <button onClick={() => setSubTab('pvs')} className={`rounded-lg px-3 py-1 font-medium border transition-colors ${subTab === 'pvs' ? 'bg-hull-700 text-white border-hull-600' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>
+          PVs <span className="ml-1 tabular-nums text-[10px]">({pvs.length})</span>
+          {(pvAvail + pvReleased > 0) && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-gray-400" />}
+        </button>
+        <button onClick={() => setSubTab('scs')} className={`rounded-lg px-3 py-1 font-medium border transition-colors ${subTab === 'scs' ? 'bg-hull-700 text-white border-hull-600' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>
+          Storage Classes <span className="ml-1 tabular-nums text-[10px]">({scs.length})</span>
+        </button>
+        <div className="ml-auto flex items-center gap-3 text-[10px] text-gray-600">
+          <span><span className="text-neon-green font-bold tabular-nums">{pvcBound}</span> bound</span>
+          {pvcPending > 0 && <span><span className="text-neon-amber font-bold tabular-nums">{pvcPending}</span> pending</span>}
+          {pvcLost > 0 && <span><span className="text-neon-red font-bold tabular-nums">{pvcLost}</span> lost</span>}
+          {(pvAvail + pvReleased > 0) && <span><span className="text-gray-400 font-bold tabular-nums">{pvAvail + pvReleased}</span> orphaned PVs</span>}
+        </div>
+      </div>
+
+      {/* PVCs Tab */}
+      {subTab === 'pvcs' && (
+        <div className="stat-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-hull-700/40 text-left text-[9px] text-gray-600 uppercase tracking-wider">
+                  <th className="px-3 py-1.5">Name</th>
+                  <th className="px-2 py-1.5">Namespace</th>
+                  <th className="px-2 py-1.5">Status</th>
+                  <th className="px-2 py-1.5">Capacity</th>
+                  <th className="px-2 py-1.5">StorageClass</th>
+                  <th className="px-2 py-1.5">Access</th>
+                  <th className="px-2 py-1.5">Workload</th>
+                  <th className="px-2 py-1.5">Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedPVCs.map(pvc => {
+                  const isExpanded = expandedPVC === `${pvc.namespace}/${pvc.name}`
+                  const boundPV = pvc.volumeName ? pvByName[pvc.volumeName] : undefined
+                  return (
+                    <Fragment key={`${pvc.namespace}/${pvc.name}`}>
+                      <tr onClick={() => setExpandedPVC(isExpanded ? null : `${pvc.namespace}/${pvc.name}`)}
+                        className={`border-b border-hull-800/40 cursor-pointer transition-colors hover:bg-hull-800/30 ${pvc.status === 'Pending' ? 'bg-amber-950/10' : pvc.status === 'Lost' ? 'bg-red-950/10' : ''}`}>
+                        <td className="px-3 py-2 font-mono text-white truncate max-w-[200px]">{pvc.name}</td>
+                        <td className="px-2 py-2 text-gray-500">{pvc.namespace}</td>
+                        <td className="px-2 py-2">
+                          <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${statusBg(pvc.status)} ${statusColor(pvc.status)}`}>{pvc.status}</span>
+                        </td>
+                        <td className="px-2 py-2 text-gray-400 font-mono">{pvc.capacity || '—'}</td>
+                        <td className="px-2 py-2 text-gray-500 truncate max-w-[120px]">{pvc.storageClass || '—'}</td>
+                        <td className="px-2 py-2 text-gray-600 text-[9px]">{pvc.accessModes?.join(', ') || '—'}</td>
+                        <td className="px-2 py-2 text-gray-400">{pvc.workload ? `${pvc.workload.kind}/${pvc.workload.name}` : <span className="text-gray-700">—</span>}</td>
+                        <td className="px-2 py-2 text-gray-600">{pvc.age}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={8} className="px-3 py-3 bg-hull-900/40">
+                            <div className="grid grid-cols-2 gap-3 text-[10px]">
+                              <div>
+                                <p className="text-gray-600 uppercase tracking-wider text-[8px] mb-1">Volume</p>
+                                <p className="font-mono text-gray-300">{pvc.volumeName || 'unbound'}</p>
+                              </div>
+                              {boundPV && (
+                                <>
+                                  <div>
+                                    <p className="text-gray-600 uppercase tracking-wider text-[8px] mb-1">Source</p>
+                                    <p className="text-gray-300">{boundPV.source}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600 uppercase tracking-wider text-[8px] mb-1">Reclaim Policy</p>
+                                    <p className="text-gray-300">{boundPV.reclaimPolicy}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600 uppercase tracking-wider text-[8px] mb-1">PV Status</p>
+                                    <p className={statusColor(boundPV.status)}>{boundPV.status}</p>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+                {sortedPVCs.length === 0 && (
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-600 text-xs">No PersistentVolumeClaims found</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* PVs Tab */}
+      {subTab === 'pvs' && (
+        <div className="stat-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-hull-700/40 text-left text-[9px] text-gray-600 uppercase tracking-wider">
+                  <th className="px-3 py-1.5">Name</th>
+                  <th className="px-2 py-1.5">Status</th>
+                  <th className="px-2 py-1.5">Capacity</th>
+                  <th className="px-2 py-1.5">Reclaim</th>
+                  <th className="px-2 py-1.5">StorageClass</th>
+                  <th className="px-2 py-1.5">Claim</th>
+                  <th className="px-2 py-1.5">Source</th>
+                  <th className="px-2 py-1.5">Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pvs.map(pv => (
+                  <tr key={pv.name} className={`border-b border-hull-800/40 ${pv.status === 'Available' || pv.status === 'Released' ? 'bg-hull-800/20' : ''}`}>
+                    <td className="px-3 py-2 font-mono text-white truncate max-w-[200px]">{pv.name}</td>
+                    <td className="px-2 py-2">
+                      <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${statusBg(pv.status)} ${statusColor(pv.status)}`}>{pv.status}</span>
+                    </td>
+                    <td className="px-2 py-2 text-gray-400 font-mono">{pv.capacity}</td>
+                    <td className="px-2 py-2 text-gray-500">{pv.reclaimPolicy}</td>
+                    <td className="px-2 py-2 text-gray-500 truncate max-w-[120px]">{pv.storageClass || '—'}</td>
+                    <td className="px-2 py-2 text-gray-400 font-mono truncate max-w-[200px]">{pv.claimRef || <span className="text-gray-700 italic">orphaned</span>}</td>
+                    <td className="px-2 py-2 text-gray-500">{pv.source}</td>
+                    <td className="px-2 py-2 text-gray-600">{pv.age}</td>
+                  </tr>
+                ))}
+                {pvs.length === 0 && (
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-600 text-xs">No PersistentVolumes found</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Storage Classes Tab */}
+      {subTab === 'scs' && (
+        <div className="space-y-1.5">
+          {scs.map(sc => (
+            <div key={sc.name} className="stat-card flex items-center gap-3 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] text-white font-medium">{sc.name}</span>
+                  {sc.isDefault && <span className="rounded border border-neon-cyan/30 bg-cyan-950/30 px-1.5 py-0.5 text-[8px] font-bold text-neon-cyan">DEFAULT</span>}
+                </div>
+                <p className="text-[9px] text-gray-500 mt-0.5">{sc.provisioner}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[9px] text-gray-500">Reclaim: <span className="text-gray-400">{sc.reclaimPolicy}</span></p>
+                <p className="text-[9px] text-gray-500">Binding: <span className="text-gray-400">{sc.bindingMode}</span></p>
+              </div>
+            </div>
+          ))}
+          {scs.length === 0 && <p className="text-center text-gray-600 text-xs py-6">No StorageClasses found</p>}
+        </div>
+      )}
     </div>
   )
 }
@@ -4250,6 +5487,357 @@ function CostAllocationPanel() {
   )
 }
 
+// ─── User Menu Dropdown ─────────────────────────────────────────────
+
+type OnlineUser = { email: string; role: string; lastSeen: string; ip: string }
+
+function UserMenuDropdown({ email, role, onClose, onAudit, onOnlineUsers, containerRef }: { email: string; role: string; onClose: () => void; onAudit: () => void; onOnlineUsers: () => void; containerRef: React.RefObject<HTMLDivElement | null> }) {
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) onClose() }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose, containerRef])
+
+  return (
+    <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-hull-600 bg-hull-950 shadow-2xl shadow-black/60 z-50 overflow-hidden">
+      <div className="px-4 py-3 border-b border-hull-700/30">
+        <p className="text-[11px] font-medium text-white truncate">{email}</p>
+        <p className={`text-[9px] font-bold uppercase tracking-widest mt-0.5 ${role === 'admin' ? 'text-neon-cyan' : 'text-gray-500'}`}>{role}</p>
+      </div>
+      <div className="py-1">
+        {role === 'admin' && (
+          <>
+            <button onClick={onOnlineUsers} className="flex w-full items-center gap-2.5 px-4 py-2 text-[11px] text-gray-400 hover:bg-hull-800/60 hover:text-white transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Online Users
+            </button>
+            <button onClick={onAudit} className="flex w-full items-center gap-2.5 px-4 py-2 text-[11px] text-gray-400 hover:bg-hull-800/60 hover:text-white transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Audit Trail
+            </button>
+          </>
+        )}
+        <a href="/auth/logout" className="flex w-full items-center gap-2.5 px-4 py-2 text-[11px] text-gray-400 hover:bg-hull-800/60 hover:text-neon-red transition-colors no-underline">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </a>
+      </div>
+    </div>
+  )
+}
+
+// ─── Online Users Modal ─────────────────────────────────────────────
+
+function OnlineUsersModal({ currentEmail, onClose }: { currentEmail: string; onClose: () => void }) {
+  const [users, setUsers] = useState<OnlineUser[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchUsers = useCallback(() => {
+    fetch('/api/online-users')
+      .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() })
+      .then(d => { if (Array.isArray(d)) setUsers(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { fetchUsers() }, [fetchUsers])
+  useEffect(() => { const iv = setInterval(fetchUsers, 15000); return () => clearInterval(iv) }, [fetchUsers])
+
+  const timeAgo = (iso: string) => {
+    const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+    if (sec < 10) return 'just now'
+    if (sec < 60) return `${sec}s ago`
+    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`
+    return `${Math.floor(sec / 3600)}h ago`
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative z-10 mx-4 w-full max-w-md max-h-[70vh] overflow-hidden rounded-2xl border border-hull-600 bg-hull-900 shadow-2xl shadow-black/60 flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-hull-700/40 px-5 py-3">
+          <div>
+            <h2 className="text-sm font-bold text-white">Online Users</h2>
+            <p className="text-[10px] text-gray-500 mt-0.5">{users.length} user{users.length !== 1 ? 's' : ''} active in the last 5 minutes</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-gray-500 hover:text-white transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12"><Spinner /></div>
+          ) : users.length === 0 ? (
+            <div className="text-center py-12 text-gray-600 text-xs">No active users</div>
+          ) : (
+            <div className="divide-y divide-hull-800/50">
+              {users.map(u => (
+                <div key={u.email} className="flex items-center gap-3 px-5 py-3 hover:bg-hull-800/30 transition-colors">
+                  <div className="relative">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-neon-cyan/20 to-neon-green/10 text-[10px] font-bold text-neon-cyan ring-1 ring-neon-cyan/20">
+                      {u.email.split('@')[0].split('.').map(p => p[0]?.toUpperCase()).join('').slice(0, 2)}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-neon-green ring-2 ring-hull-900" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[11px] font-medium truncate ${u.email === currentEmail ? 'text-neon-cyan' : 'text-white'}`}>
+                      {u.email.split('@')[0]}{u.email === currentEmail ? ' (you)' : ''}
+                    </p>
+                    <p className="text-[9px] text-gray-500">{u.email}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className={`text-[8px] font-bold uppercase tracking-widest ${u.role === 'admin' ? 'text-neon-cyan' : 'text-gray-600'}`}>{u.role}</span>
+                    <p className="text-[9px] text-gray-600 mt-0.5">{timeAgo(u.lastSeen)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── YAML Viewer/Editor Modal ───────────────────────────────────────
+
+function highlightYaml(text: string): string {
+  return text.replace(/^(\s*)([\w.\-/]+)(:)/gm, '$1<span class="text-neon-cyan">$2</span><span class="text-gray-500">$3</span>')
+    .replace(/: (true|false)/g, ': <span class="text-purple-400">$1</span>')
+    .replace(/: (\d+[\d.]*)/g, ': <span class="text-amber-400">$1</span>')
+    .replace(/: "([^"]*)"/g, ': <span class="text-green-400">"$1"</span>')
+    .replace(/: '([^']*)'/g, ': <span class="text-green-400">\'$1\'</span>')
+    .replace(/^(\s*- )/gm, '<span class="text-gray-500">$1</span>')
+    .replace(/#.*/g, '<span class="text-gray-600">$&</span>')
+}
+
+function YamlModal({ kind, ns, name, onClose }: { kind: string; ns: string; name: string; onClose: () => void }) {
+  const { role } = useAuth()
+  const isAdmin = role === 'admin'
+  const [content, setContent] = useState('')
+  const [editMode, setEditMode] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    fetch(`/api/yaml/${kind}/${ns}/${name}`)
+      .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() })
+      .then(d => {
+        const cleaned = { ...d }
+        delete cleaned.managedFields
+        if (cleaned.metadata) {
+          const m = { ...cleaned.metadata }
+          delete m.managedFields
+          cleaned.metadata = m
+        }
+        const y = yaml.dump(cleaned, { lineWidth: 120, noRefs: true, sortKeys: false })
+        setContent(y)
+        setEditContent(y)
+        setLoading(false)
+      })
+      .catch(e => { setError(e.message); setLoading(false) })
+  }, [kind, ns, name])
+
+  const handleApply = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const parsed = yaml.load(editContent)
+      const resp = await fetch(`/api/yaml/${kind}/${ns}/${name}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed),
+      })
+      if (!resp.ok) {
+        const text = await resp.text()
+        throw new Error(text)
+      }
+      setToast('Applied successfully')
+      setEditMode(false)
+      setTimeout(() => setToast(null), 3000)
+      const fresh = await fetch(`/api/yaml/${kind}/${ns}/${name}`)
+      if (fresh.ok) {
+        const d = await fresh.json()
+        const cleaned = { ...d }
+        delete cleaned.managedFields
+        if (cleaned.metadata) { const m = { ...cleaned.metadata }; delete m.managedFields; cleaned.metadata = m }
+        const y = yaml.dump(cleaned, { lineWidth: 120, noRefs: true, sortKeys: false })
+        setContent(y)
+        setEditContent(y)
+      }
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(editMode ? editContent : content).then(() => {
+      setToast('Copied to clipboard')
+      setTimeout(() => setToast(null), 2000)
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative z-10 mx-4 w-full max-w-4xl max-h-[85vh] overflow-hidden rounded-2xl border border-hull-600 bg-hull-900 shadow-2xl shadow-black/60 flex flex-col" onClick={e => e.stopPropagation()}>
+        {toast && <div className="absolute top-3 right-14 z-20 rounded-lg border border-hull-600 bg-hull-800 px-3 py-1.5 text-[10px] text-neon-green shadow-lg">{toast}</div>}
+        <div className="flex items-center justify-between border-b border-hull-700/40 px-5 py-3 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="rounded border border-hull-600 bg-hull-800 px-1.5 py-0.5 text-[9px] font-bold uppercase text-gray-400">{kind}</span>
+            <h2 className="text-sm font-bold text-white truncate">{name}</h2>
+            <span className="text-[10px] text-gray-500">{ns}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={copyToClipboard} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] text-gray-400 hover:text-white transition-colors">Copy</button>
+            {isAdmin && !editMode && (
+              <button onClick={() => setEditMode(true)} className="rounded-lg border border-cyan-900/40 bg-cyan-950/40 px-2.5 py-1 text-[10px] font-medium text-neon-cyan transition-colors hover:bg-cyan-900/30">Edit</button>
+            )}
+            {editMode && (
+              <>
+                <button onClick={() => { setEditMode(false); setEditContent(content); setError(null) }} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] text-gray-400 hover:text-white transition-colors">Cancel</button>
+                <button onClick={handleApply} disabled={saving} className="rounded-lg border border-blue-900/50 bg-blue-950/60 px-2.5 py-1 text-[10px] font-medium text-neon-blue transition-colors hover:bg-blue-900/40 disabled:opacity-40">
+                  {saving ? 'Applying…' : 'Apply'}
+                </button>
+              </>
+            )}
+            <button onClick={onClose} className="rounded-lg p-1.5 text-gray-500 hover:text-white transition-colors">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+        {error && <div className="px-5 py-2 bg-red-950/30 border-b border-red-900/30 text-[11px] text-neon-red break-all">{error}</div>}
+        <div className="flex-1 overflow-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-16"><Spinner /></div>
+          ) : editMode ? (
+            <textarea
+              value={editContent}
+              onChange={e => setEditContent(e.target.value)}
+              className="w-full h-full min-h-[400px] bg-hull-950 text-gray-300 font-mono text-[11px] leading-relaxed p-4 resize-none border-0 outline-none"
+              spellCheck={false}
+            />
+          ) : (
+            <pre
+              className="p-4 font-mono text-[11px] leading-relaxed text-gray-300 whitespace-pre-wrap break-all"
+              dangerouslySetInnerHTML={{ __html: highlightYaml(content) }}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Audit Trail Modal ──────────────────────────────────────────────
+
+type AuditEvent = { time: string; actor: string; role: string; action: string; resource: string; detail: string; ip: string }
+
+const AUDIT_ACTION_STYLE: Record<string, { bg: string; text: string }> = {
+  login: { bg: 'bg-neon-green/10 border-neon-green/20', text: 'text-neon-green' },
+  logout: { bg: 'bg-gray-700/30 border-gray-600/30', text: 'text-gray-400' },
+  'pod.delete': { bg: 'bg-neon-red/10 border-neon-red/20', text: 'text-neon-red' },
+  'workload.scale': { bg: 'bg-neon-amber/10 border-neon-amber/20', text: 'text-neon-amber' },
+  'pod.exec': { bg: 'bg-neon-cyan/10 border-neon-cyan/20', text: 'text-neon-cyan' },
+}
+
+function AuditTrailModal({ onClose }: { onClose: () => void }) {
+  const [events, setEvents] = useState<AuditEvent[]>([])
+  const [filter, setFilter] = useState<string>('all')
+  const [loading, setLoading] = useState(true)
+
+  const fetchAudit = useCallback(() => {
+    fetch('/api/audit?limit=500')
+      .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() })
+      .then(d => { if (Array.isArray(d)) setEvents(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { fetchAudit() }, [fetchAudit])
+  useEffect(() => { const iv = setInterval(fetchAudit, 30000); return () => clearInterval(iv) }, [fetchAudit])
+
+  const filtered = filter === 'all' ? events
+    : filter === 'logins' ? events.filter(e => e.action === 'login' || e.action === 'logout')
+    : events.filter(e => e.action !== 'login' && e.action !== 'logout')
+
+  const timeAgo = (iso: string) => {
+    const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+    if (sec < 60) return `${sec}s ago`
+    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`
+    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`
+    return `${Math.floor(sec / 86400)}d ago`
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative z-10 mx-4 w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl border border-hull-600 bg-hull-900 shadow-2xl shadow-black/60 flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-hull-700/40 px-5 py-3">
+          <div>
+            <h2 className="text-sm font-bold text-white">Audit Trail</h2>
+            <p className="text-[10px] text-gray-500 mt-0.5">{events.length} events tracked this session</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-gray-500 hover:text-white transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div className="flex items-center gap-2 px-5 py-2 border-b border-hull-700/20">
+          {(['all', 'logins', 'actions'] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`rounded-lg px-3 py-1 text-[10px] font-medium transition-all ${filter === f ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30' : 'text-gray-500 hover:text-gray-300 border border-transparent'}`}>
+              {f === 'all' ? 'All' : f === 'logins' ? 'Logins' : 'Admin Actions'}
+            </button>
+          ))}
+          <span className="ml-auto text-[9px] text-gray-600">{filtered.length} events</span>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12"><Spinner /></div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-gray-600 text-xs">No audit events recorded yet</div>
+          ) : (
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-[9px] uppercase tracking-wider text-gray-600 border-b border-hull-700/30">
+                  <th className="text-left px-5 py-2 font-medium">Time</th>
+                  <th className="text-left px-2 py-2 font-medium">Actor</th>
+                  <th className="text-left px-2 py-2 font-medium">Action</th>
+                  <th className="text-left px-2 py-2 font-medium">Resource</th>
+                  <th className="text-left px-2 py-2 font-medium">Detail</th>
+                  <th className="text-left px-2 py-2 font-medium">IP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((e, i) => {
+                  const style = AUDIT_ACTION_STYLE[e.action] || { bg: 'bg-hull-800 border-hull-600', text: 'text-gray-400' }
+                  return (
+                    <tr key={i} className="border-b border-hull-800/50 hover:bg-hull-800/30 transition-colors">
+                      <td className="px-5 py-2 text-gray-500 whitespace-nowrap" title={new Date(e.time).toLocaleString()}>{timeAgo(e.time)}</td>
+                      <td className="px-2 py-2 text-gray-300 font-medium truncate max-w-[140px]">{e.actor}</td>
+                      <td className="px-2 py-2">
+                        <span className={`inline-block rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${style.bg} ${style.text}`}>{e.action}</span>
+                      </td>
+                      <td className="px-2 py-2 text-gray-400 font-mono text-[10px] truncate max-w-[180px]">{e.resource || '—'}</td>
+                      <td className="px-2 py-2 text-gray-500 truncate max-w-[120px]">{e.detail || '—'}</td>
+                      <td className="px-2 py-2 text-gray-600 font-mono text-[10px]">{e.ip}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Info Popover ───────────────────────────────────────────────────
 
 const TAB_DETAIL: Record<string, { desc: string; actions: string[]; tips: string[] }> = {
@@ -4287,6 +5875,11 @@ const TAB_DETAIL: Record<string, { desc: string; actions: string[]; tips: string
     desc: 'Horizontal Pod Autoscalers with current/desired/max replicas and scaling metrics.',
     actions: ['See CPU and memory target utilisation vs current', 'View min and max replica bounds'],
     tips: ['HPA metrics show both percentage and absolute values when available'],
+  },
+  pvcs: {
+    desc: 'PersistentVolumeClaims, PersistentVolumes, and StorageClasses across the cluster.',
+    actions: ['View PVC status (Bound/Pending/Lost) with workload mapping', 'Identify orphaned PVs (Available/Released with no claim)', 'Click any PVC row to see bound PV details and source', 'Browse StorageClasses with provisioner and reclaim policy'],
+    tips: ['Pending PVCs are sorted to the top for quick identification', 'Filter by namespace using the namespace picker'],
   },
   config: {
     desc: 'ConfigMaps and Secrets with data key counts and last-modified timestamps.',
@@ -4380,7 +5973,8 @@ const TABS = [
   { id: 'services', label: 'Services', icon: '⇌' },
   { id: 'ingress', label: 'Ingress', icon: '↗' },
   { id: 'hpa', label: 'HPA', icon: '⟳' },
-  { id: 'config', label: 'Config', icon: '⬔' },
+  { id: 'pvcs', label: 'PV & PVCs', icon: '▤' },
+  { id: 'config', label: 'Config & Secrets', icon: '⬔' },
   { id: 'spot', label: 'Spot Advisor', icon: '◎' },
   { id: 'events', label: 'Events', icon: '◷' },
   { id: 'troubled', label: 'Troubled', icon: '⚠' },
@@ -4388,16 +5982,23 @@ const TABS = [
 ] as const
 type TabId = typeof TABS[number]['id']
 
-function parseRoute(): { tab: TabId; pod: { ns: string; name: string } | null; node: string | null; ingress: { ns: string; name: string } | null; workload: { ns: string; name: string; kind: string } | null } {
+function parseRoute(): { tab: TabId; pod: { ns: string; name: string } | null; node: string | null; ingress: { ns: string; name: string } | null; workload: { ns: string; name: string; kind: string } | null; nodePool: string } {
   const p = window.location.pathname.replace(/^\/+|\/+$/g, '')
   const segs = p.split('/')
+  const sp = new URLSearchParams(window.location.search)
+  const nodePool = sp.get('pool') || ''
   const validTabs = TABS.map(t => t.id) as string[]
-  if (segs[0] === 'pods' && segs.length === 3) return { tab: 'pods', pod: { ns: segs[1], name: segs[2] }, node: null, ingress: null, workload: null }
-  if (segs[0] === 'nodes' && segs.length === 2) return { tab: 'nodes', pod: null, node: segs[1], ingress: null, workload: null }
-  if (segs[0] === 'ingress' && segs.length === 3) return { tab: 'ingress', pod: null, node: null, ingress: { ns: segs[1], name: segs[2] }, workload: null }
-  if (segs[0] === 'workloads' && segs.length === 4) return { tab: 'workloads', pod: null, node: null, ingress: null, workload: { ns: segs[1], name: segs[2], kind: segs[3] } }
-  if (validTabs.includes(segs[0])) return { tab: segs[0] as TabId, pod: null, node: null, ingress: null, workload: null }
-  return { tab: 'overview', pod: null, node: null, ingress: null, workload: null }
+  if (segs[0] === 'pods' && segs.length === 3) return { tab: 'pods', pod: { ns: segs[1], name: segs[2] }, node: null, ingress: null, workload: null, nodePool }
+  if (segs[0] === 'nodes' && segs.length === 2) return { tab: 'nodes', pod: null, node: segs[1], ingress: null, workload: null, nodePool }
+  if (segs[0] === 'ingress' && segs.length === 3) return { tab: 'ingress', pod: null, node: null, ingress: { ns: segs[1], name: segs[2] }, workload: null, nodePool }
+  if (segs[0] === 'workloads' && segs.length === 4) {
+    const kindMap: Record<string, string> = { deployment: 'Deployment', statefulset: 'StatefulSet', daemonset: 'DaemonSet', job: 'Job', cronjob: 'CronJob' }
+    const rawKind = segs[1]
+    const canonKind = kindMap[rawKind.toLowerCase()] || rawKind
+    return { tab: 'workloads', pod: null, node: null, ingress: null, workload: { ns: segs[2], name: segs[3], kind: canonKind }, nodePool }
+  }
+  if (validTabs.includes(segs[0])) return { tab: segs[0] as TabId, pod: null, node: null, ingress: null, workload: null, nodePool }
+  return { tab: 'overview', pod: null, node: null, ingress: null, workload: null, nodePool: '' }
 }
 
 
@@ -4471,14 +6072,38 @@ function App() {
   const [showSearch, setShowSearch] = useState(false)
   const [sideOpen, setSideOpen] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showAudit, setShowAudit] = useState(false)
+  const [showOnlineUsers, setShowOnlineUsers] = useState(false)
+  const [troubledSub, setTroubledSub] = useState<'pods' | 'spot' | 'resilience'>('pods')
+  const [troubledExpanded, setTroubledExpanded] = useState(false)
+  const [spotHiddenReasons, setSpotHiddenReasons] = useState<string[]>([])
+  const [nodePool, setNodePoolRaw] = useState(initial.nodePool)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   const [user, setUser] = useState<UserInfo | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [authModeHint, setAuthModeHint] = useState<string>('none')
   const { data: namespaces } = useFetch<string[]>('/api/namespaces')
   const { data: clusterInfo } = useFetch<{ name: string }>('/api/cluster-info')
 
   const pushUrl = useCallback((path: string) => {
-    if (window.location.pathname !== path) window.history.pushState(null, '', path)
+    if (window.location.pathname + window.location.search !== path) window.history.pushState(null, '', path)
   }, [])
+
+  const nodesUrl = useCallback((pool?: string) => {
+    const p = pool ?? nodePool
+    return p ? `/nodes?pool=${encodeURIComponent(p)}` : '/nodes'
+  }, [nodePool])
+
+  const workloadUrl = useCallback((wt: { ns: string; name: string; kind: string }) => {
+    return `/workloads/${wt.kind.toLowerCase()}/${wt.ns}/${wt.name}`
+  }, [])
+
+  const tabUrl = useCallback((t: string) => {
+    if (t === 'overview') return '/'
+    if (t === 'nodes') return nodesUrl()
+    return `/${t}`
+  }, [nodesUrl])
 
   const setTab = useCallback((t: TabId) => {
     setTabRaw(t)
@@ -4486,20 +6111,31 @@ function App() {
     setNodeTargetRaw(null)
     setIngressTargetRaw(null)
     setWorkloadTargetRaw(null)
-    pushUrl(t === 'overview' ? '/' : `/${t}`)
+    if (t !== 'nodes') setNodePoolRaw('')
+    pushUrl(tabUrl(t))
+  }, [pushUrl, tabUrl])
+
+  const setNodePool = useCallback((pool: string) => {
+    setNodePoolRaw(pool)
+    pushUrl(pool ? `/nodes?pool=${encodeURIComponent(pool)}` : '/nodes')
   }, [pushUrl])
 
   const setPodTarget = useCallback((v: { ns: string; name: string } | null) => {
     setPodTargetRaw(v)
-    if (v) pushUrl(`/pods/${v.ns}/${v.name}`)
-    else pushUrl(tab === 'troubled' ? '/troubled' : '/pods')
-  }, [pushUrl, tab])
+    if (v) {
+      pushUrl(`/pods/${v.ns}/${v.name}`)
+    } else {
+      if (nodeTarget) pushUrl(`/nodes/${nodeTarget}`)
+      else if (workloadTarget) pushUrl(workloadUrl(workloadTarget))
+      else pushUrl(tabUrl(tab))
+    }
+  }, [pushUrl, tab, nodeTarget, workloadTarget, workloadUrl, tabUrl])
 
   const setNodeTarget = useCallback((v: string | null) => {
     setNodeTargetRaw(v)
     if (v) pushUrl(`/nodes/${v}`)
-    else pushUrl('/nodes')
-  }, [pushUrl])
+    else pushUrl(tabUrl(tab))
+  }, [pushUrl, tab, tabUrl])
 
   const setIngressTarget = useCallback((v: { ns: string; name: string } | null) => {
     setIngressTargetRaw(v)
@@ -4509,9 +6145,9 @@ function App() {
 
   const setWorkloadTarget = useCallback((v: { ns: string; name: string; kind: string } | null) => {
     setWorkloadTargetRaw(v)
-    if (v) pushUrl(`/workloads/${v.ns}/${v.name}/${v.kind}`)
-    else pushUrl('/workloads')
-  }, [pushUrl])
+    if (v) pushUrl(workloadUrl(v))
+    else pushUrl(tabUrl(tab))
+  }, [pushUrl, tab, workloadUrl, tabUrl])
 
   useEffect(() => {
     const onPop = () => {
@@ -4521,12 +6157,11 @@ function App() {
       setNodeTargetRaw(r.node)
       setIngressTargetRaw(r.ingress)
       setWorkloadTargetRaw(r.workload)
+      setNodePoolRaw(r.nodePool)
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
-
-  const [authModeHint, setAuthModeHint] = useState<string>('none')
 
   useEffect(() => {
     fetch('/api/me').then(async r => {
@@ -4579,66 +6214,36 @@ function App() {
   const handleSearchSelect = (r: SearchResult) => {
     if (r.kind === 'Pod') {
       setPodTarget({ ns: r.namespace, name: r.name })
-    } else if (r.kind === 'Deployment') {
-      setNs(r.namespace)
-      setTab('workloads')
     } else if (r.kind === 'Node') {
       setNodeTarget(r.name)
+    } else if (r.kind === 'Ingress') {
+      setIngressTarget({ ns: r.namespace, name: r.name })
+    } else if (['Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'].includes(r.kind)) {
+      setWorkloadTarget({ ns: r.namespace, name: r.name, kind: r.kind })
     } else if (r.kind === 'Service') {
       setNs(r.namespace)
       setTab('services')
-    } else if (r.kind === 'Ingress') {
-      setIngressTarget({ ns: r.namespace, name: r.name })
     }
   }
 
-  if (nodeTarget) {
-    return (
-      <AuthCtx.Provider value={userInfo}>
-        <div className="flex h-full flex-col overflow-hidden bg-hull-950 pt-safe">
-          <NodeDescribeView name={nodeTarget} onBack={() => setNodeTarget(null)} onPod={(ns, name) => { setNodeTargetRaw(null); setPodTarget({ ns, name }) }} />
-        </div>
-      </AuthCtx.Provider>
-    )
-  }
-
-  if (ingressTarget) {
-    return (
-      <AuthCtx.Provider value={userInfo}>
-        <div className="flex h-full flex-col overflow-hidden bg-hull-950 pt-safe">
-          <IngressDetailView ns={ingressTarget.ns} name={ingressTarget.name} onBack={() => setIngressTarget(null)} />
-        </div>
-      </AuthCtx.Provider>
-    )
-  }
-
-  if (workloadTarget) {
-    return (
-      <AuthCtx.Provider value={userInfo}>
-        <div className="flex h-full flex-col overflow-hidden bg-hull-950 pt-safe">
-          {workloadTarget.kind === 'CronJob'
-            ? <CronJobDetailView ns={workloadTarget.ns} name={workloadTarget.name} onBack={() => setWorkloadTarget(null)} onPod={(pns, pname) => { setWorkloadTargetRaw(null); setPodTarget({ ns: pns, name: pname }) }} />
-            : <WorkloadDetailView ns={workloadTarget.ns} name={workloadTarget.name} kind={workloadTarget.kind} onBack={() => setWorkloadTarget(null)} onPod={(pns, pname) => { setWorkloadTargetRaw(null); setPodTarget({ ns: pns, name: pname }) }} />
-          }
-        </div>
-      </AuthCtx.Provider>
-    )
-  }
-
-  if (podTarget) {
-    return (
-      <AuthCtx.Provider value={userInfo}>
-        <div className="flex h-full flex-col overflow-hidden bg-hull-950 pt-safe">
-          <PodDetailView ns={podTarget.ns} name={podTarget.name} onBack={() => setPodTarget(null)} />
-        </div>
-      </AuthCtx.Provider>
-    )
-  }
+  const detailContent = podTarget ? (
+    <PodDetailView ns={podTarget.ns} name={podTarget.name} onBack={() => setPodTarget(null)} onWorkload={(wns, wname, wkind) => { setPodTargetRaw(null); setNodeTargetRaw(null); setWorkloadTarget({ ns: wns, name: wname, kind: wkind }) }} />
+  ) : nodeTarget ? (
+    <NodeDescribeView name={nodeTarget} onBack={() => setNodeTarget(null)} onPod={(pns, pname) => { setPodTargetRaw({ ns: pns, name: pname }); pushUrl(`/pods/${pns}/${pname}`) }} />
+  ) : workloadTarget ? (
+    workloadTarget.kind === 'CronJob'
+      ? <CronJobDetailView ns={workloadTarget.ns} name={workloadTarget.name} onBack={() => setWorkloadTarget(null)} onPod={(pns, pname) => { setPodTargetRaw({ ns: pns, name: pname }); pushUrl(`/pods/${pns}/${pname}`) }} />
+      : <WorkloadDetailView ns={workloadTarget.ns} name={workloadTarget.name} kind={workloadTarget.kind} onBack={() => setWorkloadTarget(null)} onPod={(pns, pname) => { setPodTargetRaw({ ns: pns, name: pname }); pushUrl(`/pods/${pns}/${pname}`) }} />
+  ) : ingressTarget ? (
+    <IngressDetailView ns={ingressTarget.ns} name={ingressTarget.name} onBack={() => setIngressTarget(null)} />
+  ) : null
 
   return (
     <AuthCtx.Provider value={userInfo}>
       <div className="flex h-full overflow-hidden bg-hull-950 pt-safe">
         {showSearch && <SearchModal onClose={() => setShowSearch(false)} onSelect={handleSearchSelect} />}
+        {showAudit && <AuditTrailModal onClose={() => setShowAudit(false)} />}
+        {showOnlineUsers && <OnlineUsersModal currentEmail={userInfo.email} onClose={() => setShowOnlineUsers(false)} />}
 
         {/* Left edge hover trigger */}
         {!sideOpen && <div className="fixed left-0 top-0 z-30 h-full w-2 cursor-pointer" onMouseEnter={() => setSideOpen(true)} />}
@@ -4657,15 +6262,33 @@ function App() {
 
           <nav className="flex-1 overflow-y-auto py-2 px-2">
             {TABS.map(t => (
-              <button
-                key={t.id}
-                onClick={() => { setTab(t.id); if (t.id !== 'workloads') setWorkloadKind(''); setSideOpen(false); }}
-                className={`relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 mb-0.5 ${tab === t.id ? 'bg-hull-800/80 text-neon-cyan shadow-[inset_0_0_20px_rgba(6,214,224,0.04)]' : 'text-gray-500 hover:bg-hull-800/40 hover:text-gray-300'}`}
-              >
-                {tab === t.id && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r-full bg-neon-cyan shadow-[0_0_8px_rgba(6,214,224,0.6)]" />}
-                <span className="text-base w-5 text-center">{t.icon}</span>
-                <span>{t.label}</span>
-              </button>
+              <Fragment key={t.id}>
+                <button
+                  onClick={() => {
+                    if (t.id === 'troubled') {
+                      setTroubledExpanded(prev => !prev)
+                    } else {
+                      setTab(t.id); if (t.id !== 'workloads') setWorkloadKind(''); setSideOpen(false)
+                    }
+                  }}
+                  className={`relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 mb-0.5 ${tab === t.id ? 'bg-hull-800/80 text-neon-cyan shadow-[inset_0_0_20px_rgba(6,214,224,0.04)]' : 'text-gray-500 hover:bg-hull-800/40 hover:text-gray-300'}`}
+                >
+                  {tab === t.id && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r-full bg-neon-cyan shadow-[0_0_8px_rgba(6,214,224,0.6)]" />}
+                  <span className="text-base w-5 text-center">{t.icon}</span>
+                  <span className="flex-1 text-left">{t.label}</span>
+                  {t.id === 'troubled' && <span className={`text-[10px] text-gray-600 transition-transform duration-200 ${troubledExpanded ? 'rotate-90' : ''}`}>▸</span>}
+                </button>
+                {t.id === 'troubled' && troubledExpanded && (
+                  <div className="ml-8 mb-1 space-y-0.5">
+                    {([['pods', 'Troubled Pods'], ['spot', 'Node Disruptions'], ['resilience', 'Pod Resilience']] as const).map(([id, label]) => (
+                      <button key={id} onClick={() => { setTab('troubled'); setTroubledSub(id as 'pods' | 'spot' | 'resilience'); setSideOpen(false); }}
+                        className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all ${tab === 'troubled' && troubledSub === id ? 'text-neon-cyan bg-hull-800/50' : 'text-gray-600 hover:text-gray-400 hover:bg-hull-800/30'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </Fragment>
             ))}
           </nav>
 
@@ -4681,7 +6304,9 @@ function App() {
           </div>
         </aside>
 
-        {/* Main column */}
+        {detailContent ? (
+          <div className="flex flex-1 flex-col overflow-hidden">{detailContent}</div>
+        ) : (
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Header */}
           <header className="shrink-0 glass border-0 border-b border-hull-700/40 px-3 py-2.5 relative z-40">
@@ -4697,7 +6322,7 @@ function App() {
                 <button onClick={() => setShowSearch(true)} className="flex items-center gap-1.5 rounded-lg glass px-2.5 py-1 text-[11px] text-gray-400 transition-all hover:text-neon-cyan hover:shadow-[0_0_8px_rgba(6,214,224,0.1)]">
                   <span>⌕</span><span className="hidden sm:inline">Search</span>
                 </button>
-                {(tab === 'workloads' || tab === 'pods' || tab === 'ingress' || tab === 'services' || tab === 'events' || tab === 'hpa' || tab === 'config') && namespaces && namespaces.length > 0 && (
+                {(tab === 'workloads' || tab === 'pods' || tab === 'ingress' || tab === 'services' || tab === 'events' || tab === 'hpa' || tab === 'config' || tab === 'pvcs') && namespaces && namespaces.length > 0 && (
                   <NamespacePicker namespaces={namespaces} value={ns} onChange={setNs} />
                 )}
                 <div className="relative">
@@ -4706,12 +6331,16 @@ function App() {
                   </button>
                   {showInfo && <InfoPopover tab={tab} onClose={() => setShowInfo(false)} />}
                 </div>
-                <div className="flex items-center gap-2">
-                  <UserAvatar email={userInfo.email} />
-                  <div className="hidden sm:block">
-                    <p className="text-[10px] font-medium text-gray-300 leading-tight truncate max-w-[100px]">{userInfo.email.split('@')[0]}</p>
-                    <p className={`text-[8px] font-bold uppercase tracking-widest ${userInfo.role === 'admin' ? 'text-neon-cyan' : 'text-gray-500'}`}>{userInfo.role}</p>
-                  </div>
+                <div className="relative" ref={userMenuRef}>
+                  <button onClick={() => setShowUserMenu(v => !v)} className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-hull-800/60 transition-all">
+                    <UserAvatar email={userInfo.email} />
+                    <div className="hidden sm:block text-left">
+                      <p className="text-[10px] font-medium text-gray-300 leading-tight truncate max-w-[100px]">{userInfo.email.split('@')[0]}</p>
+                      <p className={`text-[8px] font-bold uppercase tracking-widest ${userInfo.role === 'admin' ? 'text-neon-cyan' : 'text-gray-500'}`}>{userInfo.role}</p>
+                    </div>
+                    <svg className="hidden sm:block text-gray-600" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
+                  {showUserMenu && <UserMenuDropdown email={userInfo.email} role={userInfo.role} onClose={() => setShowUserMenu(false)} onAudit={() => { setShowUserMenu(false); setShowAudit(true) }} onOnlineUsers={() => { setShowUserMenu(false); setShowOnlineUsers(true) }} containerRef={userMenuRef} />}
                 </div>
               </div>
             </div>
@@ -4720,19 +6349,23 @@ function App() {
           {/* Content */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
             {tab === 'overview' && <OverviewView onNodeTap={(name) => { setNodeTarget(name) }} onTab={(t, kind) => { setTab(t as TabId); if (t === 'workloads') setWorkloadKind(kind || ''); }} />}
-            {tab === 'nodes' && <NodesView onNode={(name) => setNodeTarget(name)} />}
+            {tab === 'nodes' && <NodesView onNode={(name) => setNodeTarget(name)} poolFilter={nodePool} onPoolChange={setNodePool} />}
             {tab === 'workloads' && <WorkloadsView namespace={ns} initialKind={workloadKind} onWorkload={(ns, name, kind) => setWorkloadTarget({ ns, name, kind })} />}
             {tab === 'pods' && <PodsView namespace={ns} onPod={(ns, name) => setPodTarget({ ns, name })} />}
             {tab === 'services' && <ServicesView namespace={ns} />}
             {tab === 'ingress' && <IngressesView namespace={ns} onIngress={(ns, name) => setIngressTarget({ ns, name })} />}
           {tab === 'hpa' && <HPAView namespace={ns} />}
+          {tab === 'pvcs' && <PVCsView namespace={ns} />}
           {tab === 'config' && <ConfigView namespace={ns} />}
           {tab === 'spot' && <SpotAdvisorView />}
           {tab === 'events' && <EventsView namespace={ns} />}
-          {tab === 'troubled' && <TroubledPodsView onPod={(ns, name) => setPodTarget({ ns, name })} />}
+          {tab === 'troubled' && troubledSub === 'pods' && <TroubledPodsView onPod={(ns, name) => setPodTarget({ ns, name })} />}
+          {tab === 'troubled' && troubledSub === 'spot' && <SpotInterruptionsView onNode={(name) => setNodeTarget(name)} hiddenReasons={spotHiddenReasons} onToggleReason={(r) => setSpotHiddenReasons(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])} />}
+          {tab === 'troubled' && troubledSub === 'resilience' && <PodResilienceView />}
           {tab === 'topology' && <TopologySpreadView />}
           </main>
         </div>
+        )}
       </div>
     </AuthCtx.Provider>
   )
