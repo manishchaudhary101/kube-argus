@@ -2,6 +2,17 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.1.1] — 2026-04-02
+
+### Security
+
+- **Go runtime upgraded from 1.19 → 1.25**, resolving 42 standard library vulnerabilities (crypto/tls, crypto/x509, net/http, net/url, encoding/asn1, os/exec, and more)
+- **All Go dependencies upgraded to latest**: k8s.io 0.26→0.35, golang.org/x/crypto 0.14→0.49, golang.org/x/net 0.17→0.52, go-oidc 3.9→3.17, go-jose 3.0.1→3.0.5
+- **npm vulnerabilities fixed**: brace-expansion, flatted, picomatch patched via audit fix
+- Result: **0 Go vulnerabilities** (govulncheck), **0 npm vulnerabilities** (npm audit)
+
+---
+
 ## [v1.1.0] — 2026-03-29
 
 ### New Features

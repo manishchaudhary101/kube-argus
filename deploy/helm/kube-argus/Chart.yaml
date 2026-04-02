@@ -2,8 +2,8 @@ apiVersion: v2
 name: kube-argus
 description: A production-grade Kubernetes dashboard for SREs and platform engineers
 type: application
-version: 0.2.0
-appVersion: "1.1.0"
+version: 0.2.1
+appVersion: "1.1.1"
 keywords:
   - kubernetes
   - dashboard
