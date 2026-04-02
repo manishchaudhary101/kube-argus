@@ -34,6 +34,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gorilla/websocket"
+	_ "golang.org/x/crypto/ssh"
 	"golang.org/x/oauth2"
 
 	appsv1 "k8s.io/api/apps/v1"
