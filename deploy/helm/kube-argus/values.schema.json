@@ -1,0 +1,292 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of Kube-Argus replicas to deploy"
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "default": "ghcr.io/manishchaudhary101/kube-argus",
+          "description": "Docker image repository"
+        },
+        "tag": {
+          "type": "string",
+          "default": "latest",
+          "description": "Docker image tag"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "default": "Always",
+          "description": "Image pull policy (Always, IfNotPresent, Never)"
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "default": "ClusterIP",
+          "description": "Kubernetes service type (ClusterIP, NodePort, LoadBalancer)"
+        },
+        "port": {
+          "type": "integer",
+          "default": 8080,
+          "description": "Service port"
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable ingress to expose the dashboard externally"
+        },
+        "className": {
+          "type": "string",
+          "default": "",
+          "description": "Ingress class name (e.g. nginx, alb)"
+        },
+        "annotations": {
+          "type": "object",
+          "default": {},
+          "description": "Extra ingress annotations"
+        },
+        "hosts": {
+          "type": "array",
+          "description": "Ingress host and path configuration",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Hostname for the ingress rule"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "URL path"
+                    },
+                    "pathType": {
+                      "type": "string",
+                      "description": "Path type (Prefix, Exact, ImplementationSpecific)"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": {
+          "type": "array",
+          "default": [],
+          "description": "TLS configuration for HTTPS. Set secretName and hosts."
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "CPU and memory resource requests and limits",
+      "properties": {
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "default": "100m",
+              "description": "CPU request"
+            },
+            "memory": {
+              "type": "string",
+              "default": "128Mi",
+              "description": "Memory request"
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "default": "500m",
+              "description": "CPU limit"
+            },
+            "memory": {
+              "type": "string",
+              "default": "512Mi",
+              "description": "Memory limit"
+            }
+          }
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment variables passed to the Kube-Argus container",
+      "properties": {
+        "CLUSTER_NAME": {
+          "type": "string",
+          "default": "",
+          "description": "Display name for the cluster shown in the dashboard header"
+        },
+        "DEFAULT_ROLE": {
+          "type": "string",
+          "default": "viewer",
+          "description": "Default role for authenticated users (viewer or admin)"
+        },
+        "GOOGLE_CLIENT_ID": {
+          "type": "string",
+          "default": "",
+          "description": "Google OAuth client ID for Google SSO login"
+        },
+        "GOOGLE_CLIENT_SECRET": {
+          "type": "string",
+          "default": "",
+          "description": "Google OAuth client secret for Google SSO login"
+        },
+        "OIDC_ISSUER": {
+          "type": "string",
+          "default": "",
+          "description": "OIDC issuer URL (e.g. https://accounts.google.com, Okta, Auth0, Keycloak)"
+        },
+        "OIDC_CLIENT_ID": {
+          "type": "string",
+          "default": "",
+          "description": "OIDC client ID for generic OIDC authentication"
+        },
+        "OIDC_CLIENT_SECRET": {
+          "type": "string",
+          "default": "",
+          "description": "OIDC client secret for generic OIDC authentication"
+        },
+        "OIDC_ADMIN_GROUP": {
+          "type": "string",
+          "default": "admin",
+          "description": "OIDC group claim value that grants admin role"
+        },
+        "ADMIN_EMAILS": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of email addresses that get admin role"
+        },
+        "SESSION_SECRET": {
+          "type": "string",
+          "default": "",
+          "description": "Secret key for signing session cookies (auto-generated if empty)"
+        },
+        "SESSION_TTL": {
+          "type": "string",
+          "default": "8h",
+          "description": "Session duration (e.g. 8h, 24h, 30m)"
+        },
+        "CORS_ORIGIN": {
+          "type": "string",
+          "default": "",
+          "description": "Allowed CORS origin for cross-origin requests"
+        },
+        "PROMETHEUS_URL": {
+          "type": "string",
+          "default": "",
+          "description": "Prometheus server URL for metrics charts and right-sizing (e.g. http://prometheus-server.monitoring:9090)"
+        },
+        "PROMETHEUS_USER": {
+          "type": "string",
+          "default": "",
+          "description": "Prometheus basic auth username (if required)"
+        },
+        "PROMETHEUS_KEY": {
+          "type": "string",
+          "default": "",
+          "description": "Prometheus basic auth password or API key (if required)"
+        },
+        "LLM_GATEWAY_URL": {
+          "type": "string",
+          "default": "",
+          "description": "LLM API endpoint for AI-powered pod diagnostics"
+        },
+        "LLM_GATEWAY_KEY": {
+          "type": "string",
+          "default": "",
+          "description": "LLM API key"
+        },
+        "LLM_GATEWAY_MODEL": {
+          "type": "string",
+          "default": "",
+          "description": "LLM model name (e.g. gpt-4, claude-3)"
+        },
+        "AWS_SECRET_NAME": {
+          "type": "string",
+          "default": "",
+          "description": "AWS Secrets Manager secret name for loading env vars at startup"
+        },
+        "AWS_REGION": {
+          "type": "string",
+          "default": "us-east-1",
+          "description": "AWS region for Secrets Manager and Spot Advisor"
+        }
+      }
+    },
+    "existingSecret": {
+      "type": "string",
+      "default": "",
+      "description": "Name of an existing Kubernetes Secret to use for environment variables instead of env.*"
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create a dedicated ServiceAccount for Kube-Argus"
+        },
+        "name": {
+          "type": "string",
+          "default": "",
+          "description": "Override the ServiceAccount name (defaults to release name)"
+        },
+        "annotations": {
+          "type": "object",
+          "default": {},
+          "description": "Annotations to add to the ServiceAccount (e.g. for IAM roles)"
+        }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create ClusterRole and ClusterRoleBinding for Kubernetes API access"
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "default": {},
+      "description": "Node selector labels for pod scheduling"
+    },
+    "tolerations": {
+      "type": "array",
+      "default": [],
+      "description": "Tolerations for pod scheduling on tainted nodes"
+    },
+    "affinity": {
+      "type": "object",
+      "default": {},
+      "description": "Affinity rules for pod scheduling"
+    }
+  }
+}

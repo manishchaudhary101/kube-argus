@@ -14,6 +14,7 @@ sources:
   - https://github.com/manishchaudhary101/kube-argus
 maintainers:
   - name: manishchaudhary101
+    email: imanishchaudhary@gmail.com
     url: https://github.com/manishchaudhary101
 annotations:
   artifacthub.io/license: Apache-2.0
