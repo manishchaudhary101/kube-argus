@@ -2,8 +2,8 @@ apiVersion: v2
 name: kube-argus
 description: A production-grade Kubernetes dashboard for SREs and platform engineers
 type: application
-version: 0.2.2
-appVersion: "1.1.3"
+version: 0.2.3
+appVersion: "1.1.4"
 keywords:
   - kubernetes
   - dashboard
@@ -21,7 +21,11 @@ annotations:
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus
   artifacthub.io/screenshots: |
-    - title: Overview Dashboard
+    - title: Cluster Overview — Real-time node and pod status
       url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png
-    - title: Node Detail
+    - title: Node Detail — Pod heatmap, conditions, and drain wizard
       url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-node-detail.png
+    - title: Pod Metrics — Prometheus CPU and memory charts
+      url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-pod-metrics.png
+    - title: Spot Advisor — Cost optimization and instance recommendations
+      url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
