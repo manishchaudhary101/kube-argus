@@ -7,7 +7,7 @@ COPY web/ ./
 RUN npm run build
 
 # ── Stage 2: Build backend (native cross-compilation, no QEMU) ──────
-FROM --platform=$BUILDPLATFORM golang:1.19-alpine AS backend
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend
 ARG TARGETARCH
 RUN apk add --no-cache git
 WORKDIR /app
