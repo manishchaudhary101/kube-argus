@@ -2,7 +2,7 @@ apiVersion: v2
 name: kube-argus
 description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
-version: 0.2.3
+version: 1.1.4
 appVersion: "1.1.4"
 keywords:
   - kubernetes
