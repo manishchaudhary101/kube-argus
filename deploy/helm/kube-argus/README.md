@@ -1,6 +1,6 @@
 # Kube-Argus Helm Chart
 
-A production-grade, real-time Kubernetes dashboard for SREs and platform engineers.
+The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.
 
 Live cluster state every 10 seconds, streaming pod logs, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
 

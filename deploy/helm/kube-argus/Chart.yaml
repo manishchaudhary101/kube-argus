@@ -1,6 +1,6 @@
 apiVersion: v2
 name: kube-argus
-description: A production-grade Kubernetes dashboard for SREs and platform engineers
+description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
 version: 0.2.2
 appVersion: "1.1.3"
