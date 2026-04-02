@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/manishchaudhary101/kube-argus
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 service:
   type: ClusterIP
