@@ -21,7 +21,7 @@ cd kube-argus
 cd web && npm install && npm run build && cd ..
 
 # Run the backend (uses ~/.kube/config by default)
-DEFAULT_ROLE=admin go run main.go
+DEFAULT_ROLE=admin go run ./cmd/server
 ```
 
 Open http://localhost:8080. The dashboard auto-refreshes every 10 seconds.
@@ -30,7 +30,7 @@ Open http://localhost:8080. The dashboard auto-refreshes every 10 seconds.
 
 ```bash
 # Terminal 1: Run the Go backend
-go run main.go
+go run ./cmd/server
 
 # Terminal 2: Run the Vite dev server with proxy
 cd web && npm run dev
@@ -48,58 +48,83 @@ docker run -p 8080:8080 -v ~/.kube/config:/home/nobody/.kube/config:ro kube-argu
 ## Architecture
 
 ```
-├── main.go                 # Go backend — all API handlers, cache, auth, WebSocket
+├── cmd/server/                 # Go backend source files (package main)
+│   ├── main.go                 #   Entrypoint, route registration, kubeConfig
+│   ├── auth.go                 #   OIDC / Google / None auth, sessions, middleware
+│   ├── cache.go                #   In-memory Kubernetes resource cache
+│   ├── nodes.go                #   Node APIs (list, cordon, drain, pod-usage)
+│   ├── workloads.go            #   Workload APIs (list, scale, restart, agglogs)
+│   ├── pods.go                 #   Pod APIs (list, detail, delete)
+│   ├── prometheus.go           #   Prometheus metrics, sizing, alerts
+│   ├── ai.go                   #   LLM gateway, AI diagnosis
+│   ├── ...                     #   + 11 more domain-organized files
 ├── web/
 │   ├── src/
-│   │   ├── App.tsx         # React frontend — all components in a single file
-│   │   ├── index.css       # Tailwind CSS + custom styles
-│   │   └── main.tsx        # React entry point
+│   │   ├── App.tsx             # React app shell — routing, sidebar, header
+│   │   ├── types.ts            # Shared TypeScript interfaces
+│   │   ├── routing.ts          # Tab definitions and URL parsing
+│   │   ├── context/            # React contexts (auth)
+│   │   ├── hooks/              # Custom hooks (useFetch, useMetrics, etc.)
+│   │   ├── components/
+│   │   │   ├── ui/             # Reusable atoms (Pill, Btn, K9sBar, MetricChart)
+│   │   │   ├── modals/         # Modal dialogs (Search, Drain, YAML, Audit)
+│   │   │   └── views/          # Page-level view components
+│   │   ├── layout/             # Layout components (NamespacePicker, UserMenu)
+│   │   ├── index.css           # Tailwind CSS + custom styles
+│   │   └── main.tsx            # React entry point
 │   ├── package.json
 │   └── vite.config.ts
 ├── deploy/
-│   ├── helm/kube-argus/    # Helm chart
-│   └── k8s/                # Plain Kubernetes manifests
-├── Dockerfile              # Multi-stage, multi-arch build
-└── docker-compose.yaml     # Local evaluation with Docker
+│   ├── helm/kube-argus/        # Helm chart
+│   └── k8s/                    # Plain Kubernetes manifests
+├── Dockerfile                  # Multi-stage, multi-arch build
+└── docker-compose.yaml         # Local evaluation with Docker
 ```
 
-### Backend (main.go)
+### Backend (`cmd/server/`)
 
-The Go backend is a single file that handles:
+The Go backend is organized into ~20 domain-focused files, all in `package main`:
 
-- **In-memory cache** — Kubernetes resources are fetched in 3 batches every 10 seconds and stored in memory. All API responses read from this cache, so 100 users don't mean 100x API calls.
-- **API handlers** — REST endpoints under `/api/*` for cluster data, workload management, pod actions, storage, YAML view/edit, audit trail, and more.
-- **Auth** — OIDC/OAuth2 with support for Google SSO, generic OIDC, or no auth. Sessions stored in signed cookies.
-- **WebSocket** — Pod exec terminal via `gorilla/websocket` + `client-go/remotecommand`.
-- **SSE streaming** — Pod logs, drain progress, and aggregated workload logs streamed via Server-Sent Events.
-- **Gzip middleware** — Automatic response compression for all API endpoints.
+- **`main.go`** — Entrypoint, Kubernetes client initialization, route registration
+- **`server.go`** — CORS, gzip middleware, JSON/context helpers
+- **`auth.go`** — OIDC/OAuth2 with Google SSO, generic OIDC, or no auth; cookie-based sessions
+- **`cache.go`** — In-memory cache refreshed every 10s in 3 batches; all API reads hit cache, not the K8s API
+- **`nodes.go`** — Node list, cordon/uncordon, drain wizard, pod-usage heatmap
+- **`workloads.go`** — Workload list, scale/restart, aggregated logs
+- **`pods.go`** — Pod list, detail, delete
+- **`prometheus.go`** — Metrics charts, right-sizing, alerts
+- **`ai.go`** — LLM-powered pod diagnosis and spot analysis
+- **`resources.go`** — PDBs, HPAs, events, topology spread, search, namespace costs
+- **`spot_advisor.go`** — Spot instance recommendations and consolidation
+- And more: `audit.go`, `config.go`, `exec.go`, `networking.go`, `storage.go`, `yaml_editor.go`, `sparklines.go`, `helpers.go`
 
-### Frontend (App.tsx)
+### Frontend (`web/src/`)
 
-The React frontend is a single-file application using:
+The React frontend is organized into ~40 TypeScript files:
 
-- **React 19** with TypeScript
-- **Tailwind CSS** for styling (dark theme)
-- **Recharts** for Prometheus metric charts
-- **xterm.js** for the pod terminal
-- **js-yaml** for YAML parsing/display
+- **`types.ts`** — All shared interfaces (Pod, Workload, NodeInfo, etc.)
+- **`hooks/`** — Data fetching (`useFetch`), metrics, AI streaming, drain background
+- **`components/ui/`** — Reusable atoms: Pill, Btn, Spinner, K9sBar, MetricChart, MiniSparkline
+- **`components/modals/`** — Search, DrainWizard, YAML editor, AuditTrail, OnlineUsers
+- **`components/views/`** — One file per page (OverviewView, NodesView, PodsView, etc.)
+- **`layout/`** — NamespacePicker, UserMenuDropdown
+
+Uses React 19, TypeScript, Tailwind CSS, Recharts, xterm.js, and js-yaml.
 
 ## How to Add a New Feature
 
 ### Adding a New Backend API Endpoint
 
-1. Write your handler function in `main.go`:
+1. Create a handler function in the appropriate domain file under `cmd/server/` (e.g., add a storage endpoint to `storage.go`):
    ```go
    func apiMyFeature(w http.ResponseWriter, r *http.Request) {
-       // Use the cached data from clusterCache
-       c.mu.RLock()
-       defer c.mu.RUnlock()
-       // Build your response
-       j(w, result) // j() is the JSON response helper
+       cache.mu.RLock()
+       defer cache.mu.RUnlock()
+       j(w, result)
    }
    ```
 
-2. Register the route in `main()` (around line 1900):
+2. Register the route in `main.go`:
    ```go
    mux.HandleFunc("/api/my-feature", apiMyFeature)
    ```
@@ -110,24 +135,24 @@ The React frontend is a single-file application using:
 
 ### Adding a New Frontend Component
 
-1. Add your component function in `web/src/App.tsx`.
-2. Add navigation in the sidebar (search for the `nav` section).
-3. Add the view rendering in the main content area (search for the view switching logic).
+1. Add your view component in `web/src/components/views/`.
+2. Import and render it in `App.tsx` within the tab routing section.
+3. Add navigation entry in `routing.ts` (the `TABS` array).
 
 ### Adding New Cache Data
 
 If your feature needs Kubernetes resources not already cached:
 
-1. Add the list call in the appropriate batch in `clusterCache.refresh()` (around line 670).
+1. Add the list call in the appropriate batch in `cache.go`'s `refresh()` function.
 2. Add the field to the `clusterCache` struct.
-3. Use `c.mu.RLock()` in your handler to read from the cache.
+3. Use `cache.mu.RLock()` in your handler to read from the cache.
 
 ## Code Style
 
 - Go code follows standard `gofmt` formatting
 - Frontend uses the project's ESLint config
 - Avoid adding comments that narrate what the code does — comments should explain non-obvious intent
-- Keep things simple — both `main.go` and `App.tsx` are single files by design for easy navigation
+- Group code by domain — each file should own one concern
 
 ## Submitting Changes
 
@@ -136,7 +161,7 @@ If your feature needs Kubernetes resources not already cached:
 3. Make your changes
 4. Ensure both builds pass:
    ```bash
-   go build -o /dev/null main.go
+   go build ./cmd/server
    cd web && npm run build
    ```
 5. Commit with a descriptive message (`feat:`, `fix:`, `docs:`, `chore:`)

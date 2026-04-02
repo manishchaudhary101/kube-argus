@@ -251,7 +251,7 @@ cd kube-argus
 cd web && npm install && npm run build && cd ..
 
 # Run the backend (uses ~/.kube/config by default)
-go run main.go
+go run ./cmd/server
 ```
 
 Open http://localhost:8080.
