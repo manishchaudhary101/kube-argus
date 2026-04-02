@@ -222,8 +222,8 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 ## Quick Start
 
 ### Prerequisites
-- Go 1.19+
-- Node.js 18+
+- Go 1.25+
+- Node.js 20+
 - Access to a Kubernetes cluster (kubeconfig or in-cluster)
 - (Optional) Prometheus endpoint for metrics
 - (Optional) OIDC provider for authentication
@@ -369,8 +369,10 @@ When `AWS_SECRET_NAME` is set, the app loads config values from Secrets Manager 
 
 Kube-Argus is designed to be lightweight despite its real-time nature:
 - **Cached**: All K8s list operations are cached in-memory, refreshed every **10 seconds** server-side
+- **Multi-batch refresh**: Cache loads in 3 sequential batches — overview renders after batch 1, no waiting for all resources
 - **Single connection**: One set of API calls per refresh cycle, **not per-user** — 100 users don't mean 100x API load
-- **Read-only**: No write operations to the K8s API (except admin actions: cordon, drain, scale, restart, delete, exec)
+- **Gzip compression**: All API responses are automatically compressed via middleware
+- **Read-only**: No write operations to the K8s API (except admin actions: cordon, drain, scale, restart, delete, exec, YAML edit)
 - **No CRDs**: No custom resources or operators needed
 - **No agents**: Nothing deployed to worker nodes
 - **Prometheus**: Standard PromQL range queries, no recording rules required (but supported)
@@ -388,11 +390,14 @@ metadata:
   name: kube-argus
 rules:
   - apiGroups: [""]
-    resources: [nodes, pods, pods/log, services, events, configmaps, secrets, namespaces, resourcequotas]
+    resources: [nodes, pods, pods/log, services, events, configmaps, secrets, namespaces, resourcequotas, persistentvolumeclaims, persistentvolumes]
     verbs: [get, list, watch]
   - apiGroups: [""]
     resources: [nodes]
     verbs: [patch]
+  - apiGroups: [""]
+    resources: [services, configmaps, secrets]
+    verbs: [update]
   - apiGroups: [""]
     resources: [pods, pods/exec]
     verbs: [get, list, watch, delete, create]
@@ -401,21 +406,24 @@ rules:
     verbs: [create]
   - apiGroups: [apps]
     resources: [deployments, statefulsets, daemonsets, replicasets]
-    verbs: [get, list, watch, patch]
+    verbs: [get, list, watch, patch, update]
   - apiGroups: [apps]
     resources: [deployments/scale, statefulsets/scale]
     verbs: [get, update]
   - apiGroups: [batch]
     resources: [jobs, cronjobs]
-    verbs: [get, list, watch]
+    verbs: [get, list, watch, update]
   - apiGroups: [networking.k8s.io]
     resources: [ingresses]
     verbs: [get, list, watch]
   - apiGroups: [autoscaling]
     resources: [horizontalpodautoscalers]
-    verbs: [get, list, watch]
+    verbs: [get, list, watch, update]
   - apiGroups: [policy]
     resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
     verbs: [get, list, watch]
   - apiGroups: [metrics.k8s.io]
     resources: [nodes, pods]
