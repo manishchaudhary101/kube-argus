@@ -119,8 +119,15 @@ function NodeMetricsPanel({ nodeName }: { nodeName: string }) {
   const { data, loading, err } = useMetrics(`/api/metrics/node?node=${encodeURIComponent(nodeName)}`, timeRange)
 
   if (loading) return <div className="rounded border border-hull-700 bg-hull-900 p-3 text-center"><Spinner /></div>
-  if (err || !data) return null
-  if (Object.keys(data).length === 0) return null
+  if (err) return (
+    <div className="rounded border border-hull-700 bg-hull-900 overflow-hidden">
+      <div className="border-b border-hull-700 bg-hull-800 px-2 py-1.5">
+        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Metrics</span>
+      </div>
+      <p className="text-[10px] text-neon-amber text-center py-4">{err}</p>
+    </div>
+  )
+  if (!data || Object.keys(data).length === 0) return null
 
   return (
     <div className="rounded border border-hull-700 bg-hull-900 overflow-hidden">
