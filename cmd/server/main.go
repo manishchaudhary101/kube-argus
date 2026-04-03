@@ -50,6 +50,13 @@ func main() {
 	initPrometheus()
 
 	initAuth()
+	jitInitPersistence()
+	jitRestore()
+	go jitExpiryLoop()
+
+	auditInitPersistence()
+	auditRestore()
+	go auditPersistLoop()
 
 	mux := http.NewServeMux()
 
@@ -95,6 +102,9 @@ func main() {
 	mux.HandleFunc("/api/storage", apiStorage)
 	mux.HandleFunc("/api/config-drift", apiConfigDrift)
 	mux.HandleFunc("/api/yaml/", apiYaml)
+	mux.HandleFunc("/api/jit/requests", apiJITRequests)
+	mux.HandleFunc("/api/jit/my-grants", apiJITMyGrants)
+	mux.HandleFunc("/api/jit/", apiJITAction)
 	mux.HandleFunc("/api/audit", apiAudit)
 	mux.HandleFunc("/api/online-users", func(w http.ResponseWriter, r *http.Request) {
 		if !requireAdmin(w, r) {

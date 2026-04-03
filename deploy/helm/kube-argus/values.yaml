@@ -85,6 +85,11 @@ topologySpreadConstraints:
     labelSelector:
       matchLabels: {}
 
+jit:
+  persistence:
+    enabled: true
+  retentionDays: 7
+
 nodeSelector: {}
 tolerations: []
 affinity:

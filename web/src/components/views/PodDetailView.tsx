@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { Spinner, StatusDot, ContainerStateBadge } from '../ui/Atoms'
 import { MetricChart, useMetrics, METRIC_RANGES, YamlModal } from './WorkloadDetailView'
 import type { MetricsData, RefLine } from './WorkloadDetailView'
+import { JITRequestModal } from '../modals/JITRequestModal'
 
 // ─── Resource Bar ────────────────────────────────────────────────────
 
@@ -319,6 +320,10 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
   const [autoScroll, setAutoScroll] = useState(true)
   const [showShell, setShowShell] = useState(false)
   const [showYaml, setShowYaml] = useState(false)
+  const [showJITModal, setShowJITModal] = useState(false)
+  const [jitGranted, setJitGranted] = useState(false)
+  const [jitPending, setJitPending] = useState(false)
+  const [jitExpiresIn, setJitExpiresIn] = useState('')
   const [logContainer, setLogContainer] = useState('')
   const [prevLogContainer, setPrevLogContainer] = useState<string | null>(null)
   const [prevLog, setPrevLog] = useState<string | null>(null)
@@ -356,6 +361,55 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
     setAutoScroll(atBottom)
   }, [])
 
+  const prevJitState = useRef<{ pending: boolean; granted: boolean }>({ pending: false, granted: false })
+
+  useEffect(() => {
+    if (isAdmin) return
+    const myOwnerKind = desc?.ownerKind || ''
+    const myOwnerName = desc?.ownerName || ''
+    const check = () => {
+      fetch('/api/jit/my-grants').then(r => r.json()).then((grants: any[]) => {
+        const grant = grants.find((g: any) => g.namespace === ns && g.ownerKind === myOwnerKind && g.ownerName === myOwnerName)
+        if (grant && grant.expiresAt) {
+          if (prevJitState.current.pending && !prevJitState.current.granted) {
+            setToast('Access approved — shell is now available')
+            setTimeout(() => setToast(null), 5000)
+          }
+          setJitGranted(true)
+          setJitPending(false)
+          const diff = new Date(grant.expiresAt).getTime() - Date.now()
+          if (diff > 3600000) setJitExpiresIn(`${Math.floor(diff / 3600000)}h ${Math.floor((diff % 3600000) / 60000)}m`)
+          else if (diff > 60000) setJitExpiresIn(`${Math.ceil(diff / 60000)}m`)
+          else if (diff > 0) setJitExpiresIn(`${Math.ceil(diff / 1000)}s`)
+          else { setJitGranted(false); setJitExpiresIn('') }
+          prevJitState.current = { pending: false, granted: true }
+        } else {
+          setJitGranted(false)
+          setJitExpiresIn('')
+          prevJitState.current = { ...prevJitState.current, granted: false }
+        }
+      }).catch(() => {})
+      fetch('/api/jit/requests').then(r => r.json()).then((reqs: any[]) => {
+        const matchOwner = (r: any) => r.namespace === ns && r.ownerKind === myOwnerKind && r.ownerName === myOwnerName
+        const hasPending = reqs.some((r: any) => matchOwner(r) && r.status === 'pending')
+        if (prevJitState.current.pending && !hasPending && !jitGranted) {
+          if (reqs.some((r: any) => matchOwner(r) && r.status === 'denied')) {
+            setToast('Access request was denied')
+            setTimeout(() => setToast(null), 5000)
+          } else if (reqs.some((r: any) => matchOwner(r) && r.status === 'expired')) {
+            setToast('Access request expired — no action taken within 48h')
+            setTimeout(() => setToast(null), 5000)
+          }
+        }
+        setJitPending(hasPending)
+        prevJitState.current = { ...prevJitState.current, pending: hasPending }
+      }).catch(() => {})
+    }
+    check()
+    const id = setInterval(check, 5000)
+    return () => clearInterval(id)
+  }, [isAdmin, ns, desc?.ownerKind, desc?.ownerName])
+
   const deletePod = async () => {
     setDeleting(true)
     try {
@@ -387,7 +441,8 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
     <div className="flex min-h-0 flex-1 flex-col">
       {showShell && <PodShell ns={ns} name={name} onClose={() => setShowShell(false)} />}
       {showYaml && <YamlModal kind="Pod" ns={ns} name={name} onClose={() => setShowYaml(false)} />}
-      {toast && <div className="border-b border-hull-700 bg-hull-800 px-4 py-2 text-xs text-gray-300">{toast}</div>}
+      {showJITModal && <JITRequestModal ns={ns} pod={name} ownerKind={desc?.ownerKind} ownerName={desc?.ownerName} onClose={() => setShowJITModal(false)} onSubmitted={() => { setShowJITModal(false); setJitPending(true) }} />}
+      {toast && <div className={`border-b px-4 py-2 text-xs font-medium ${toast.includes('approved') ? 'border-green-900/40 bg-green-950/30 text-neon-green' : toast.includes('denied') ? 'border-red-900/40 bg-red-950/30 text-neon-red' : toast.includes('expired') ? 'border-amber-900/40 bg-amber-950/30 text-neon-amber' : 'border-hull-700 bg-hull-800 text-gray-300'}`}>{toast}</div>}
       <div className="flex items-center gap-2 border-b border-hull-700 bg-hull-900 px-4 py-2">
         <button onClick={onBack} className="rounded bg-hull-700 px-2 py-1 text-xs text-gray-400 hover:text-white">←</button>
         <div className="min-w-0 flex-1">
@@ -396,7 +451,7 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
         </div>
         <div className="flex gap-1.5">
           <button onClick={() => setShowYaml(true)} className="rounded-md border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors">YAML</button>
-        {isAdmin && (
+        {isAdmin ? (
           <>
             <button onClick={() => setShowShell(true)} className="rounded-md border border-cyan-900/40 bg-cyan-950/40 px-2.5 py-1 text-[10px] font-medium text-neon-cyan transition-colors hover:bg-cyan-900/30">Shell</button>
             {!confirmDelete ? (
@@ -410,6 +465,14 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
               </>
             )}
           </>
+        ) : jitGranted ? (
+          <button onClick={() => setShowShell(true)} className="rounded-md border border-cyan-900/40 bg-cyan-950/40 px-2.5 py-1 text-[10px] font-medium text-neon-cyan transition-colors hover:bg-cyan-900/30 flex items-center gap-1.5">
+            Shell <span className="text-[9px] text-cyan-600">{jitExpiresIn}</span>
+          </button>
+        ) : jitPending ? (
+          <span className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400">Pending Approval...</span>
+        ) : (
+          <button onClick={() => setShowJITModal(true)} className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-900/20">Request Access</button>
         )}
         </div>
       </div>

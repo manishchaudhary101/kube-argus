@@ -2,13 +2,15 @@ apiVersion: v2
 name: kube-argus
 description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
-version: 1.1.5
-appVersion: "1.1.5"
+version: 1.2.0
+appVersion: "1.2.0"
 keywords:
   - kubernetes
   - dashboard
   - monitoring
   - sre
+  - jit-access
+  - security
 home: https://github.com/manishchaudhary101/kube-argus
 sources:
   - https://github.com/manishchaudhary101/kube-argus
@@ -18,6 +20,19 @@ maintainers:
     url: https://github.com/manishchaudhary101
 annotations:
   artifacthub.io/license: Apache-2.0
+  artifacthub.io/changes: |
+    - kind: added
+      description: Just-in-Time (JIT) exec access — viewers request time-bound shell access, admins approve/deny from the dashboard
+    - kind: added
+      description: JIT persistence via ConfigMap — access requests survive restarts and are shared across replicas
+    - kind: added
+      description: Notification badge on admin avatar showing pending JIT request count
+    - kind: added
+      description: Access Requests in admin dropdown (alongside Online Users and Audit Trail)
+    - kind: added
+      description: Deployment-scoped JIT grants — access is scoped to the workload, not individual pods
+    - kind: added
+      description: Auto-expiring pending requests (48h TTL) and configurable retention for terminal states
   artifacthub.io/links: |
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus

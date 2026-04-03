@@ -1,6 +1,6 @@
 # Kube-Argus
 
-**The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.** Live cluster state, streaming pod logs, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
+**The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.** Live cluster state, streaming pod logs, just-in-time exec access, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
 
 ![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
@@ -89,6 +89,7 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 | Pod sparklines (CPU/MEM trends) | **Yes** | — | — | — | — |
 | Aggregated workload logs | **Yes** | — | — | — | — |
 | Storage dashboard (PVC/PV/StorageClass) | **Yes** | Partial | Yes | Partial | **Yes** |
+| Just-in-Time exec access (approval workflow) | **Yes** | — | — | — | — |
 | Audit trail & online users | **Yes** | — | — | — | — |
 | Node pod heatmap (noisy neighbors) | **Yes** | — | — | — | — |
 | Spot interruption resilience scoring | **Yes** | — | — | — | — |
@@ -192,10 +193,19 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 ### Events
 - Cluster events filtered by namespace with type, reason, source, and message
 
+### Just-in-Time (JIT) Exec Access
+- **Zero-trust shell access** — viewers request time-bound exec access, admins approve/deny from the dashboard
+- **Workload-scoped grants** — access is scoped to the Deployment/StatefulSet/DaemonSet, not individual pods
+- **Admin notification badge** — amber badge on admin avatar shows pending request count at a glance
+- **Auto-expiring access** — approved grants expire after the requested duration; pending requests expire after 48h
+- **ConfigMap persistence** — JIT state survives restarts and is shared across replicas (no database required)
+- **Full audit trail** — every JIT action (request, approve, deny, revoke, expire) is recorded
+
 ### Security & Observability
 - **Three auth modes**: Google SSO, generic OIDC (Okta, Auth0, Keycloak, Azure AD, Dex), or no login
 - Role-based access: admin vs viewer (via OIDC groups or email allowlist)
-- **Audit trail** — track logins, logouts, pod deletions, scaling actions, exec sessions, and YAML edits
+- **Just-in-Time exec access** — viewers must request and get admin approval for shell access (see above)
+- **Audit trail** — track logins, logouts, pod deletions, scaling actions, exec sessions, JIT approvals, and YAML edits
 - **Online users** — see who's currently viewing the dashboard with presence indicators
 - Session cookies with HMAC signing
 - Container runs as non-root (`USER nobody`)
@@ -375,6 +385,17 @@ Admin access (pod delete, exec, scale) is granted when **any** of these match:
 | `LLM_GATEWAY_KEY` | No | — | Bearer token for the LLM API |
 | `LLM_GATEWAY_MODEL` | No | — | Model name (e.g. `gpt-4o`, `claude-3`) |
 
+### Just-in-Time (JIT) Exec Access
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `JIT_CONFIGMAP_NAME` | No | `kube-argus-jit` | ConfigMap name for persisting JIT requests |
+| `AUDIT_CONFIGMAP_NAME` | No | `kube-argus-audit` | ConfigMap name for persisting audit trail |
+| `JIT_RETENTION_DAYS` | No | `7` | Days to keep terminal JIT requests before auto-cleanup |
+| `POD_NAMESPACE` | No | auto-detected | Namespace for JIT/audit ConfigMaps (set automatically via Downward API in Helm) |
+
+When deployed via Helm with `jit.persistence.enabled: true` (default), these environment variables are automatically configured. The ConfigMaps are created on first write — no manual setup required.
+
 ### AWS Integration (Optional)
 
 | Variable | Required | Default | Description |
@@ -418,7 +439,7 @@ rules:
     verbs: [patch]
   - apiGroups: [""]
     resources: [services, configmaps, secrets]
-    verbs: [update]
+    verbs: [create, update]
   - apiGroups: [""]
     resources: [pods, pods/exec]
     verbs: [get, list, watch, delete, create]

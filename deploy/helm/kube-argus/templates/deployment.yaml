@@ -81,6 +81,18 @@ spec:
           env:
             - name: PORT
               value: "8080"
+            {{- if .Values.jit.persistence.enabled }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: JIT_CONFIGMAP_NAME
+              value: "{{ include "kube-argus.fullname" . }}-jit"
+            - name: JIT_RETENTION_DAYS
+              value: {{ .Values.jit.retentionDays | quote }}
+            - name: AUDIT_CONFIGMAP_NAME
+              value: "{{ include "kube-argus.fullname" . }}-audit"
+            {{- end }}
             {{- range $key, $value := .Values.env }}
             {{- if $value }}
             - name: {{ $key }}

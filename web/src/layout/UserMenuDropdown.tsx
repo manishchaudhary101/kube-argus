@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 
 export type OnlineUser = { email: string; role: string; lastSeen: string; ip: string }
 
-export function UserMenuDropdown({ email, role, onClose, onAudit, onOnlineUsers, containerRef }: { email: string; role: string; onClose: () => void; onAudit: () => void; onOnlineUsers: () => void; containerRef: React.RefObject<HTMLDivElement | null> }) {
+export function UserMenuDropdown({ email, role, onClose, onAudit, onOnlineUsers, onAccessRequests, pendingJITCount, containerRef }: { email: string; role: string; onClose: () => void; onAudit: () => void; onOnlineUsers: () => void; onAccessRequests: () => void; pendingJITCount: number; containerRef: React.RefObject<HTMLDivElement | null> }) {
   useEffect(() => {
     const handler = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) onClose() }
     document.addEventListener('mousedown', handler)
@@ -25,6 +25,13 @@ export function UserMenuDropdown({ email, role, onClose, onAudit, onOnlineUsers,
             <button onClick={onAudit} className="flex w-full items-center gap-2.5 px-4 py-2 text-[11px] text-gray-400 hover:bg-hull-800/60 hover:text-white transition-colors">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               Audit Trail
+            </button>
+            <button onClick={onAccessRequests} className="flex w-full items-center gap-2.5 px-4 py-2 text-[11px] text-gray-400 hover:bg-hull-800/60 hover:text-white transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Access Requests
+              {pendingJITCount > 0 && (
+                <span className="ml-auto rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-black leading-none">{pendingJITCount}</span>
+              )}
             </button>
           </>
         )}

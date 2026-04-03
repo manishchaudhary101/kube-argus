@@ -40,10 +40,10 @@ func (t *wsTerminal) Write(p []byte) (int, error) {
 }
 
 func apiExec(w http.ResponseWriter, r *http.Request) {
-	if !requireAdmin(w, r) { return }
-
 	ns := r.URL.Query().Get("namespace")
 	name := r.URL.Query().Get("pod")
+	ownerKind, ownerName := resolvePodOwner(ns, name)
+	if !requireAdminOrJIT(w, r, ns, ownerKind, ownerName) { return }
 	container := r.URL.Query().Get("container")
 	if ns == "" || name == "" {
 		http.Error(w, "namespace and pod required", 400)

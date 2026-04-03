@@ -330,6 +330,28 @@
         }
       }
     },
+    "jit": {
+      "type": "object",
+      "description": "Just-in-Time exec access settings",
+      "properties": {
+        "persistence": {
+          "type": "object",
+          "description": "ConfigMap-based persistence for JIT requests",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Persist JIT requests to a ConfigMap so state survives restarts and is shared across replicas"
+            }
+          }
+        },
+        "retentionDays": {
+          "type": "integer",
+          "default": 7,
+          "description": "Days to keep terminal JIT requests (expired, denied, revoked) before automatic cleanup"
+        }
+      }
+    },
     "topologySpreadConstraints": {
       "type": "array",
       "description": "Topology spread constraints to distribute pods across nodes/zones. Defaults to soft anti-affinity per hostname.",

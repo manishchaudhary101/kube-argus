@@ -17,7 +17,7 @@ rules:
     verbs: [patch]
   - apiGroups: [""]
     resources: [services, configmaps, secrets]
-    verbs: [update]
+    verbs: [create, update]
   - apiGroups: [""]
     resources: [pods, pods/exec]
     verbs: [get, list, watch, delete, create]

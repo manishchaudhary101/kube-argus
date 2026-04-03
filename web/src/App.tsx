@@ -32,6 +32,7 @@ import { ConfigView } from './components/views/ConfigView'
 import { PVCsView } from './components/views/PVCsView'
 import { SpotAdvisorView } from './components/views/SpotAdvisorView'
 import { CronJobDetailView } from './components/views/CronJobDetailView'
+import { JITRequestsModal } from './components/views/JITRequestsView'
 
 function App() {
   const initial = parseRoute()
@@ -48,6 +49,8 @@ function App() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showAudit, setShowAudit] = useState(false)
   const [showOnlineUsers, setShowOnlineUsers] = useState(false)
+  const [showJITRequests, setShowJITRequests] = useState(false)
+  const [pendingJITCount, setPendingJITCount] = useState(0)
   const [troubledSub, setTroubledSub] = useState<'pods' | 'spot' | 'resilience'>('pods')
   const [troubledExpanded, setTroubledExpanded] = useState(false)
   const [spotHiddenReasons, setSpotHiddenReasons] = useState<string[]>([])
@@ -147,6 +150,18 @@ function App() {
     }).then(d => { if (d) { setUser(d); setAuthModeHint(d.authMode || 'none'); setAuthLoading(false) } }).catch(() => { setUser({ email: 'anonymous', role: 'viewer', authMode: 'none' }); setAuthLoading(false) })
   }, [])
 
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return
+    const poll = () => {
+      fetch('/api/jit/requests').then(r => r.json()).then((reqs: { status: string }[]) => {
+        if (Array.isArray(reqs)) setPendingJITCount(reqs.filter(r => r.status === 'pending').length)
+      }).catch(() => {})
+    }
+    poll()
+    const iv = setInterval(poll, 15000)
+    return () => clearInterval(iv)
+  }, [user])
+
   if (authLoading) return (
     <div className="flex h-full items-center justify-center bg-hull-950">
       <div className="flex flex-col items-center gap-4">
@@ -217,6 +232,7 @@ function App() {
         {showSearch && <SearchModal onClose={() => setShowSearch(false)} onSelect={handleSearchSelect} />}
         {showAudit && <AuditTrailModal onClose={() => setShowAudit(false)} />}
         {showOnlineUsers && <OnlineUsersModal currentEmail={userInfo.email} onClose={() => setShowOnlineUsers(false)} />}
+        {showJITRequests && <JITRequestsModal onClose={() => setShowJITRequests(false)} />}
 
         {!sideOpen && <div className="fixed left-0 top-0 z-30 h-full w-2 cursor-pointer" onMouseEnter={() => setSideOpen(true)} />}
 
@@ -301,15 +317,22 @@ function App() {
                   {showInfo && <InfoPopover tab={tab} onClose={() => setShowInfo(false)} />}
                 </div>
                 <div className="relative" ref={userMenuRef}>
-                  <button onClick={() => setShowUserMenu(v => !v)} className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-hull-800/60 transition-all" aria-label="User menu" aria-expanded={showUserMenu}>
-                    <UserAvatar email={userInfo.email} />
+                  <button onClick={() => setShowUserMenu(v => !v)} className="relative flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-hull-800/60 transition-all" aria-label="User menu" aria-expanded={showUserMenu}>
+                    <div className="relative">
+                      <UserAvatar email={userInfo.email} />
+                      {pendingJITCount > 0 && userInfo.role === 'admin' && (
+                        <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-black leading-none shadow-[0_0_6px_rgba(245,158,11,0.5)]">
+                          {pendingJITCount > 9 ? '9+' : pendingJITCount}
+                        </span>
+                      )}
+                    </div>
                     <div className="hidden sm:block text-left">
                       <p className="text-[10px] font-medium text-gray-300 leading-tight truncate max-w-[100px]">{userInfo.email.split('@')[0]}</p>
                       <p className={`text-[8px] font-bold uppercase tracking-widest ${userInfo.role === 'admin' ? 'text-neon-cyan' : 'text-gray-500'}`}>{userInfo.role}</p>
                     </div>
                     <svg className="hidden sm:block text-gray-600" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
-                  {showUserMenu && <UserMenuDropdown email={userInfo.email} role={userInfo.role} onClose={() => setShowUserMenu(false)} onAudit={() => { setShowUserMenu(false); setShowAudit(true) }} onOnlineUsers={() => { setShowUserMenu(false); setShowOnlineUsers(true) }} containerRef={userMenuRef} />}
+                  {showUserMenu && <UserMenuDropdown email={userInfo.email} role={userInfo.role} onClose={() => setShowUserMenu(false)} onAudit={() => { setShowUserMenu(false); setShowAudit(true) }} onOnlineUsers={() => { setShowUserMenu(false); setShowOnlineUsers(true) }} onAccessRequests={() => { setShowUserMenu(false); setShowJITRequests(true) }} pendingJITCount={pendingJITCount} containerRef={userMenuRef} />}
                 </div>
               </div>
             </div>

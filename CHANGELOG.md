@@ -2,6 +2,45 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.2.0] — 2026-04-03
+
+### New Feature: Just-in-Time (JIT) Exec Access
+
+**Zero-trust shell access for Kubernetes pods** — viewers request time-bound exec access, admins approve or deny from the dashboard. No more permanent shell permissions for non-admin users.
+
+#### How it works
+
+1. **Viewer requests access** — from the pod detail page, viewers click "Request Shell Access" and provide a reason and duration
+2. **Admin gets notified** — a notification badge appears on the admin's avatar showing the number of pending requests
+3. **Admin approves/denies** — from the Access Requests panel (admin dropdown menu), admins review and approve or deny each request
+4. **Temporary access** — approved access is scoped to the workload (Deployment/StatefulSet) and auto-expires after the requested duration
+5. **Full audit trail** — all JIT actions (request, approve, deny, revoke, expire) are recorded in the audit trail
+
+#### Details
+
+- **Workload-scoped grants** — access is granted at the Deployment/StatefulSet/DaemonSet level, not individual pods; exec into any pod owned by the approved workload
+- **ConfigMap persistence** — JIT requests survive pod restarts and are shared across replicas via Kubernetes ConfigMap (no database required)
+- **Pending request TTL** — unanswered requests auto-expire after 48 hours
+- **Configurable retention** — terminal states (expired, denied, revoked) are pruned after `jit.retentionDays` (default: 7 days)
+- **Optimistic concurrency** — ConfigMap updates use `resourceVersion` to prevent lost updates in multi-replica setups
+- **Notification badge** — admin avatar in the header shows a live amber badge with pending request count (polled every 15s)
+- **Admin dropdown** — Access Requests panel is in the admin dropdown alongside Online Users and Audit Trail
+
+#### Helm Configuration
+
+```yaml
+jit:
+  persistence:
+    enabled: true       # persist JIT requests to ConfigMap
+  retentionDays: 7      # days to keep terminal requests
+```
+
+### RBAC
+
+- Added `create` verb for `configmaps` (required for JIT and audit ConfigMap persistence)
+
+---
+
 ## [v1.1.5] — 2026-04-03
 
 ### Helm Chart Hardening

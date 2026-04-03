@@ -228,7 +228,7 @@
     <h1 class="title">KUBE-<span>ARGUS</span></h1>
     <p class="tagline">
       The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.<br>
-      Live cluster state, streaming logs, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
+      Live cluster state, streaming logs, just-in-time exec access, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
     </p>
 
     <div class="badges">
@@ -298,6 +298,11 @@ helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
         <div class="card-icon">🚨</div>
         <h3>Troubled Pods Screen</h3>
         <p>A dedicated, high-signal view of only broken pods — perfect for NOC teams and incident response.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔑</div>
+        <h3>Just-in-Time Exec Access</h3>
+        <p>Zero-trust shell access — viewers request time-bound exec, admins approve/deny. Workload-scoped, auto-expiring, fully audited.</p>
       </div>
       <div class="card">
         <div class="card-icon">🔐</div>
