@@ -235,20 +235,31 @@
     }
     .screenshot-item p { font-size:0.8rem; color:var(--muted); margin-top:0.75rem; }
 
-    /* ── Stats bar ────────────────────────────── */
-    .stats {
-      display:flex; justify-content:center; gap:4rem; flex-wrap:wrap;
-      padding:3rem 1.5rem 4rem; max-width:900px; margin:0 auto;
-      opacity:0; transform:translateY(20px);
+    /* ── Rotating ticker ────────────────────── */
+    .ticker {
+      text-align:center; padding:3.5rem 1.5rem 4.5rem;
+      font-size:clamp(1.1rem, 2.5vw, 1.4rem); color:var(--muted);
     }
-    .stats.visible { opacity:1; transform:translateY(0); transition:all 0.7s ease-out; }
-    .stat { text-align:center; }
-    .stat-val {
-      font-size:2.5rem; font-weight:900;
-      background:linear-gradient(135deg, var(--cyan), var(--green));
-      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    .ticker-line {
+      display:inline;
     }
-    .stat-label { font-size:0.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin-top:0.25rem; }
+    .ticker-word {
+      display:inline-block; position:relative;
+      color:var(--cyan); font-weight:700;
+      min-width:200px; text-align:left;
+    }
+    .ticker-word span {
+      display:inline-block;
+      animation:tickerIn 0.5s ease-out both;
+    }
+    @keyframes tickerIn {
+      from { opacity:0; transform:translateY(100%); filter:blur(4px); }
+      to { opacity:1; transform:translateY(0); filter:blur(0); }
+    }
+    @keyframes tickerOut {
+      from { opacity:1; transform:translateY(0); filter:blur(0); }
+      to { opacity:0; transform:translateY(-100%); filter:blur(4px); }
+    }
 
     /* ── Footer ───────────────────────────────── */
     footer {
@@ -319,11 +330,8 @@
     </div>
   </section>
 
-  <div class="stats" id="stats">
-    <div class="stat"><div class="stat-val" data-target="30">0</div><div class="stat-label">MB Docker Image</div></div>
-    <div class="stat"><div class="stat-val" data-target="1">&lt;1</div><div class="stat-label">Second Startup</div></div>
-    <div class="stat"><div class="stat-val" data-target="0">0</div><div class="stat-label">Dependencies</div></div>
-    <div class="stat"><div class="stat-val" data-target="10">10</div><div class="stat-label">Sec Auto-Refresh</div></div>
+  <div class="ticker">
+    <span class="ticker-line">No more </span><span class="ticker-word" id="ticker"></span>
   </div>
 
   <section class="features">
@@ -513,8 +521,47 @@
     document.querySelectorAll('.card').forEach((el, i) => { el.dataset.delay = i * 70; obs.observe(el); });
     document.querySelectorAll('.screenshot-item').forEach((el, i) => { el.dataset.delay = i * 100; obs.observe(el); });
     document.querySelectorAll('.section-heading').forEach(el => obs.observe(el));
-    const statsEl = document.getElementById('stats');
-    if (statsEl) obs.observe(statsEl);
+
+    /* ── Rotating ticker ───────────────────── */
+    const phrases = [
+      'switching between k9s, Grafana & kubectl.',
+      'giving everyone permanent shell access.',
+      'waiting for dashboards to refresh.',
+      'blind-scaling without cost data.',
+      'debugging pods without AI help.',
+      'managing YAML across 10 tools.',
+      'wondering who changed what and when.',
+      'SSHing into nodes to read logs.',
+    ];
+    const tickerEl = document.getElementById('ticker');
+    let phraseIdx = 0;
+
+    function showPhrase() {
+      const text = phrases[phraseIdx];
+      tickerEl.innerHTML = '';
+      text.split('').forEach((ch, i) => {
+        const s = document.createElement('span');
+        s.textContent = ch === ' ' ? '\u00a0' : ch;
+        s.style.animationDelay = `${i * 25}ms`;
+        tickerEl.appendChild(s);
+      });
+
+      const duration = text.length * 25 + 500 + 2000;
+      setTimeout(() => {
+        tickerEl.querySelectorAll('span').forEach((s, i) => {
+          s.style.animation = `tickerOut 0.3s ease-in ${i * 15}ms forwards`;
+        });
+        setTimeout(() => {
+          phraseIdx = (phraseIdx + 1) % phrases.length;
+          showPhrase();
+        }, text.length * 15 + 400);
+      }, duration);
+    }
+
+    const tickerObs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) { showPhrase(); tickerObs.disconnect(); }
+    }, { threshold: 0.5 });
+    tickerObs.observe(tickerEl.parentElement);
   </script>
 
 </body>
