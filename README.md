@@ -289,7 +289,9 @@ docker run -p 8080:8080 \
 
 ```bash
 helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus
-helm install kube-argus kube-argus/kube-argus --set env.CLUSTER_NAME="my-cluster"
+helm install kube-argus kube-argus/kube-argus \
+  --namespace kube-argus --create-namespace \
+  --set env.CLUSTER_NAME="my-cluster"
 ```
 
 To customise, download the default values and edit:
@@ -297,7 +299,9 @@ To customise, download the default values and edit:
 ```bash
 helm show values kube-argus/kube-argus > values.yaml
 # Edit values.yaml, then:
-helm install kube-argus kube-argus/kube-argus -f values.yaml
+helm install kube-argus kube-argus/kube-argus \
+  --namespace kube-argus --create-namespace \
+  -f values.yaml
 ```
 
 <details>
@@ -305,6 +309,7 @@ helm install kube-argus kube-argus/kube-argus -f values.yaml
 
 ```bash
 helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+  --namespace kube-argus --create-namespace \
   --set env.CLUSTER_NAME="my-cluster"
 ```
 </details>
