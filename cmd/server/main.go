@@ -55,14 +55,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("clientset: %v", err)
 	}
-	metricsCl, _ = metricsv.NewForConfig(cfg)
+	metricsCl, err = metricsv.NewForConfig(cfg)
+	if err != nil {
+		log.Printf("metrics-server client init failed: %v", err)
+	} else {
+		log.Println("metrics-server client initialized")
+	}
 
 	log.Println("warming cache...")
 	prevGC := debug.SetGCPercent(400)
 	startCacheLoop()
 	debug.SetGCPercent(prevGC)
 	runtime.GC()
-	log.Println("cache ready")
+	cache.mu.RLock()
+	nm, pm := cache.nodeMetrics != nil, cache.podMetrics != nil
+	cache.mu.RUnlock()
+	if nm && pm {
+		log.Println("cache ready (metrics-server: node + pod metrics available)")
+	} else if nm || pm {
+		log.Printf("cache ready (metrics-server: partial — node=%v pod=%v)", nm, pm)
+	} else if metricsCl != nil {
+		log.Println("cache ready (metrics-server: no data returned — check APIService and RBAC)")
+	} else {
+		log.Println("cache ready (metrics-server: disabled)")
+	}
 
 	startSpotAdvisorLoop()
 	initLLM()

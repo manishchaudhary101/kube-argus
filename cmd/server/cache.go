@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"runtime"
 	"sort"
 	"sync"
@@ -109,11 +110,23 @@ func (c *clusterCache) refresh() {
 	go func() { defer wg1.Done(); nsList, _ = clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{}) }()
 	go func() {
 		defer wg1.Done()
-		if metricsCl != nil { nodeMetrics, _ = metricsCl.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{}) }
+		if metricsCl != nil {
+			var err error
+			nodeMetrics, err = metricsCl.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
+			if err != nil {
+				log.Printf("metrics-server node metrics: %v", err)
+			}
+		}
 	}()
 	go func() {
 		defer wg1.Done()
-		if metricsCl != nil { podMetrics, _ = metricsCl.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{}) }
+		if metricsCl != nil {
+			var err error
+			podMetrics, err = metricsCl.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{})
+			if err != nil {
+				log.Printf("metrics-server pod metrics: %v", err)
+			}
+		}
 	}()
 	wg1.Wait()
 	storeBatch()
