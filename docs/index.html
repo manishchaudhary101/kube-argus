@@ -238,19 +238,27 @@
     /* ── Rotating ticker ────────────────────── */
     .ticker {
       text-align:center; padding:3.5rem 1.5rem 4.5rem;
-      font-size:clamp(1.1rem, 2.5vw, 1.4rem); color:var(--muted);
     }
-    .ticker-line {
-      display:inline;
+    .ticker-label {
+      display:block;
+      font-size:clamp(1.3rem, 3vw, 1.8rem);
+      font-weight:800; color:#fff;
+      margin-bottom:0.5rem;
     }
     .ticker-word {
-      display:inline-block; position:relative;
-      color:var(--cyan); font-weight:700;
-      min-width:200px; text-align:left;
+      display:block; position:relative;
+      height:clamp(1.4rem, 3vw, 1.8rem);
+      overflow:hidden;
     }
-    .ticker-word span {
+    .ticker-phrase {
+      display:block; text-align:center;
+      font-size:clamp(1rem, 2.2vw, 1.3rem);
+      font-weight:500; color:var(--muted);
+      font-style:italic;
+    }
+    .ticker-phrase span {
       display:inline-block;
-      animation:tickerIn 0.5s ease-out both;
+      animation:tickerIn 0.4s ease-out both;
     }
     @keyframes tickerIn {
       from { opacity:0; transform:translateY(100%); filter:blur(4px); }
@@ -328,7 +336,8 @@
   </section>
 
   <div class="ticker">
-    <span class="ticker-line">No more </span><span class="ticker-word" id="ticker"></span>
+    <span class="ticker-label">No more.</span>
+    <div class="ticker-word"><div class="ticker-phrase" id="ticker"></div></div>
   </div>
 
   <section class="features">
@@ -544,26 +553,26 @@
       text.split('').forEach((ch, i) => {
         const s = document.createElement('span');
         s.textContent = ch === ' ' ? '\u00a0' : ch;
-        s.style.animationDelay = `${i * 25}ms`;
+        s.style.animationDelay = `${i * 20}ms`;
         tickerEl.appendChild(s);
       });
 
-      const duration = text.length * 25 + 500 + 2000;
+      const duration = text.length * 20 + 400 + 2200;
       setTimeout(() => {
         tickerEl.querySelectorAll('span').forEach((s, i) => {
-          s.style.animation = `tickerOut 0.3s ease-in ${i * 15}ms forwards`;
+          s.style.animation = `tickerOut 0.25s ease-in ${i * 12}ms forwards`;
         });
         setTimeout(() => {
           phraseIdx = (phraseIdx + 1) % phrases.length;
           showPhrase();
-        }, text.length * 15 + 400);
+        }, text.length * 12 + 350);
       }, duration);
     }
 
     const tickerObs = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting) { showPhrase(); tickerObs.disconnect(); }
-    }, { threshold: 0.5 });
-    tickerObs.observe(tickerEl.parentElement);
+    }, { threshold: 0.3 });
+    tickerObs.observe(tickerEl.closest('.ticker'));
   </script>
 
 </body>
