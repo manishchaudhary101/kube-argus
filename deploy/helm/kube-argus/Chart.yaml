@@ -11,6 +11,7 @@ keywords:
   - sre
   - jit-access
   - security
+icon: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/logo.svg
 home: https://github.com/manishchaudhary101/kube-argus
 sources:
   - https://github.com/manishchaudhary101/kube-argus
