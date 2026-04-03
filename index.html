@@ -422,11 +422,12 @@
     }
 
     .cmd-line {
-      opacity: 0;
+      visibility: hidden;
+      height: 1.6em;
     }
 
     .cmd-line.typed {
-      opacity: 1;
+      visibility: visible;
     }
 
     .cursor-blink {
@@ -786,10 +787,8 @@
 
       <div class="install-box">
         <div class="install-dots"><i></i><i></i><i></i></div>
-        <div class="cmd-line" id="cmd1"><span style="color:#6b7280">$</span> helm repo add kube-argus
-          https://manishchaudhary101.github.io/kube-argus</div>
-        <div class="cmd-line" id="cmd2"><span style="color:#6b7280">$</span> helm install kube-argus
-          kube-argus/kube-argus -n kube-argus --create-namespace</div>
+        <div class="cmd-line" id="cmd1">$ helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus</div>
+        <div class="cmd-line" id="cmd2">$ helm install kube-argus kube-argus/kube-argus -n kube-argus --create-namespace</div>
         <span class="cursor-blink" id="cursor">_</span>
       </div>
     </div>
@@ -969,15 +968,15 @@
     /* ── Terminal typing effect ─────────────── */
     function typeLine(el, delay) {
       return new Promise(resolve => {
-        const text = el.textContent;
-        el.textContent = '';
+        const full = el.textContent.trim();
+        el.innerHTML = '\u00a0';
         el.classList.add('typed');
         let i = 0;
         setTimeout(() => {
           const iv = setInterval(() => {
-            el.innerHTML = text.substring(0, i + 1).replace(/^\$/, '<span style="color:#6b7280">$</span>');
+            el.innerHTML = full.substring(0, i + 1).replace(/^\$/, '<span style="color:#6b7280">$</span>');
             i++;
-            if (i >= text.length) { clearInterval(iv); resolve(); }
+            if (i >= full.length) { clearInterval(iv); resolve(); }
           }, 18);
         }, delay);
       });
