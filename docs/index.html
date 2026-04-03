@@ -252,7 +252,8 @@
 
     <div class="install-box">
       <div class="install-label">Install via Helm</div>
-helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus
+helm install kube-argus kube-argus/kube-argus \
   --set env.CLUSTER_NAME="my-cluster"
     </div>
   </section>

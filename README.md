@@ -288,17 +288,26 @@ docker run -p 8080:8080 \
 ### On Kubernetes (Helm)
 
 ```bash
-helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
-  --set env.CLUSTER_NAME="my-cluster"
+helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus
+helm install kube-argus kube-argus/kube-argus --set env.CLUSTER_NAME="my-cluster"
 ```
 
 To customise, download the default values and edit:
 
 ```bash
-helm show values oci://ghcr.io/manishchaudhary101/charts/kube-argus > values.yaml
+helm show values kube-argus/kube-argus > values.yaml
 # Edit values.yaml, then:
-helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus -f values.yaml
+helm install kube-argus kube-argus/kube-argus -f values.yaml
 ```
+
+<details>
+<summary>Alternative: install via OCI registry (no <code>helm repo add</code> needed)</summary>
+
+```bash
+helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+  --set env.CLUSTER_NAME="my-cluster"
+```
+</details>
 
 ### On Kubernetes (plain manifests)
 
