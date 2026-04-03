@@ -30,12 +30,13 @@ helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `replicaCount` | Number of replicas | `1` |
+| `replicaCount` | Number of replicas | `2` |
 | `image.repository` | Docker image repository | `ghcr.io/manishchaudhary101/kube-argus` |
 | `image.tag` | Docker image tag | `latest` |
 | `image.pullPolicy` | Image pull policy | `Always` |
 | `service.type` | Kubernetes service type | `ClusterIP` |
 | `service.port` | Service port | `8080` |
+| `service.annotations` | Service annotations (e.g. AWS LB, Prometheus) | `{}` |
 | `ingress.enabled` | Enable ingress | `false` |
 | `ingress.className` | Ingress class name | `""` |
 | `ingress.hosts` | Ingress hosts configuration | see values.yaml |
@@ -43,9 +44,16 @@ helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
 | `resources.requests.memory` | Memory request | `128Mi` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `512Mi` |
+| `podAnnotations` | Pod annotations | `{}` |
+| `podSecurityContext.runAsNonRoot` | Require non-root user | `true` |
+| `podSecurityContext.runAsUser` | UID to run as | `65534` |
+| `securityContext.readOnlyRootFilesystem` | Read-only root filesystem | `true` |
+| `securityContext.allowPrivilegeEscalation` | Prevent privilege escalation | `false` |
 | `serviceAccount.create` | Create a service account | `true` |
 | `rbac.create` | Create RBAC resources (ClusterRole + binding) | `true` |
 | `existingSecret` | Use an existing secret for env vars | `""` |
+| `topologySpreadConstraints` | Spread pods across nodes (soft) | per-hostname |
+| `affinity` | Pod anti-affinity (soft, weight 100) | per-hostname |
 
 ### Environment Variables
 
