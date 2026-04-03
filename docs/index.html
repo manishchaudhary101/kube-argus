@@ -241,7 +241,8 @@
       position:relative;
     }
     .ticker-card {
-      display:inline-block; position:relative; padding:2.5rem 3.5rem;
+      position:relative; max-width:620px; width:100%; margin:0 auto;
+      padding:2.5rem 3rem;
       border-radius:20px;
       background:radial-gradient(ellipse at 50% 0%, rgba(6,214,224,0.06) 0%, transparent 70%);
       border:1px solid rgba(6,214,224,0.1);
@@ -258,14 +259,14 @@
       font-size:clamp(1.6rem, 3.5vw, 2.2rem);
       font-weight:900; letter-spacing:0.02em;
       margin-bottom:1.2rem;
-      background:linear-gradient(135deg, #ff6b6b, #ff8e53, #ff6b6b);
+      background:linear-gradient(135deg, var(--cyan), #00ff88, var(--cyan));
       background-size:200% auto;
       -webkit-background-clip:text; -webkit-text-fill-color:transparent;
       animation:tickerGradient 3s ease infinite;
     }
     .ticker-label .strike-icon {
       display:inline-block; width:28px; height:28px;
-      background:linear-gradient(135deg, #ff6b6b, #ff8e53);
+      background:linear-gradient(135deg, var(--cyan), #00ff88);
       -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='4.93' y1='4.93' x2='19.07' y2='19.07'/%3E%3C/svg%3E") center/contain no-repeat;
       flex-shrink:0;
     }
@@ -275,27 +276,27 @@
     }
     .ticker-divider {
       width:60px; height:2px; margin:0 auto 1.4rem;
-      background:linear-gradient(90deg, transparent, rgba(255,107,107,0.5), transparent);
+      background:linear-gradient(90deg, transparent, rgba(6,214,224,0.4), transparent);
       border-radius:2px;
     }
     .ticker-phrase-wrap {
-      position:relative; min-height:1.8rem;
+      position:relative; height:1.8rem;
       display:flex; align-items:center; justify-content:center;
     }
     .ticker-phrase {
       position:relative; display:inline-block;
       font-size:clamp(1rem, 2.2vw, 1.25rem);
-      font-weight:500; color:rgba(255,255,255,0.75);
-      letter-spacing:0.01em;
+      font-weight:500; color:rgba(255,255,255,0.7);
+      letter-spacing:0.01em; white-space:nowrap;
       transition:color 0.3s, opacity 0.3s;
     }
     .ticker-phrase.struck {
-      color:rgba(255,255,255,0.25);
+      color:rgba(255,255,255,0.2);
     }
     .ticker-strike {
       position:absolute; top:50%; left:0; height:2px; width:0;
-      background:linear-gradient(90deg, #ff6b6b, #ff8e53);
-      box-shadow:0 0 8px rgba(255,107,107,0.5), 0 0 20px rgba(255,107,107,0.2);
+      background:linear-gradient(90deg, var(--cyan), #00ff88);
+      box-shadow:0 0 8px rgba(6,214,224,0.4), 0 0 20px rgba(6,214,224,0.15);
       border-radius:2px; transform:translateY(-50%);
       transition:width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     }
@@ -304,9 +305,9 @@
     }
     .ticker-resolved {
       position:absolute; right:-2rem; top:50%; transform:translateY(-50%);
-      font-size:0.75rem; font-weight:700; color:#00ff88;
+      font-size:0.85rem; font-weight:700; color:#00ff88;
       opacity:0; transition:opacity 0.3s 0.35s;
-      text-transform:uppercase; letter-spacing:0.05em;
+      filter:drop-shadow(0 0 4px rgba(0,255,136,0.5));
     }
     .ticker-phrase.struck .ticker-resolved {
       opacity:1;
