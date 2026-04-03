@@ -30,10 +30,10 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.0
-    created: "2026-04-03T11:53:18.846061203Z"
+    created: "2026-04-03T12:19:38.929315472Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
-    digest: 101a22f96b7999789bfc63034b13e2f9270f94c7320168ebb9fc6180c4d1d28c
+    digest: 341ce5b318e88c3ba0dae9de52fbb4fd5a9da28ea7b729614d86491ec87323cd
     home: https://github.com/manishchaudhary101/kube-argus
     keywords:
     - kubernetes
@@ -53,4 +53,4 @@ entries:
     urls:
     - https://manishchaudhary101.github.io/kube-argus/kube-argus-1.2.0.tgz
     version: 1.2.0
-generated: "2026-04-03T11:53:18.84526924Z"
+generated: "2026-04-03T12:19:38.927593768Z"
