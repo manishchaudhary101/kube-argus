@@ -235,38 +235,81 @@
     }
     .screenshot-item p { font-size:0.8rem; color:var(--muted); margin-top:0.75rem; }
 
-    /* ── Rotating ticker ────────────────────── */
+    /* ── Elimination ticker ─────────────────── */
     .ticker {
-      text-align:center; padding:3.5rem 1.5rem 4.5rem;
+      text-align:center; padding:4.5rem 1.5rem 5rem;
+      position:relative;
+    }
+    .ticker-card {
+      display:inline-block; position:relative; padding:2.5rem 3.5rem;
+      border-radius:20px;
+      background:radial-gradient(ellipse at 50% 0%, rgba(6,214,224,0.06) 0%, transparent 70%);
+      border:1px solid rgba(6,214,224,0.1);
+    }
+    .ticker-card::before {
+      content:''; position:absolute; inset:0; border-radius:20px; z-index:-1;
+      padding:1px;
+      background:conic-gradient(from var(--ticker-angle, 0deg) at 50% 50%, rgba(6,214,224,0.4), transparent 25%, rgba(0,255,136,0.3) 50%, transparent 75%, rgba(6,214,224,0.4));
+      -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite:xor; mask-composite:exclude;
     }
     .ticker-label {
-      display:block;
-      font-size:clamp(1.3rem, 3vw, 1.8rem);
-      font-weight:800; color:#fff;
-      margin-bottom:0.5rem;
+      display:flex; align-items:center; justify-content:center; gap:0.6rem;
+      font-size:clamp(1.6rem, 3.5vw, 2.2rem);
+      font-weight:900; letter-spacing:0.02em;
+      margin-bottom:1.2rem;
+      background:linear-gradient(135deg, #ff6b6b, #ff8e53, #ff6b6b);
+      background-size:200% auto;
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      animation:tickerGradient 3s ease infinite;
     }
-    .ticker-word {
-      display:block; position:relative;
-      height:clamp(1.4rem, 3vw, 1.8rem);
-      overflow:hidden;
+    .ticker-label .strike-icon {
+      display:inline-block; width:28px; height:28px;
+      background:linear-gradient(135deg, #ff6b6b, #ff8e53);
+      -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='4.93' y1='4.93' x2='19.07' y2='19.07'/%3E%3C/svg%3E") center/contain no-repeat;
+      flex-shrink:0;
+    }
+    @keyframes tickerGradient {
+      0%,100% { background-position:0% center; }
+      50% { background-position:200% center; }
+    }
+    .ticker-divider {
+      width:60px; height:2px; margin:0 auto 1.4rem;
+      background:linear-gradient(90deg, transparent, rgba(255,107,107,0.5), transparent);
+      border-radius:2px;
+    }
+    .ticker-phrase-wrap {
+      position:relative; min-height:1.8rem;
+      display:flex; align-items:center; justify-content:center;
     }
     .ticker-phrase {
-      display:block; text-align:center;
-      font-size:clamp(1rem, 2.2vw, 1.3rem);
-      font-weight:500; color:var(--muted);
-      font-style:italic;
+      position:relative; display:inline-block;
+      font-size:clamp(1rem, 2.2vw, 1.25rem);
+      font-weight:500; color:rgba(255,255,255,0.75);
+      letter-spacing:0.01em;
+      transition:color 0.3s, opacity 0.3s;
     }
-    .ticker-phrase span {
-      display:inline-block;
-      animation:tickerIn 0.4s ease-out both;
+    .ticker-phrase.struck {
+      color:rgba(255,255,255,0.25);
     }
-    @keyframes tickerIn {
-      from { opacity:0; transform:translateY(100%); filter:blur(4px); }
-      to { opacity:1; transform:translateY(0); filter:blur(0); }
+    .ticker-strike {
+      position:absolute; top:50%; left:0; height:2px; width:0;
+      background:linear-gradient(90deg, #ff6b6b, #ff8e53);
+      box-shadow:0 0 8px rgba(255,107,107,0.5), 0 0 20px rgba(255,107,107,0.2);
+      border-radius:2px; transform:translateY(-50%);
+      transition:width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     }
-    @keyframes tickerOut {
-      from { opacity:1; transform:translateY(0); filter:blur(0); }
-      to { opacity:0; transform:translateY(-100%); filter:blur(4px); }
+    .ticker-phrase.struck .ticker-strike {
+      width:100%;
+    }
+    .ticker-resolved {
+      position:absolute; right:-2rem; top:50%; transform:translateY(-50%);
+      font-size:0.75rem; font-weight:700; color:#00ff88;
+      opacity:0; transition:opacity 0.3s 0.35s;
+      text-transform:uppercase; letter-spacing:0.05em;
+    }
+    .ticker-phrase.struck .ticker-resolved {
+      opacity:1;
     }
 
     /* ── Footer ───────────────────────────────── */
@@ -336,8 +379,13 @@
   </section>
 
   <div class="ticker">
-    <span class="ticker-label">No more.</span>
-    <div class="ticker-word"><div class="ticker-phrase" id="ticker"></div></div>
+    <div class="ticker-card">
+      <div class="ticker-label"><span class="strike-icon"></span> No more.</div>
+      <div class="ticker-divider"></div>
+      <div class="ticker-phrase-wrap">
+        <span class="ticker-phrase" id="ticker"><span class="ticker-strike"></span><span class="ticker-resolved">&#10003;</span></span>
+      </div>
+    </div>
   </div>
 
   <section class="features">
@@ -549,30 +597,45 @@
 
     function showPhrase() {
       const text = phrases[phraseIdx];
-      tickerEl.innerHTML = '';
-      text.split('').forEach((ch, i) => {
-        const s = document.createElement('span');
-        s.textContent = ch === ' ' ? '\u00a0' : ch;
-        s.style.animationDelay = `${i * 20}ms`;
-        tickerEl.appendChild(s);
+      tickerEl.classList.remove('struck');
+      tickerEl.style.opacity = '0';
+      tickerEl.childNodes.forEach(n => {
+        if (n.nodeType === 3) n.textContent = '';
       });
 
-      const duration = text.length * 20 + 400 + 2200;
       setTimeout(() => {
-        tickerEl.querySelectorAll('span').forEach((s, i) => {
-          s.style.animation = `tickerOut 0.25s ease-in ${i * 12}ms forwards`;
-        });
+        tickerEl.childNodes.forEach(n => { if (n.nodeType === 3) n.remove(); });
+        const textNode = document.createTextNode(text);
+        tickerEl.insertBefore(textNode, tickerEl.firstChild);
+        tickerEl.style.opacity = '1';
+
         setTimeout(() => {
-          phraseIdx = (phraseIdx + 1) % phrases.length;
-          showPhrase();
-        }, text.length * 12 + 350);
-      }, duration);
+          tickerEl.classList.add('struck');
+
+          setTimeout(() => {
+            tickerEl.style.opacity = '0';
+            setTimeout(() => {
+              phraseIdx = (phraseIdx + 1) % phrases.length;
+              showPhrase();
+            }, 400);
+          }, 1200);
+        }, 1800);
+      }, 150);
     }
 
     const tickerObs = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting) { showPhrase(); tickerObs.disconnect(); }
     }, { threshold: 0.3 });
     tickerObs.observe(tickerEl.closest('.ticker'));
+
+    /* spinning conic border for ticker card */
+    (function() {
+      const card = document.querySelector('.ticker-card');
+      if (!card) return;
+      let angle = 0;
+      function spin() { angle = (angle + 0.6) % 360; card.style.setProperty('--ticker-angle', angle + 'deg'); requestAnimationFrame(spin); }
+      spin();
+    })();
   </script>
 
 </body>
