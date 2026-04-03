@@ -216,28 +216,32 @@ func hasActiveJIT(email, namespace, ownerKind, ownerName string) bool {
 
 // requireAdminOrJIT allows access if user is admin OR has an active JIT grant for the workload.
 func requireAdminOrJIT(w http.ResponseWriter, r *http.Request, namespace, ownerKind, ownerName string) bool {
-	if !authEnabled {
-		if defaultRole == "admin" {
-			return true
+	email := "anonymous"
+	role := defaultRole
+
+	if authEnabled {
+		sd, ok := r.Context().Value(userCtxKey).(*sessionData)
+		if !ok || sd == nil {
+			log.Printf("jit-exec: denied (no session) ns=%s %s/%s", namespace, ownerKind, ownerName)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(403)
+			json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+			return false
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(403)
-		json.NewEncoder(w).Encode(map[string]string{"error": "forbidden", "message": "admin access or approved JIT request required"})
-		return false
+		email = sd.Email
+		role = sd.Role
 	}
-	sd, ok := r.Context().Value(userCtxKey).(*sessionData)
-	if !ok || sd == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(403)
-		json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
-		return false
-	}
-	if sd.Role == "admin" {
+
+	if role == "admin" {
 		return true
 	}
-	if hasActiveJIT(sd.Email, namespace, ownerKind, ownerName) {
+
+	if hasActiveJIT(email, namespace, ownerKind, ownerName) {
+		log.Printf("jit-exec: granted via JIT for %s ns=%s %s/%s", email, namespace, ownerKind, ownerName)
 		return true
 	}
+
+	log.Printf("jit-exec: denied for %s (role=%s) ns=%s %s/%s — no active JIT grant", email, role, namespace, ownerKind, ownerName)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(403)
 	json.NewEncoder(w).Encode(map[string]string{"error": "forbidden", "message": "admin access or approved JIT request required"})
