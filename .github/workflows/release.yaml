@@ -95,28 +95,27 @@ jobs:
     needs: [docker, helm, helm-pages]
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Generate release notes
-        id: notes
+      - name: Extract changelog for this version
+        id: changelog
         run: |
-          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v' | sed -n '2p')
-          if [ -n "$PREV_TAG" ]; then
-            echo "prev=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          VERSION="${GITHUB_REF_NAME}"
+          # Extract section between this version header and the next version header
+          BODY=$(awk "/^## \\[${VERSION}\\]/{found=1; next} /^## \\[v[0-9]/{if(found) exit} found{print}" CHANGELOG.md)
+          if [ -z "$BODY" ]; then
+            BODY="Release ${VERSION} — see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details."
           fi
+          # Write to file to preserve formatting
+          echo "$BODY" > /tmp/release-notes.md
 
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ARGS=(--title "${{ github.ref_name }}" --latest)
-          if [ -n "${{ steps.notes.outputs.prev }}" ]; then
-            ARGS+=(--generate-notes --notes-start-tag "${{ steps.notes.outputs.prev }}")
-          else
-            ARGS+=(--generate-notes)
-          fi
-          gh release create "${{ github.ref_name }}" "${ARGS[@]}"
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes-file /tmp/release-notes.md \
+            --latest
 
   helm-pages:
     name: Publish Helm chart to GitHub Pages
