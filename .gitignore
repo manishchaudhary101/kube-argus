@@ -27,4 +27,4 @@ vendor/
 # Misc
 tmp/
 *.log
-server
+/server
