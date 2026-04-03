@@ -4,91 +4,96 @@ All notable changes to Kube-Argus will be documented in this file.
 
 ## [v1.2.0] — 2026-04-03
 
-### New Feature: Just-in-Time (JIT) Exec Access
+### 🔐 New Feature: Just-in-Time (JIT) Exec Access
 
 **Zero-trust shell access for Kubernetes pods** — viewers request time-bound exec access, admins approve or deny from the dashboard. No more permanent shell permissions for non-admin users.
 
-#### How it works
+#### 🔄 How it works
 
-1. **Viewer requests access** — from the pod detail page, viewers click "Request Shell Access" and provide a reason and duration
-2. **Admin gets notified** — a notification badge appears on the admin's avatar showing the number of pending requests
-3. **Admin approves/denies** — from the Access Requests panel (admin dropdown menu), admins review and approve or deny each request
-4. **Temporary access** — approved access is scoped to the workload (Deployment/StatefulSet) and auto-expires after the requested duration
-5. **Full audit trail** — all JIT actions (request, approve, deny, revoke, expire) are recorded in the audit trail
+1. 🙋 **Viewer requests access** — from the pod detail page, viewers click "Request Shell Access" and provide a reason and duration
+2. 🔔 **Admin gets notified** — a notification badge appears on the admin's avatar showing the number of pending requests
+3. ✅ **Admin approves/denies** — from the Access Requests panel (admin dropdown menu), admins review and approve or deny each request
+4. ⏱️ **Temporary access** — approved access is scoped to the workload (Deployment/StatefulSet) and auto-expires after the requested duration
+5. 📝 **Full audit trail** — all JIT actions (request, approve, deny, revoke, expire) are recorded in the audit trail
 
-#### Backend (Go) — `cmd/server/jit.go` (511 lines, new file)
+#### ⚙️ Backend (Go) — `cmd/server/jit.go` (511 lines, new file)
 
-- **JIT request lifecycle** — full state machine: `pending` → `active`/`denied`/`expired` → `revoked`/`expired`
-- **Workload-scoped grants** — access is granted at the Deployment/StatefulSet/DaemonSet level, not individual pods; `resolvePodOwner()` walks `OwnerReferences` chains (Pod → ReplicaSet → Deployment) to resolve the top-level owner
-- **ConfigMap persistence** — JIT requests survive pod restarts and are shared across replicas via Kubernetes ConfigMap (no database required)
-- **Optimistic concurrency** — ConfigMap updates use `resourceVersion` to prevent lost updates in multi-replica setups, with automatic retry on conflicts
-- **Pending request TTL** — unanswered requests auto-expire after 48 hours
-- **Configurable retention** — terminal states (expired, denied, revoked) are pruned after `jit.retentionDays` (default: 7 days)
-- **Background expiry loop** — goroutine that checks active grants and pending TTLs every 30 seconds, persists state every 60 seconds
-- **Graceful degradation** — ConfigMap read/write failures log warnings but never crash the application
-- **REST API endpoints**: `POST /api/jit/request`, `GET /api/jit/requests`, `GET /api/jit/grants`, `POST /api/jit/:id/approve`, `POST /api/jit/:id/deny`, `POST /api/jit/:id/revoke`
-- **Exec integration** — `requireAdminOrJIT` middleware updated to check deployment-scoped JIT grants before allowing exec
+- 🔁 **JIT request lifecycle** — full state machine: `pending` → `active`/`denied`/`expired` → `revoked`/`expired`
+- 🎯 **Workload-scoped grants** — access is granted at the Deployment/StatefulSet/DaemonSet level, not individual pods; `resolvePodOwner()` walks `OwnerReferences` chains (Pod → ReplicaSet → Deployment) to resolve the top-level owner
+- 💾 **ConfigMap persistence** — JIT requests survive pod restarts and are shared across replicas via Kubernetes ConfigMap (no database required)
+- 🔒 **Optimistic concurrency** — ConfigMap updates use `resourceVersion` to prevent lost updates in multi-replica setups, with automatic retry on conflicts
+- ⏳ **Pending request TTL** — unanswered requests auto-expire after 48 hours
+- 🧹 **Configurable retention** — terminal states (expired, denied, revoked) are pruned after `jit.retentionDays` (default: 7 days)
+- 🔄 **Background expiry loop** — goroutine that checks active grants and pending TTLs every 30 seconds, persists state every 60 seconds
+- 🛡️ **Graceful degradation** — ConfigMap read/write failures log warnings but never crash the application
+- 🌐 **REST API endpoints**: `POST /api/jit/request`, `GET /api/jit/requests`, `GET /api/jit/grants`, `POST /api/jit/:id/approve`, `POST /api/jit/:id/deny`, `POST /api/jit/:id/revoke`
+- 🔗 **Exec integration** — `requireAdminOrJIT` middleware updated to check deployment-scoped JIT grants before allowing exec
 
-#### Backend — Audit ConfigMap Persistence (`cmd/server/audit.go`)
+#### 💾 Backend — Audit ConfigMap Persistence (`cmd/server/audit.go`)
 
-- **Audit trail persistence** — audit entries now persist to a dedicated ConfigMap alongside JIT requests
-- **Dirty-flag optimization** — `auditPersistLoop()` only writes to ConfigMap when new entries have been recorded (every 60s)
-- **Restore on startup** — `auditRestore()` loads previous audit entries from ConfigMap at application start
+- 📦 **Audit trail persistence** — audit entries now persist to a dedicated ConfigMap alongside JIT requests
+- ⚡ **Dirty-flag optimization** — `auditPersistLoop()` only writes to ConfigMap when new entries have been recorded (every 60s)
+- 🔄 **Restore on startup** — `auditRestore()` loads previous audit entries from ConfigMap at application start
 
-#### Frontend — JIT Request Modal (`web/src/components/modals/JITRequestModal.tsx`, new file)
+#### 🖥️ Frontend — JIT Request Modal (`web/src/components/modals/JITRequestModal.tsx`, new file)
 
-- **Request form** — modal for viewers to submit JIT access requests with reason and duration fields
-- **Workload context** — displays the ownerKind/ownerName (e.g., "Deployment: my-app") with an explanatory message about deployment-level access
-- **Duration selector** — configurable access duration
+- 📋 **Request form** — modal for viewers to submit JIT access requests with reason and duration fields
+- 🏷️ **Workload context** — displays the ownerKind/ownerName (e.g., "Deployment: my-app") with an explanatory message about deployment-level access
+- ⏱️ **Duration selector** — configurable access duration
 
-#### Frontend — Access Requests Panel (`web/src/components/views/JITRequestsView.tsx`, new file)
+#### 📋 Frontend — Access Requests Panel (`web/src/components/views/JITRequestsView.tsx`, new file)
 
-- **Full-screen modal** — styled consistently with Audit Trail and Online Users modals
-- **Status filters** — filter by all/pending/active/denied/expired/revoked
-- **Admin actions** — approve, deny, and revoke buttons with loading states
-- **Request cards** — show status badge, requester email, namespace, workload, duration, reason, approver, and time-remaining countdown for active grants
-- **Auto-refresh** — polls every 10 seconds for live updates
+- 🖼️ **Full-screen modal** — styled consistently with Audit Trail and Online Users modals
+- 🔍 **Status filters** — filter by all/pending/active/denied/expired/revoked
+- 🛠️ **Admin actions** — approve, deny, and revoke buttons with loading states
+- 🃏 **Request cards** — show status badge, requester email, namespace, workload, duration, reason, approver, and time-remaining countdown for active grants
+- 🔄 **Auto-refresh** — polls every 10 seconds for live updates
 
-#### Frontend — Notification Badge & Admin Dropdown (`web/src/App.tsx`, `UserMenuDropdown.tsx`)
+#### 🔔 Frontend — Notification Badge & Admin Dropdown (`web/src/App.tsx`, `UserMenuDropdown.tsx`)
 
-- **Notification badge** — amber badge on admin avatar showing pending JIT request count (polled every 15s), with glow effect and `9+` overflow
-- **Admin dropdown** — "Access Requests" entry added alongside "Online Users" and "Audit Trail" with inline pending count badge
-- **JIT tab removed** — Access Requests moved from sidebar tab to admin dropdown for cleaner navigation
+- 🟡 **Notification badge** — amber badge on admin avatar showing pending JIT request count (polled every 15s), with glow effect and `9+` overflow
+- 📂 **Admin dropdown** — "Access Requests" entry added alongside "Online Users" and "Audit Trail" with inline pending count badge
+- 🧹 **JIT tab removed** — Access Requests moved from sidebar tab to admin dropdown for cleaner navigation
 
-#### Frontend — Pod Detail Integration (`web/src/components/views/PodDetailView.tsx`)
+#### 🔔 Frontend — Pod Detail Integration (`web/src/components/views/PodDetailView.tsx`)
 
-- **Toast notifications** — viewers receive color-coded toasts when their JIT request is approved (green), denied (red), or expired (amber)
-- **Status polling** — `useEffect` hook polls JIT grants/requests and tracks state transitions via `prevJitState` ref
-- **Deployment-scoped checks** — JIT status checks now match on `namespace + ownerKind + ownerName`
+- 🍞 **Toast notifications** — viewers receive color-coded toasts when their JIT request is approved (green), denied (red), or expired (amber)
+- 📡 **Status polling** — `useEffect` hook polls JIT grants/requests and tracks state transitions via `prevJitState` ref
+- 🎯 **Deployment-scoped checks** — JIT status checks now match on `namespace + ownerKind + ownerName`
 
-#### Helm Chart
+#### 📦 Helm Chart
 
-- **New values** — `jit.persistence.enabled` (default: `true`), `jit.retentionDays` (default: `7`)
-- **Environment variables** — `POD_NAMESPACE` (Downward API), `JIT_CONFIGMAP_NAME`, `JIT_RETENTION_DAYS`, `AUDIT_CONFIGMAP_NAME` injected conditionally when persistence is enabled
-- **Values schema** — JSON schema updated with JIT configuration definitions
-- **Chart version** bumped to `1.2.0`
-- **ArtifactHub changelog** — `artifacthub.io/changes` annotation with 6 change entries
-- **Keywords** — added `jit-access` and `security`
+- ➕ **New values** — `jit.persistence.enabled` (default: `true`), `jit.retentionDays` (default: `7`)
+- 🔧 **Environment variables** — `POD_NAMESPACE` (Downward API), `JIT_CONFIGMAP_NAME`, `JIT_RETENTION_DAYS`, `AUDIT_CONFIGMAP_NAME` injected conditionally when persistence is enabled
+- 📐 **Values schema** — JSON schema updated with JIT configuration definitions
+- 🏷️ **Chart version** bumped to `1.2.0`
+- 📋 **ArtifactHub changelog** — `artifacthub.io/changes` annotation with 6 change entries
+- 🔑 **Keywords** — added `jit-access` and `security`
 
-#### RBAC
+#### 🔐 RBAC
 
-- Added `create` verb for `configmaps` in both Helm ClusterRole and raw K8s manifests (required for JIT and audit ConfigMap persistence)
+- ➕ Added `create` verb for `configmaps` in both Helm ClusterRole and raw K8s manifests (required for JIT and audit ConfigMap persistence)
 
-#### Raw Kubernetes Manifests (`deploy/k8s/`)
+#### 📄 Raw Kubernetes Manifests (`deploy/k8s/`)
 
 - `deployment.yaml` — added `POD_NAMESPACE`, `JIT_CONFIGMAP_NAME`, `AUDIT_CONFIGMAP_NAME` environment variables
 - `rbac.yaml` — added `create` verb for `configmaps`
 
-### Docs & Landing Page
+### 📚 Docs & Landing Page
 
-- **GitHub Pages landing page** — new `docs/index.html` with hero section, 12 feature cards (4×3 grid), screenshots, install command, and badges
-- **CI badge** — added to README and landing page (links to GitHub Actions CI workflow)
-- **ArtifactHub badge** — added to landing page
-- **README** — new JIT feature section, updated feature comparison table, JIT config env vars table, updated RBAC section, updated tagline
+- 🌐 **GitHub Pages landing page** — new `docs/index.html` with hero section, 12 feature cards (4×3 grid), screenshots, install command, and badges
+- 🏷️ **CI badge** — added to README and landing page (links to GitHub Actions CI workflow)
+- 🏷️ **ArtifactHub badge** — added to landing page
+- 📖 **README** — new JIT feature section, updated feature comparison table, JIT config env vars table, updated RBAC section, updated tagline
 
-### Bug Fixes
+### 🐛 Bug Fixes
 
-- **`.gitignore` fix** — `server` pattern was matching `cmd/server/` directory, preventing new files from being tracked; changed to `/server` to only match root-level compiled binary
+- 🔧 **`.gitignore` fix** — `server` pattern was matching `cmd/server/` directory, preventing new files from being tracked; changed to `/server` to only match root-level compiled binary
+- 🔧 **JIT exec fix** — `requireAdminOrJIT` now checks JIT grants even when auth is disabled (previously skipped JIT lookup entirely for non-admin roles)
+- 🔧 **Node metrics panel** — shows "Prometheus not configured" message instead of silently hiding
+- 📊 **Prometheus fallback** — node metrics now work with vanilla Prometheus (raw cadvisor queries alongside recording-rule queries)
+- 📝 **Metrics-server logging** — errors from metrics-server API calls are now logged instead of silently discarded
+- 🖥️ **TTY-aware banner** — startup ASCII banner only emits ANSI colors when stdout is a real terminal
 
 ---
 
