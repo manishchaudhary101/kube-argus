@@ -1,6 +1,6 @@
 # Kube-Argus
 
-**The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.** Live cluster state every 10 seconds, streaming pod logs, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
+**The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.** Live cluster state, streaming pod logs, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
 
 ![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)

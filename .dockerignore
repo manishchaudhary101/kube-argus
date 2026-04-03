@@ -1,6 +1,8 @@
 web/node_modules
 web/dist
 .git
+.github
+.cursor
 .env
 .env.*
 *.md

@@ -225,7 +225,7 @@ function App() {
         <aside onMouseLeave={() => setSideOpen(false)} className={`fixed left-0 top-0 z-50 flex h-full w-56 flex-col border-r border-hull-700/40 bg-hull-950/95 backdrop-blur-xl transition-transform duration-300 ease-out pt-safe ${sideOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-hull-700/30">
             <h1 className="text-sm font-extrabold tracking-wider text-white">KUBE-<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
-            <button onClick={() => setSideOpen(false)} className="rounded-lg p-1 text-gray-500 hover:text-white transition-colors">
+            <button onClick={() => setSideOpen(false)} className="rounded-lg p-1 text-gray-500 hover:text-white transition-colors" aria-label="Close sidebar">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>
@@ -281,27 +281,27 @@ function App() {
           <header className="shrink-0 glass border-0 border-b border-hull-700/40 px-3 py-2.5 relative z-40">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <button onClick={() => setSideOpen(true)} className="rounded-lg p-1.5 text-gray-400 hover:text-white hover:bg-hull-800/60 transition-all active:scale-90">
+                <button onClick={() => setSideOpen(true)} className="rounded-lg p-1.5 text-gray-400 hover:text-white hover:bg-hull-800/60 transition-all active:scale-90" aria-label="Open sidebar" aria-expanded={sideOpen}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
                 </button>
                 <h1 className="text-sm font-extrabold tracking-wider text-white">KUBE-<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
                 {clusterInfo && <span className="hidden sm:inline rounded-lg bg-gradient-to-r from-amber-950/40 to-amber-950/20 border border-amber-900/20 px-2 py-0.5 font-mono text-[10px] text-neon-amber">{clusterInfo.name}</span>}
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowSearch(true)} className="flex items-center gap-1.5 rounded-lg glass px-2.5 py-1 text-[11px] text-gray-400 transition-all hover:text-neon-cyan hover:shadow-[0_0_8px_rgba(6,214,224,0.1)]">
+                <button onClick={() => setShowSearch(true)} className="flex items-center gap-1.5 rounded-lg glass px-2.5 py-1 text-[11px] text-gray-400 transition-all hover:text-neon-cyan hover:shadow-[0_0_8px_rgba(6,214,224,0.1)]" aria-label="Search resources">
                   <span>⌕</span><span className="hidden sm:inline">Search</span>
                 </button>
                 {(tab === 'workloads' || tab === 'pods' || tab === 'ingress' || tab === 'services' || tab === 'events' || tab === 'hpa' || tab === 'config' || tab === 'pvcs') && namespaces && namespaces.length > 0 && (
                   <NamespacePicker namespaces={namespaces} value={ns} onChange={setNs} />
                 )}
                 <div className="relative">
-                  <button onClick={() => setShowInfo(v => !v)} className="rounded-lg p-1.5 text-gray-500 hover:text-neon-cyan hover:bg-hull-800/60 transition-all" title="Dashboard Info">
+                  <button onClick={() => setShowInfo(v => !v)} className="rounded-lg p-1.5 text-gray-500 hover:text-neon-cyan hover:bg-hull-800/60 transition-all" title="Dashboard Info" aria-label="Dashboard info">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                   </button>
                   {showInfo && <InfoPopover tab={tab} onClose={() => setShowInfo(false)} />}
                 </div>
                 <div className="relative" ref={userMenuRef}>
-                  <button onClick={() => setShowUserMenu(v => !v)} className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-hull-800/60 transition-all">
+                  <button onClick={() => setShowUserMenu(v => !v)} className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-hull-800/60 transition-all" aria-label="User menu" aria-expanded={showUserMenu}>
                     <UserAvatar email={userInfo.email} />
                     <div className="hidden sm:block text-left">
                       <p className="text-[10px] font-medium text-gray-300 leading-tight truncate max-w-[100px]">{userInfo.email.split('@')[0]}</p>

@@ -2,6 +2,28 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.1.5] — 2026-04-03
+
+### Helm Chart Hardening
+
+- **Default replicas bumped to 2** with **topology spread constraint** and **pod anti-affinity** (soft, weight 100) to prefer scheduling replicas on different nodes
+- **Pod security context** — Chart now enforces `runAsNonRoot`, `readOnlyRootFilesystem`, and drops all Linux capabilities by default, passing Pod Security Standards audits out of the box
+- **Startup probe** added to prevent liveness kills during slow cluster API connections (10 retries x 5s)
+- **Pod annotations** (`podAnnotations`) and **service annotations** (`service.annotations`) are now configurable via `values.yaml`
+
+### CI/CD
+
+- **PR CI workflow** — New `ci.yaml` runs `go vet`, `go build`, and frontend `npm run build` on every pull request
+- **Release concurrency** — Overlapping tag builds are now automatically cancelled
+
+### Polish
+
+- `.dockerignore` updated to exclude `.github/` and `.cursor/` from build context
+- `web/package.json` now declares `engines: { node: ">=20" }` for fast-fail on wrong Node versions
+- **Accessibility** — Added `aria-label` and `aria-expanded` attributes to all icon-only buttons (sidebar, search, info, user menu)
+
+---
+
 ## [v1.1.4] — 2026-04-02
 
 ### Security

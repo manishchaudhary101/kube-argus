@@ -4,7 +4,7 @@
   "properties": {
     "replicaCount": {
       "type": "integer",
-      "default": 1,
+      "default": 2,
       "description": "Number of Kube-Argus replicas to deploy"
     },
     "image": {
@@ -39,6 +39,11 @@
           "type": "integer",
           "default": 8080,
           "description": "Service port"
+        },
+        "annotations": {
+          "type": "object",
+          "default": {},
+          "description": "Annotations to add to the Service (e.g. AWS LB annotations, prometheus.io/scrape)"
         }
       }
     },
@@ -238,6 +243,58 @@
         }
       }
     },
+    "podAnnotations": {
+      "type": "object",
+      "default": {},
+      "description": "Annotations to add to pods (e.g. prometheus.io/scrape, sidecar injection)"
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "description": "Pod-level security context applied to all containers",
+      "properties": {
+        "runAsNonRoot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require the pod to run as a non-root user"
+        },
+        "runAsUser": {
+          "type": "integer",
+          "default": 65534,
+          "description": "UID to run the pod as (65534 = nobody)"
+        },
+        "fsGroup": {
+          "type": "integer",
+          "default": 65534,
+          "description": "Group ID for volume file system ownership"
+        }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "description": "Container-level security context for the kube-argus container",
+      "properties": {
+        "allowPrivilegeEscalation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prevent gaining more privileges than the parent process"
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mount the root filesystem as read-only"
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "drop": {
+              "type": "array",
+              "default": ["ALL"],
+              "description": "Linux capabilities to drop"
+            }
+          }
+        }
+      }
+    },
     "existingSecret": {
       "type": "string",
       "default": "",
@@ -270,6 +327,27 @@
           "type": "boolean",
           "default": true,
           "description": "Create ClusterRole and ClusterRoleBinding for Kubernetes API access"
+        }
+      }
+    },
+    "topologySpreadConstraints": {
+      "type": "array",
+      "description": "Topology spread constraints to distribute pods across nodes/zones. Defaults to soft anti-affinity per hostname.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "maxSkew": {
+            "type": "integer",
+            "description": "Maximum difference in pod count between topology domains"
+          },
+          "topologyKey": {
+            "type": "string",
+            "description": "Node label key for topology domain (e.g. kubernetes.io/hostname, topology.kubernetes.io/zone)"
+          },
+          "whenUnsatisfiable": {
+            "type": "string",
+            "description": "How to handle unsatisfiable constraints (ScheduleAnyway or DoNotSchedule)"
+          }
         }
       }
     },

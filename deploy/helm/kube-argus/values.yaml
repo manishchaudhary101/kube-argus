@@ -1,4 +1,4 @@
-replicaCount: 1
+replicaCount: 2
 
 image:
   repository: ghcr.io/manishchaudhary101/kube-argus
@@ -8,6 +8,7 @@ image:
 service:
   type: ClusterIP
   port: 8080
+  annotations: {}
 
 ingress:
   enabled: false
@@ -56,6 +57,19 @@ env:
 
 existingSecret: ""
 
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
 serviceAccount:
   create: true
   name: ""
@@ -64,6 +78,24 @@ serviceAccount:
 rbac:
   create: true
 
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels: {}
+
 nodeSelector: {}
 tolerations: []
-affinity: {}
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - kube-argus
+          topologyKey: kubernetes.io/hostname
