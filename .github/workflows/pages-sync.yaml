@@ -1,0 +1,36 @@
+name: Sync Landing Page
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "docs/**"
+
+jobs:
+  sync:
+    name: Sync docs/ to gh-pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Copy landing page files
+        run: |
+          cp docs/index.html gh-pages/
+          cp docs/screenshot-*.png gh-pages/ 2>/dev/null || true
+
+      - name: Push to gh-pages
+        run: |
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet && echo "No changes" && exit 0
+          git commit -m "docs: sync landing page from master"
+          git push
