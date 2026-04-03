@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kube-Argus — Real-time Kubernetes Dashboard</title>
+  <meta name="description" content="The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl. Live state, cost analysis, and AI diagnostics in a single binary.">
+  <meta property="og:title" content="Kube-Argus">
+  <meta property="og:description" content="Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png">
+  <meta property="og:url" content="https://manishchaudhary101.github.io/kube-argus/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230c1322'/%3E%3Ctext x='32' y='26' text-anchor='middle' font-family='system-ui,sans-serif' font-weight='900' font-size='14' fill='%23ffffff' letter-spacing='1'%3EKUBE%3C/text%3E%3Ctext x='32' y='46' text-anchor='middle' font-family='system-ui,sans-serif' font-weight='900' font-size='12' fill='%2306d6e0' letter-spacing='1'%3EARGUS%3C/text%3E%3C/svg%3E">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0e1a;
+      --surface: #111827;
+      --border: rgba(255,255,255,0.06);
+      --cyan: #06d6e0;
+      --green: #00ff88;
+      --amber: #f59e0b;
+      --text: #e5e7eb;
+      --muted: #6b7280;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem 1.5rem;
+      position: relative;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -40%; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 800px;
+      background: radial-gradient(circle, rgba(6,214,224,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .logo { position: relative; margin-bottom: 1.5rem; }
+    .logo svg { width: 80px; height: 80px; filter: drop-shadow(0 0 30px rgba(6,214,224,0.3)); }
+
+    .title {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+    .title span { color: var(--cyan); text-shadow: 0 0 40px rgba(6,214,224,0.4); }
+
+    .tagline {
+      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      color: var(--muted);
+      max-width: 640px;
+      margin: 0.75rem auto 2rem;
+      line-height: 1.7;
+    }
+
+    .buttons { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-bottom: 3rem; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, rgba(6,214,224,0.15), rgba(0,255,136,0.08));
+      border-color: rgba(6,214,224,0.3);
+      color: var(--cyan);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 0 30px rgba(6,214,224,0.2);
+      border-color: rgba(6,214,224,0.5);
+      text-decoration: none;
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.04);
+      border-color: var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.08);
+      text-decoration: none;
+    }
+
+    .install-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.75rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      color: var(--green);
+      max-width: 600px;
+      width: 100%;
+      text-align: left;
+      position: relative;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .install-label {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .features {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 4rem 1.5rem 6rem;
+    }
+    .features h2 {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 3rem;
+    }
+    .features h2 span { color: var(--cyan); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      border-color: rgba(6,214,224,0.2);
+      box-shadow: 0 0 40px rgba(6,214,224,0.05);
+    }
+    .card-icon { font-size: 1.5rem; margin-bottom: 0.75rem; }
+    .card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .card p { font-size: 0.875rem; color: var(--muted); line-height: 1.6; }
+
+    .screenshots {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1.5rem 6rem;
+    }
+    .screenshots h2 {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 3rem;
+    }
+    .screenshots h2 span { color: var(--cyan); }
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+      gap: 1.5rem;
+    }
+    @media (max-width: 540px) {
+      .screenshot-grid { grid-template-columns: 1fr; }
+    }
+    .screenshot-item { text-align: center; }
+    .screenshot-item img {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      transition: transform 0.2s;
+    }
+    .screenshot-item img:hover { transform: scale(1.02); }
+    .screenshot-item p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+
+    .badges {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+    .badges img { height: 22px; }
+
+    footer {
+      text-align: center;
+      padding: 3rem 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    footer a { color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <div class="logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+        <rect width="64" height="64" rx="14" fill="#0c1322"/>
+        <text x="32" y="26" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="14" fill="#ffffff" letter-spacing="1">KUBE</text>
+        <text x="32" y="46" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="12" fill="#06d6e0" letter-spacing="1">ARGUS</text>
+        <rect x="4" y="52" width="56" height="3" rx="1.5" fill="url(#g)"/>
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#06d6e0"/><stop offset="100%" stop-color="#00ff88"/></linearGradient></defs>
+      </svg>
+    </div>
+
+    <h1 class="title">KUBE-<span>ARGUS</span></h1>
+    <p class="tagline">
+      The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.<br>
+      Live cluster state, streaming logs, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
+    </p>
+
+    <div class="badges">
+      <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go">
+      <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React">
+      <img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License">
+      <img src="https://img.shields.io/github/stars/manishchaudhary101/kube-argus?style=social" alt="Stars">
+    </div>
+
+    <div class="buttons">
+      <a href="https://github.com/manishchaudhary101/kube-argus" class="btn btn-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus" class="btn btn-secondary">
+        Artifact Hub
+      </a>
+    </div>
+
+    <div class="install-box">
+      <div class="install-label">Install via Helm</div>
+helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+  --set env.CLUSTER_NAME="my-cluster"
+    </div>
+  </section>
+
+  <section class="features">
+    <h2>What you <span>get</span></h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">⚡</div>
+        <h3>Real-time Cluster State</h3>
+        <p>Nodes, pods, workloads, services, and events — auto-refreshing with zero manual reloads.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📜</div>
+        <h3>Streaming Logs & Exec</h3>
+        <p>Live pod logs via SSE with follow mode, previous container logs, and browser-based terminal via xterm.js.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔧</div>
+        <h3>Node Drain Wizard</h3>
+        <p>Safe, guided drains with PDB awareness, eviction preview, and real-time progress streaming.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">💰</div>
+        <h3>Cost Analysis</h3>
+        <p>Namespace cost allocation, spot instance advisor, and resource right-sizing recommendations.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🤖</div>
+        <h3>AI Diagnostics</h3>
+        <p>LLM-powered root cause analysis for troubled pods. Works with any OpenAI-compatible API.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📝</div>
+        <h3>YAML Editor</h3>
+        <p>View and edit raw YAML for 11 resource types directly from the dashboard with syntax highlighting.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔗</div>
+        <h3>Dependency Graph</h3>
+        <p>Visual map of Deployments → Services → Ingresses → HPAs → Secrets with config drift detection.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🚨</div>
+        <h3>Troubled Pods Screen</h3>
+        <p>A dedicated, high-signal view of only broken pods — perfect for NOC teams and incident response.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔐</div>
+        <h3>SSO & RBAC Built In</h3>
+        <p>Google SSO, any OIDC provider (Okta, Auth0, Keycloak), or no auth. Role-based access out of the box.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="screenshots">
+    <h2>See it in <span>action</span></h2>
+    <div class="screenshot-grid">
+      <div class="screenshot-item">
+        <img src="screenshot-overview.png" alt="Cluster Overview" loading="lazy">
+        <p>Cluster Overview — Real-time node and pod status</p>
+      </div>
+      <div class="screenshot-item">
+        <img src="screenshot-node-detail.png" alt="Node Detail" loading="lazy">
+        <p>Node Detail — Pod heatmap, conditions, and drain wizard</p>
+      </div>
+      <div class="screenshot-item">
+        <img src="screenshot-pod-metrics.png" alt="Pod Metrics" loading="lazy">
+        <p>Pod Metrics — Prometheus CPU and memory charts</p>
+      </div>
+      <div class="screenshot-item">
+        <img src="screenshot-spot-advisor.png" alt="Spot Advisor" loading="lazy">
+        <p>Spot Advisor — Cost optimization and instance recommendations</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Apache 2.0 &middot; Built by <a href="https://github.com/manishchaudhary101">manishchaudhary101</a> &middot;
+      <a href="https://github.com/manishchaudhary101/kube-argus">GitHub</a> &middot;
+      <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus">Artifact Hub</a>
+    </p>
+  </footer>
+
+</body>
+</html>
