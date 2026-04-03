@@ -122,7 +122,7 @@ function NodeMetricsPanel({ nodeName }: { nodeName: string }) {
   if (err) return (
     <div className="rounded border border-hull-700 bg-hull-900 overflow-hidden">
       <div className="border-b border-hull-700 bg-hull-800 px-2 py-1.5">
-        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Metrics</span>
+        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Node Metrics</span>
       </div>
       <p className="text-[10px] text-neon-amber text-center py-4">{err}</p>
     </div>
@@ -132,7 +132,7 @@ function NodeMetricsPanel({ nodeName }: { nodeName: string }) {
   return (
     <div className="rounded border border-hull-700 bg-hull-900 overflow-hidden">
       <div className="border-b border-hull-700 bg-hull-800 px-2 py-1.5 flex items-center justify-between">
-        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Metrics</span>
+        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Node Metrics</span>
         <div className="flex gap-1">
           {METRIC_RANGES.map(r => (
             <button key={r} onClick={() => setTimeRange(r)}
