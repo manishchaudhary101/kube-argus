@@ -14,8 +14,8 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #0a0e1a;
-      --surface: #111827;
+      --bg: #050810;
+      --surface: #0d1117;
       --border: rgba(255,255,255,0.06);
       --cyan: #06d6e0;
       --green: #00ff88;
@@ -33,36 +33,19 @@
     a { color: var(--cyan); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(30px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes float {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-10px); }
-    }
-    @keyframes glowPulse {
-      0%, 100% { filter: drop-shadow(0 0 20px rgba(6,214,224,0.3)); }
-      50% { filter: drop-shadow(0 0 40px rgba(6,214,224,0.6)); }
-    }
-    @keyframes orbDrift {
-      0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.6; }
-      33% { transform: translateX(-45%) scale(1.1); opacity: 0.8; }
-      66% { transform: translateX(-55%) scale(0.95); opacity: 0.5; }
-    }
-    @keyframes shimmer {
-      0% { background-position: -200% center; }
-      100% { background-position: 200% center; }
-    }
-    @keyframes borderGlow {
-      0%, 100% { border-color: rgba(6,214,224,0.15); }
-      50% { border-color: rgba(6,214,224,0.4); }
-    }
+    /* ── Keyframes ────────────────────────────── */
+    @keyframes fadeUp { from { opacity:0; transform:translateY(40px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes scanline { from { top:-4px; } to { top:100%; } }
+    @keyframes glitch1 { 0%,100%{clip-path:inset(0 0 0 0);transform:translate(0)} 20%{clip-path:inset(20% 0 60% 0);transform:translate(-3px,0)} 40%{clip-path:inset(40% 0 30% 0);transform:translate(3px,0)} 60%{clip-path:inset(60% 0 10% 0);transform:translate(-2px,0)} 80%{clip-path:inset(10% 0 80% 0);transform:translate(2px,0)} }
+    @keyframes glitch2 { 0%,100%{clip-path:inset(0 0 0 0);transform:translate(0)} 20%{clip-path:inset(50% 0 20% 0);transform:translate(3px,0)} 40%{clip-path:inset(10% 0 70% 0);transform:translate(-3px,0)} 60%{clip-path:inset(70% 0 5% 0);transform:translate(2px,0)} 80%{clip-path:inset(30% 0 50% 0);transform:translate(-1px,0)} }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+    @keyframes pulseRing { 0%{transform:scale(0.8);opacity:0.6} 50%{transform:scale(1.4);opacity:0} 100%{transform:scale(0.8);opacity:0} }
+    @keyframes borderTravel { 0%{background-position:0% 0%} 100%{background-position:200% 0%} }
+    @keyframes textShimmer { 0%{background-position:-100% center} 100%{background-position:200% center} }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    @keyframes gridFade { 0%{opacity:0.03} 50%{opacity:0.06} 100%{opacity:0.03} }
 
+    /* ── Hero ─────────────────────────────────── */
     .hero {
       min-height: 100vh;
       display: flex;
@@ -72,292 +55,279 @@
       text-align: center;
       padding: 2rem 1.5rem;
       position: relative;
+      overflow: hidden;
     }
-    .hero::before {
-      content: '';
-      position: absolute;
-      top: -40%; left: 50%; transform: translateX(-50%);
-      width: 800px; height: 800px;
-      background: radial-gradient(circle, rgba(6,214,224,0.08) 0%, transparent 70%);
-      pointer-events: none;
-      animation: orbDrift 12s ease-in-out infinite;
+    #particles { position:absolute; inset:0; z-index:0; }
+    .hero-grid {
+      position: absolute; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(6,214,224,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(6,214,224,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridFade 8s ease-in-out infinite;
     }
-    .hero::after {
-      content: '';
-      position: absolute;
-      top: -20%; left: 40%; transform: translateX(-50%);
-      width: 600px; height: 600px;
-      background: radial-gradient(circle, rgba(0,255,136,0.04) 0%, transparent 70%);
+    .hero-scan {
+      position: absolute; left:0; width:100%; height:4px; z-index:1;
+      background: linear-gradient(90deg, transparent, rgba(6,214,224,0.4), transparent);
+      animation: scanline 6s linear infinite;
       pointer-events: none;
-      animation: orbDrift 16s ease-in-out infinite reverse;
     }
 
-    .logo {
-      position: relative;
-      margin-bottom: 1.5rem;
-      animation: fadeUp 0.8s ease-out both;
-    }
-    .logo svg {
-      width: 80px; height: 80px;
-      animation: float 4s ease-in-out infinite, glowPulse 3s ease-in-out infinite;
-    }
+    .hero-content { position:relative; z-index:2; }
 
+    /* logo */
+    .logo { position:relative; margin-bottom:2rem; animation:fadeUp 0.8s ease-out both; }
+    .logo svg { width:90px; height:90px; animation:float 5s ease-in-out infinite; filter:drop-shadow(0 0 30px rgba(6,214,224,0.4)); }
+    .logo-ring {
+      position:absolute; top:50%; left:50%; width:130px; height:130px; margin:-65px 0 0 -65px;
+      border:1px solid rgba(6,214,224,0.2); border-radius:50%;
+      animation:pulseRing 3s ease-in-out infinite;
+    }
+    .logo-ring:nth-child(3) { animation-delay:1s; width:160px; height:160px; margin:-80px 0 0 -80px; }
+
+    /* title with glitch */
+    .title-wrap { position:relative; animation:fadeUp 0.8s ease-out 0.15s both; }
     .title {
-      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-size: clamp(3rem, 7vw, 5rem);
       font-weight: 900;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.25rem;
-      animation: fadeUp 0.8s ease-out 0.15s both;
+      letter-spacing: 0.08em;
+      line-height: 1.1;
+      color: #fff;
     }
     .title span {
-      color: var(--cyan);
-      text-shadow: 0 0 40px rgba(6,214,224,0.4);
       background: linear-gradient(90deg, var(--cyan), var(--green), var(--cyan));
       background-size: 200% auto;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: shimmer 4s linear infinite;
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+      animation: textShimmer 3s linear infinite;
     }
+    .title-glitch {
+      position:absolute; top:0; left:0; width:100%; height:100%;
+      pointer-events:none; overflow:hidden;
+    }
+    .title-glitch .title { position:absolute; top:0; left:0; }
+    .title-glitch .g1 { color:var(--cyan); animation:glitch1 4s infinite linear; opacity:0.6; }
+    .title-glitch .g2 { color:var(--green); animation:glitch2 4s infinite linear 0.05s; opacity:0.4; }
 
     .tagline {
-      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      font-size: clamp(0.95rem, 2.2vw, 1.15rem);
       color: var(--muted);
-      max-width: 640px;
-      margin: 0.75rem auto 2rem;
-      line-height: 1.7;
+      max-width: 620px;
+      margin: 1rem auto 2rem;
+      line-height: 1.8;
       animation: fadeUp 0.8s ease-out 0.3s both;
     }
 
+    .badges {
+      display:flex; gap:0.5rem; flex-wrap:wrap; justify-content:center; margin-bottom:2rem;
+      animation:fadeUp 0.8s ease-out 0.4s both;
+    }
+    .badges img { height:22px; }
+
     .buttons {
-      display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-bottom: 3rem;
-      animation: fadeUp 0.8s ease-out 0.55s both;
+      display:flex; gap:1rem; flex-wrap:wrap; justify-content:center; margin-bottom:3rem;
+      animation:fadeUp 0.8s ease-out 0.5s both;
     }
     .btn {
-      display: inline-flex; align-items: center; gap: 0.5rem;
-      padding: 0.75rem 1.75rem;
-      border-radius: 12px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      transition: all 0.25s;
-      border: 1px solid transparent;
+      display:inline-flex; align-items:center; gap:0.5rem;
+      padding:0.8rem 2rem; border-radius:12px; font-size:0.95rem; font-weight:600;
+      transition:all 0.3s; border:1px solid transparent; position:relative; overflow:hidden;
     }
+    .btn::before {
+      content:''; position:absolute; inset:-1px; border-radius:12px; padding:1px; z-index:-1;
+      background:linear-gradient(135deg, var(--cyan), var(--green), var(--cyan));
+      background-size:200% 200%; animation:borderTravel 3s linear infinite;
+      -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite:xor; mask-composite:exclude; opacity:0;
+      transition:opacity 0.3s;
+    }
+    .btn:hover::before { opacity:1; }
     .btn-primary {
-      background: linear-gradient(135deg, rgba(6,214,224,0.15), rgba(0,255,136,0.08));
-      border-color: rgba(6,214,224,0.3);
-      color: var(--cyan);
+      background:linear-gradient(135deg, rgba(6,214,224,0.12), rgba(0,255,136,0.06));
+      border-color:rgba(6,214,224,0.3); color:var(--cyan);
     }
-    .btn-primary:hover {
-      box-shadow: 0 0 30px rgba(6,214,224,0.25);
-      border-color: rgba(6,214,224,0.5);
-      text-decoration: none;
-      transform: translateY(-2px);
-    }
+    .btn-primary:hover { box-shadow:0 0 40px rgba(6,214,224,0.2); text-decoration:none; transform:translateY(-3px); }
     .btn-secondary {
-      background: rgba(255,255,255,0.04);
-      border-color: var(--border);
-      color: var(--text);
+      background:rgba(255,255,255,0.03); border-color:var(--border); color:var(--text);
     }
-    .btn-secondary:hover {
-      background: rgba(255,255,255,0.08);
-      text-decoration: none;
-      transform: translateY(-2px);
-    }
+    .btn-secondary:hover { background:rgba(255,255,255,0.07); text-decoration:none; transform:translateY(-3px); }
 
+    /* install terminal */
     .install-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem 1.75rem;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.85rem;
-      color: var(--green);
-      max-width: 720px;
-      width: 100%;
-      text-align: left;
-      position: relative;
-      white-space: pre;
-      overflow-x: auto;
-      animation: fadeUp 0.8s ease-out 0.7s both, borderGlow 4s ease-in-out 2s infinite;
+      background:rgba(13,17,23,0.9); border:1px solid rgba(6,214,224,0.15); border-radius:14px;
+      padding:1.25rem 1.75rem; font-family:'SF Mono','Fira Code','Cascadia Code',monospace;
+      font-size:0.82rem; color:var(--green); max-width:720px; width:100%;
+      text-align:left; position:relative; white-space:pre; overflow-x:auto;
+      backdrop-filter:blur(10px);
+      animation:fadeUp 0.8s ease-out 0.65s both;
     }
-    .install-label {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--muted);
-      margin-bottom: 0.5rem;
-      font-weight: 600;
+    .install-box::before {
+      content:''; position:absolute; inset:-1px; border-radius:14px; padding:1px; z-index:-1;
+      background:linear-gradient(135deg, rgba(6,214,224,0.3), rgba(0,255,136,0.1), rgba(6,214,224,0.3));
+      background-size:200% 200%; animation:borderTravel 4s linear infinite;
+      -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite:xor; mask-composite:exclude;
     }
+    .install-dots {
+      display:flex; gap:6px; margin-bottom:0.75rem;
+    }
+    .install-dots i { width:10px; height:10px; border-radius:50%; display:block; }
+    .install-dots i:nth-child(1) { background:#ff5f57; }
+    .install-dots i:nth-child(2) { background:#febc2e; }
+    .install-dots i:nth-child(3) { background:#28c840; }
+    .cmd-line { opacity:0; }
+    .cmd-line.typed { opacity:1; }
+    .cursor-blink { animation:blink 1s step-end infinite; color:var(--cyan); }
 
+    /* ── Features ─────────────────────────────── */
     .features {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 4rem 1.5rem 6rem;
+      max-width:1100px; margin:0 auto; padding:5rem 1.5rem 6rem;
+      position:relative;
     }
-    .features h2 {
-      text-align: center;
-      font-size: 2rem;
-      font-weight: 800;
-      margin-bottom: 3rem;
-      opacity: 0;
-      transform: translateY(20px);
+    .section-heading {
+      text-align:center; font-size:2.2rem; font-weight:800; margin-bottom:3.5rem;
+      opacity:0; transform:translateY(20px);
     }
-    .features h2.visible {
-      opacity: 1;
-      transform: translateY(0);
-      transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-    }
-    .features h2 span { color: var(--cyan); }
+    .section-heading.visible { opacity:1; transform:translateY(0); transition:all 0.7s ease-out; }
+    .section-heading span { color:var(--cyan); }
 
     .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.25rem;
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1.25rem;
     }
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1.75rem;
-      transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
-      opacity: 0;
-      transform: translateY(30px);
+      background:var(--surface); border:1px solid var(--border); border-radius:16px;
+      padding:2rem; position:relative; overflow:hidden;
+      opacity:0; transform:translateY(30px);
+      transition:border-color 0.3s, box-shadow 0.3s, transform 0.3s;
     }
-    .card.visible {
-      opacity: 1;
-      transform: translateY(0);
-      transition: opacity 0.6s ease-out, transform 0.6s ease-out, border-color 0.3s, box-shadow 0.3s;
+    .card.visible { opacity:1; transform:translateY(0); transition:all 0.6s ease-out; }
+    .card::before {
+      content:''; position:absolute; top:0; left:-75%; width:50%; height:100%;
+      background:linear-gradient(90deg, transparent, rgba(6,214,224,0.04), transparent);
+      transition:left 0.6s; pointer-events:none;
     }
+    .card:hover::before { left:125%; }
     .card:hover {
-      border-color: rgba(6,214,224,0.25);
-      box-shadow: 0 0 40px rgba(6,214,224,0.08);
-      transform: translateY(-4px);
+      border-color:rgba(6,214,224,0.25); box-shadow:0 0 50px rgba(6,214,224,0.06);
+      transform:translateY(-5px);
     }
-    .card-icon { font-size: 1.5rem; margin-bottom: 0.75rem; }
-    .card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
-    .card p { font-size: 0.875rem; color: var(--muted); line-height: 1.6; }
+    .card-icon { font-size:1.6rem; margin-bottom:0.75rem; }
+    .card h3 { font-size:1.05rem; font-weight:700; margin-bottom:0.5rem; }
+    .card p { font-size:0.875rem; color:var(--muted); line-height:1.65; }
 
+    /* ── Screenshots ──────────────────────────── */
     .screenshots {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 0 1.5rem 6rem;
+      max-width:1100px; margin:0 auto; padding:0 1.5rem 6rem;
     }
-    .screenshots h2 {
-      text-align: center;
-      font-size: 2rem;
-      font-weight: 800;
-      margin-bottom: 3rem;
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    .screenshots h2.visible {
-      opacity: 1;
-      transform: translateY(0);
-      transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-    }
-    .screenshots h2 span { color: var(--cyan); }
     .screenshot-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
-      gap: 1.5rem;
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(480px,1fr)); gap:1.5rem;
     }
-    @media (max-width: 540px) {
-      .screenshot-grid { grid-template-columns: 1fr; }
-    }
+    @media (max-width:540px) { .screenshot-grid { grid-template-columns:1fr; } }
     .screenshot-item {
-      text-align: center;
-      opacity: 0;
-      transform: translateY(30px);
+      text-align:center; opacity:0; transform:translateY(30px);
     }
-    .screenshot-item.visible {
-      opacity: 1;
-      transform: translateY(0);
-      transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-    }
+    .screenshot-item.visible { opacity:1; transform:translateY(0); transition:all 0.6s ease-out; }
     .screenshot-item img {
-      width: 100%;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      transition: transform 0.3s, box-shadow 0.3s;
+      width:100%; border-radius:14px; border:1px solid var(--border);
+      transition:transform 0.3s,box-shadow 0.3s;
     }
     .screenshot-item img:hover {
-      transform: scale(1.02);
-      box-shadow: 0 8px 40px rgba(6,214,224,0.1);
+      transform:scale(1.02); box-shadow:0 10px 50px rgba(6,214,224,0.1);
     }
-    .screenshot-item p {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-top: 0.75rem;
-    }
+    .screenshot-item p { font-size:0.8rem; color:var(--muted); margin-top:0.75rem; }
 
-    .badges {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-bottom: 2rem;
-      animation: fadeUp 0.8s ease-out 0.45s both;
+    /* ── Stats bar ────────────────────────────── */
+    .stats {
+      display:flex; justify-content:center; gap:4rem; flex-wrap:wrap;
+      padding:3rem 1.5rem 4rem; max-width:900px; margin:0 auto;
+      opacity:0; transform:translateY(20px);
     }
-    .badges img { height: 22px; }
+    .stats.visible { opacity:1; transform:translateY(0); transition:all 0.7s ease-out; }
+    .stat { text-align:center; }
+    .stat-val {
+      font-size:2.5rem; font-weight:900;
+      background:linear-gradient(135deg, var(--cyan), var(--green));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    }
+    .stat-label { font-size:0.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin-top:0.25rem; }
 
+    /* ── Footer ───────────────────────────────── */
     footer {
-      text-align: center;
-      padding: 3rem 1.5rem;
-      border-top: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 0.8rem;
+      text-align:center; padding:3rem 1.5rem;
+      border-top:1px solid var(--border); color:var(--muted); font-size:0.8rem;
     }
-    footer a { color: var(--cyan); }
+    footer a { color:var(--cyan); }
   </style>
 </head>
 <body>
 
   <section class="hero">
-    <div class="logo">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-        <rect width="64" height="64" rx="14" fill="#0c1322"/>
-        <text x="32" y="26" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="14" fill="#ffffff" letter-spacing="1">KUBE</text>
-        <text x="32" y="46" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="12" fill="#06d6e0" letter-spacing="1">ARGUS</text>
-        <rect x="4" y="52" width="56" height="3" rx="1.5" fill="url(#g)"/>
-        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#06d6e0"/><stop offset="100%" stop-color="#00ff88"/></linearGradient></defs>
-      </svg>
-    </div>
+    <canvas id="particles"></canvas>
+    <div class="hero-grid"></div>
+    <div class="hero-scan"></div>
 
-    <h1 class="title">KUBE-<span>ARGUS</span></h1>
-    <p class="tagline">
-      The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.<br>
-      Live cluster state, streaming logs, just-in-time exec access, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
-    </p>
+    <div class="hero-content">
+      <div class="logo">
+        <div class="logo-ring"></div>
+        <div class="logo-ring"></div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+          <rect width="64" height="64" rx="14" fill="#0c1322"/>
+          <text x="32" y="26" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="14" fill="#ffffff" letter-spacing="1">KUBE</text>
+          <text x="32" y="46" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="12" fill="#06d6e0" letter-spacing="1">ARGUS</text>
+          <rect x="4" y="52" width="56" height="3" rx="1.5" fill="url(#g)"/>
+          <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#06d6e0"/><stop offset="100%" stop-color="#00ff88"/></linearGradient></defs>
+        </svg>
+      </div>
 
-    <div class="badges">
-      <a href="https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml"><img src="https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml/badge.svg" alt="CI"></a>
-      <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go">
-      <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React">
-      <img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License">
-      <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kube-argus" alt="Artifact Hub"></a>
-      <img src="https://img.shields.io/github/stars/manishchaudhary101/kube-argus?style=social" alt="Stars">
-    </div>
+      <div class="title-wrap">
+        <h1 class="title">KUBE-<span>ARGUS</span></h1>
+        <div class="title-glitch" aria-hidden="true">
+          <h1 class="title g1">KUBE-<span>ARGUS</span></h1>
+          <h1 class="title g2">KUBE-<span>ARGUS</span></h1>
+        </div>
+      </div>
 
-    <div class="buttons">
-      <a href="https://github.com/manishchaudhary101/kube-argus" class="btn btn-primary">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
-        GitHub
-      </a>
-      <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus" class="btn btn-secondary">
-        Artifact Hub
-      </a>
-    </div>
+      <p class="tagline">
+        The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.<br>
+        Live cluster state, streaming logs, just-in-time exec access, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
+      </p>
 
-    <div class="install-box">
-      <div class="install-label">Install via Helm</div>
-<span style="color:#6b7280">$</span> helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus
-<span style="color:#6b7280">$</span> helm install kube-argus kube-argus/kube-argus -n kube-argus --create-namespace
+      <div class="badges">
+        <a href="https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml"><img src="https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml/badge.svg" alt="CI"></a>
+        <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go">
+        <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React">
+        <img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License">
+        <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kube-argus" alt="Artifact Hub"></a>
+        <img src="https://img.shields.io/github/stars/manishchaudhary101/kube-argus?style=social" alt="Stars">
+      </div>
+
+      <div class="buttons">
+        <a href="https://github.com/manishchaudhary101/kube-argus" class="btn btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus" class="btn btn-secondary">
+          Artifact Hub
+        </a>
+      </div>
+
+      <div class="install-box">
+        <div class="install-dots"><i></i><i></i><i></i></div>
+        <div class="cmd-line" id="cmd1"><span style="color:#6b7280">$</span> helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus</div>
+        <div class="cmd-line" id="cmd2"><span style="color:#6b7280">$</span> helm install kube-argus kube-argus/kube-argus -n kube-argus --create-namespace</div>
+        <span class="cursor-blink" id="cursor">_</span>
+      </div>
     </div>
   </section>
 
+  <div class="stats" id="stats">
+    <div class="stat"><div class="stat-val" data-target="30">0</div><div class="stat-label">MB Docker Image</div></div>
+    <div class="stat"><div class="stat-val" data-target="1">&lt;1</div><div class="stat-label">Second Startup</div></div>
+    <div class="stat"><div class="stat-val" data-target="0">0</div><div class="stat-label">Dependencies</div></div>
+    <div class="stat"><div class="stat-val" data-target="10">10</div><div class="stat-label">Sec Auto-Refresh</div></div>
+  </div>
+
   <section class="features">
-    <h2>What you <span>get</span></h2>
+    <h2 class="section-heading">What you <span>get</span></h2>
     <div class="grid">
       <div class="card">
         <div class="card-icon">⚡</div>
@@ -423,7 +393,7 @@
   </section>
 
   <section class="screenshots">
-    <h2>See it in <span>action</span></h2>
+    <h2 class="section-heading">See it in <span>action</span></h2>
     <div class="screenshot-grid">
       <div class="screenshot-item">
         <img src="screenshot-overview.png" alt="Cluster Overview" loading="lazy">
@@ -453,25 +423,98 @@
   </footer>
 
   <script>
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry, i) => {
-        if (entry.isIntersecting) {
-          const delay = entry.target.dataset.delay || 0;
-          setTimeout(() => entry.target.classList.add('visible'), delay);
-          observer.unobserve(entry.target);
+    /* ── Particle star field ────────────────── */
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    let W, H, particles = [], mouse = { x: -1000, y: -1000 };
+
+    function resize() {
+      W = canvas.width = canvas.offsetWidth;
+      H = canvas.height = canvas.offsetHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+    document.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+    for (let i = 0; i < 120; i++) {
+      particles.push({
+        x: Math.random() * 2000, y: Math.random() * 2000,
+        r: Math.random() * 1.5 + 0.3,
+        dx: (Math.random() - 0.5) * 0.3,
+        dy: (Math.random() - 0.5) * 0.3,
+        o: Math.random() * 0.5 + 0.1
+      });
+    }
+
+    function drawParticles() {
+      ctx.clearRect(0, 0, W, H);
+      particles.forEach(p => {
+        p.x += p.dx; p.y += p.dy;
+        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+
+        const dist = Math.hypot(p.x - mouse.x, p.y - mouse.y);
+        const boost = dist < 150 ? (150 - dist) / 150 : 0;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r + boost * 2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(6,214,224,${p.o + boost * 0.4})`;
+        ctx.fill();
+      });
+
+      particles.forEach((a, i) => {
+        for (let j = i + 1; j < particles.length; j++) {
+          const b = particles[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < 100) {
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = `rgba(6,214,224,${0.06 * (1 - d / 100)})`;
+            ctx.stroke();
+          }
         }
       });
-    }, { threshold: 0.15 });
+      requestAnimationFrame(drawParticles);
+    }
+    drawParticles();
 
-    document.querySelectorAll('.card').forEach((el, i) => {
-      el.dataset.delay = i * 80;
-      observer.observe(el);
-    });
-    document.querySelectorAll('.screenshot-item').forEach((el, i) => {
-      el.dataset.delay = i * 120;
-      observer.observe(el);
-    });
-    document.querySelectorAll('.features h2, .screenshots h2').forEach(el => observer.observe(el));
+    /* ── Terminal typing effect ─────────────── */
+    function typeLine(el, delay) {
+      return new Promise(resolve => {
+        const text = el.textContent;
+        el.textContent = '';
+        el.classList.add('typed');
+        let i = 0;
+        setTimeout(() => {
+          const iv = setInterval(() => {
+            el.innerHTML = text.substring(0, i + 1).replace(/^\$/, '<span style="color:#6b7280">$</span>');
+            i++;
+            if (i >= text.length) { clearInterval(iv); resolve(); }
+          }, 18);
+        }, delay);
+      });
+    }
+    (async () => {
+      await typeLine(document.getElementById('cmd1'), 1200);
+      await typeLine(document.getElementById('cmd2'), 400);
+    })();
+
+    /* ── Scroll reveals ────────────────────── */
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const d = entry.target.dataset.delay || 0;
+          setTimeout(() => entry.target.classList.add('visible'), d);
+          obs.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll('.card').forEach((el, i) => { el.dataset.delay = i * 70; obs.observe(el); });
+    document.querySelectorAll('.screenshot-item').forEach((el, i) => { el.dataset.delay = i * 100; obs.observe(el); });
+    document.querySelectorAll('.section-heading').forEach(el => obs.observe(el));
+    const statsEl = document.getElementById('stats');
+    if (statsEl) obs.observe(statsEl);
   </script>
 
 </body>
