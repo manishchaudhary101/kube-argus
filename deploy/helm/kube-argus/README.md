@@ -7,7 +7,8 @@ Live cluster state, streaming pod logs, interactive shell, YAML editor, drain wi
 ## Quick Install
 
 ```bash
-helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus
+helm install kube-argus kube-argus/kube-argus -n kube-argus --create-namespace \
   --set env.CLUSTER_NAME="my-cluster"
 ```
 
@@ -87,7 +88,7 @@ Set via `env.*` in values or through `existingSecret`:
 ### With Google SSO
 
 ```bash
-helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+helm install kube-argus kube-argus/kube-argus -n kube-argus --create-namespace \
   --set env.CLUSTER_NAME="production" \
   --set env.GOOGLE_CLIENT_ID="your-client-id" \
   --set env.GOOGLE_CLIENT_SECRET="your-secret" \
@@ -97,7 +98,7 @@ helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
 ### With Prometheus metrics
 
 ```bash
-helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+helm install kube-argus kube-argus/kube-argus -n kube-argus --create-namespace \
   --set env.CLUSTER_NAME="production" \
   --set env.PROMETHEUS_URL="http://prometheus-server.monitoring:9090"
 ```
@@ -105,7 +106,7 @@ helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
 ### With Ingress
 
 ```bash
-helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+helm install kube-argus kube-argus/kube-argus -n kube-argus --create-namespace \
   --set env.CLUSTER_NAME="production" \
   --set ingress.enabled=true \
   --set ingress.className=nginx \
