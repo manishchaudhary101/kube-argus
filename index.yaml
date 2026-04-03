@@ -1,0 +1,56 @@
+apiVersion: v1
+entries:
+  kube-argus:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Just-in-Time (JIT) exec access — viewers request time-bound shell access, admins approve/deny from the dashboard
+        - kind: added
+          description: JIT persistence via ConfigMap — access requests survive restarts and are shared across replicas
+        - kind: added
+          description: Notification badge on admin avatar showing pending JIT request count
+        - kind: added
+          description: Access Requests in admin dropdown (alongside Online Users and Audit Trail)
+        - kind: added
+          description: Deployment-scoped JIT grants — access is scoped to the workload, not individual pods
+        - kind: added
+          description: Auto-expiring pending requests (48h TTL) and configurable retention for terminal states
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: GitHub
+          url: https://github.com/manishchaudhary101/kube-argus
+      artifacthub.io/screenshots: |
+        - title: Cluster Overview — Real-time node and pod status
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png
+        - title: Node Detail — Pod heatmap, conditions, and drain wizard
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-node-detail.png
+        - title: Pod Metrics — Prometheus CPU and memory charts
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-pod-metrics.png
+        - title: Spot Advisor — Cost optimization and instance recommendations
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
+    apiVersion: v2
+    appVersion: 1.2.0
+    created: "2026-04-03T08:39:54.035351482Z"
+    description: Real-time Kubernetes dashboard with live state, cost analysis, and
+      AI-powered diagnostics
+    digest: b2cad554f6f29e1482ec202e0fd09b29d20ef0b9b0aa15eb2b1765e441b64182
+    home: https://github.com/manishchaudhary101/kube-argus
+    keywords:
+    - kubernetes
+    - dashboard
+    - monitoring
+    - sre
+    - jit-access
+    - security
+    maintainers:
+    - email: imanishchaudhary@gmail.com
+      name: manishchaudhary101
+      url: https://github.com/manishchaudhary101
+    name: kube-argus
+    sources:
+    - https://github.com/manishchaudhary101/kube-argus
+    type: application
+    urls:
+    - https://manishchaudhary101.github.io/kube-argus/kube-argus-1.2.0.tgz
+    version: 1.2.0
+generated: "2026-04-03T08:39:54.034513318Z"
