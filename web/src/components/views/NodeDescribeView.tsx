@@ -147,23 +147,23 @@ function NodeMetricsPanel({ nodeName }: { nodeName: string }) {
         </div>
         {data.fs_used && <MetricChart title="Filesystem Usage %" series={data.fs_used} unit="%" height={90} />}
         <div className="grid grid-cols-2 gap-3">
-          {data.rr_cpu_used && <MetricChart title="CPU — pod usage (cores)" series={data.rr_cpu_used} unit="cores"
+          {(data.rr_cpu_used || data.cpu_used) && <MetricChart title="CPU — pod usage (cores)" series={data.rr_cpu_used || data.cpu_used} unit="cores"
             refLines={[
               ...(data.cpu_capacity ? [{ value: seriesLastVal(data.cpu_capacity), label: 'capacity', color: '#ef4444' }] : []),
-              ...(data.rr_cpu_requests ? [{ value: seriesLastVal(data.rr_cpu_requests), label: 'requests', color: '#f59e0b' }] : []),
-              ...(data.rr_cpu_limits ? [{ value: seriesLastVal(data.rr_cpu_limits), label: 'limits', color: '#a78bfa' }] : []),
+              ...((data.rr_cpu_requests || data.cpu_requests) ? [{ value: seriesLastVal(data.rr_cpu_requests || data.cpu_requests), label: 'requests', color: '#f59e0b' }] : []),
+              ...((data.rr_cpu_limits || data.cpu_limits) ? [{ value: seriesLastVal(data.rr_cpu_limits || data.cpu_limits), label: 'limits', color: '#a78bfa' }] : []),
             ]} />}
-          {data.rr_mem_used && <MetricChart title="Memory — pod working set" series={data.rr_mem_used} unit="bytes"
+          {(data.rr_mem_used || data.mem_used) && <MetricChart title="Memory — pod working set" series={data.rr_mem_used || data.mem_used} unit="bytes"
             refLines={[
               ...(data.mem_capacity ? [{ value: seriesLastVal(data.mem_capacity), label: `capacity ${fmtBytes(seriesLastVal(data.mem_capacity))}`, color: '#ef4444' }] : []),
-              ...(data.rr_mem_requests ? [{ value: seriesLastVal(data.rr_mem_requests), label: `requests ${fmtBytes(seriesLastVal(data.rr_mem_requests))}`, color: '#f59e0b' }] : []),
-              ...(data.rr_mem_limits ? [{ value: seriesLastVal(data.rr_mem_limits), label: `limits ${fmtBytes(seriesLastVal(data.rr_mem_limits))}`, color: '#a78bfa' }] : []),
+              ...((data.rr_mem_requests || data.mem_requests) ? [{ value: seriesLastVal(data.rr_mem_requests || data.mem_requests), label: `requests ${fmtBytes(seriesLastVal(data.rr_mem_requests || data.mem_requests))}`, color: '#f59e0b' }] : []),
+              ...((data.rr_mem_limits || data.mem_limits) ? [{ value: seriesLastVal(data.rr_mem_limits || data.mem_limits), label: `limits ${fmtBytes(seriesLastVal(data.rr_mem_limits || data.mem_limits))}`, color: '#a78bfa' }] : []),
             ]} />}
         </div>
-        {(data.rr_mem_rss || data.rr_mem_cache) && (
+        {(data.rr_mem_rss || data.mem_rss || data.rr_mem_cache || data.mem_cache) && (
           <div className="grid grid-cols-2 gap-3">
-            {data.rr_mem_rss && <MetricChart title="Memory RSS" series={data.rr_mem_rss} unit="bytes" height={90} />}
-            {data.rr_mem_cache && <MetricChart title="Memory Cache" series={data.rr_mem_cache} unit="bytes" height={90} />}
+            {(data.rr_mem_rss || data.mem_rss) && <MetricChart title="Memory RSS" series={data.rr_mem_rss || data.mem_rss} unit="bytes" height={90} />}
+            {(data.rr_mem_cache || data.mem_cache) && <MetricChart title="Memory Cache" series={data.rr_mem_cache || data.mem_cache} unit="bytes" height={90} />}
           </div>
         )}
       </div>

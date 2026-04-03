@@ -398,22 +398,35 @@ func apiMetricsNode(w http.ResponseWriter, r *http.Request) {
 	}
 	cache.mu.RUnlock()
 
-	queries := map[string]string{
-		"rr_cpu_used":    fmt.Sprintf(`sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{node=~"%s"})`, node),
-		"cpu_capacity":   fmt.Sprintf(`sum(kube_node_status_capacity{node=~"%s", resource="cpu"})`, node),
-		"rr_cpu_requests": fmt.Sprintf(`sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{node=~"%s"})`, node),
-		"rr_cpu_limits":  fmt.Sprintf(`sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{node=~"%s"})`, node),
+	podOnNode := fmt.Sprintf(`topk by(namespace,pod) (1, kube_pod_info{node="%s"})`, node)
 
+	queries := map[string]string{
+		// Recording-rule based (kube-prometheus-stack / Grafana Cloud)
+		"rr_cpu_used":     fmt.Sprintf(`sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{node=~"%s"})`, node),
+		"rr_cpu_requests": fmt.Sprintf(`sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{node=~"%s"})`, node),
+		"rr_cpu_limits":   fmt.Sprintf(`sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{node=~"%s"})`, node),
 		"rr_mem_used":     fmt.Sprintf(`sum(node_namespace_pod_container:container_memory_working_set_bytes{node=~"%s", container!=""})`, node),
-		"mem_capacity":    fmt.Sprintf(`sum(kube_node_status_capacity{node=~"%s", resource="memory"})`, node),
 		"rr_mem_requests": fmt.Sprintf(`sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{node=~"%s"})`, node),
 		"rr_mem_limits":   fmt.Sprintf(`sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{node=~"%s"})`, node),
 		"rr_mem_rss":      fmt.Sprintf(`sum(node_namespace_pod_container:container_memory_rss{node=~"%s", container!=""})`, node),
 		"rr_mem_cache":    fmt.Sprintf(`sum(node_namespace_pod_container:container_memory_cache{node=~"%s", container!=""})`, node),
 
-		"cpu":    fmt.Sprintf(`100 - (avg by(instance)(rate(node_cpu_seconds_total{mode="idle",instance=~"%s:.*"}[%s])) * 100)`, nodeInstance, rateWin),
-		"memory": fmt.Sprintf(`(1 - node_memory_MemAvailable_bytes{instance=~"%s:.*"} / node_memory_MemTotal_bytes{instance=~"%s:.*"}) * 100`, nodeInstance, nodeInstance),
-		"fs_used": fmt.Sprintf(`(1 - node_filesystem_avail_bytes{instance=~"%s:.*",mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{instance=~"%s:.*",mountpoint="/",fstype!="tmpfs"}) * 100`, nodeInstance, nodeInstance),
+		// Raw cadvisor / kube-state-metrics fallback (works with vanilla Prometheus)
+		"cpu_used":     fmt.Sprintf(`sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[%s]) * on(namespace,pod) group_left() %s)`, rateWin, podOnNode),
+		"cpu_requests": fmt.Sprintf(`sum(kube_pod_container_resource_requests{resource="cpu",container!=""} * on(namespace,pod) group_left() %s)`, podOnNode),
+		"cpu_limits":   fmt.Sprintf(`sum(kube_pod_container_resource_limits{resource="cpu",container!=""} * on(namespace,pod) group_left() %s)`, podOnNode),
+		"mem_used":     fmt.Sprintf(`sum(container_memory_working_set_bytes{container!="",container!="POD"} * on(namespace,pod) group_left() %s)`, podOnNode),
+		"mem_requests": fmt.Sprintf(`sum(kube_pod_container_resource_requests{resource="memory",container!=""} * on(namespace,pod) group_left() %s)`, podOnNode),
+		"mem_limits":   fmt.Sprintf(`sum(kube_pod_container_resource_limits{resource="memory",container!=""} * on(namespace,pod) group_left() %s)`, podOnNode),
+		"mem_rss":      fmt.Sprintf(`sum(container_memory_rss{container!="",container!="POD"} * on(namespace,pod) group_left() %s)`, podOnNode),
+		"mem_cache":    fmt.Sprintf(`sum(container_memory_cache{container!="",container!="POD"} * on(namespace,pod) group_left() %s)`, podOnNode),
+
+		// Always available (kube-state-metrics + node_exporter)
+		"cpu_capacity": fmt.Sprintf(`sum(kube_node_status_capacity{node=~"%s", resource="cpu"})`, node),
+		"mem_capacity": fmt.Sprintf(`sum(kube_node_status_capacity{node=~"%s", resource="memory"})`, node),
+		"cpu":          fmt.Sprintf(`100 - (avg by(instance)(rate(node_cpu_seconds_total{mode="idle",instance=~"%s:.*"}[%s])) * 100)`, nodeInstance, rateWin),
+		"memory":       fmt.Sprintf(`(1 - node_memory_MemAvailable_bytes{instance=~"%s:.*"} / node_memory_MemTotal_bytes{instance=~"%s:.*"}) * 100`, nodeInstance, nodeInstance),
+		"fs_used":      fmt.Sprintf(`(1 - node_filesystem_avail_bytes{instance=~"%s:.*",mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{instance=~"%s:.*",mountpoint="/",fstype!="tmpfs"}) * 100`, nodeInstance, nodeInstance),
 	}
 
 	jGz(w, r, promQueryParallel(queries, startStr, endStr, step))
