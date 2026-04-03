@@ -73,3 +73,14 @@ jobs:
 
       - name: Push chart to GHCR
         run: helm push kube-argus-*.tgz oci://${{ env.REGISTRY }}/manishchaudhary101/charts
+
+      - name: Install oras
+        uses: oras-project/setup-oras@v1
+
+      - name: Push ArtifactHub repo metadata
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+          oras push \
+            ${{ env.REGISTRY }}/manishchaudhary101/charts/kube-argus:artifacthub.io \
+            --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+            deploy/helm/kube-argus/artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
