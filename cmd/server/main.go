@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	_ "golang.org/x/crypto/ssh"
+	"golang.org/x/term"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -26,15 +27,20 @@ var (
 
 func main() {
 	log.SetFlags(0)
-	log.Println("\033[36m" + `
+	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	cyan, bold, uline, reset := "\033[36m", "\033[1m", "\033[4m", "\033[0m"
+	if !isTTY {
+		cyan, bold, uline, reset = "", "", "", ""
+	}
+	log.Println(cyan + `
   _  ___   _ ____  _____      _    ____   ____ _   _ ____
  | |/ / | | | __ )| ____|    / \  |  _ \ / ___| | | / ___|
  | ' /| | | |  _ \|  _|     / _ \ | |_) | |  _| | | \___ \
  | . \| |_| | |_) | |___   / ___ \|  _ <| |_| | |_| |___) |
  |_|\_\\___/|____/|_____| /_/   \_\_| \_\\____|\___/|____/
-` + "\033[0m")
-	log.Println("  \033[1mReal-time Kubernetes Dashboard\033[0m")
-	log.Println("  Created by \033[36mManish Chaudhary\033[0m (\033[4mhttps://github.com/manishchaudhary101\033[0m)")
+` + reset)
+	log.Println("  " + bold + "Real-time Kubernetes Dashboard" + reset)
+	log.Println("  Created by " + cyan + "Manish Chaudhary" + reset + " (" + uline + "https://github.com/manishchaudhary101" + reset + ")")
 	log.Println()
 	log.SetFlags(log.LstdFlags)
 
