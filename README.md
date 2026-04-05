@@ -26,10 +26,6 @@
   Live cluster state, streaming pod logs, just-in-time exec access, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a <strong>single binary</strong> with <strong>zero dependencies</strong>.
 </p>
 
-<p align="center">
-  If you already use Kube-Argus, add yourself as an <a href="https://github.com/manishchaudhary101/kube-argus/issues">adopter</a>!
-</p>
-
 ---
 
 <table>
