@@ -4,6 +4,59 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: "Namespace favorites — star namespaces in the picker, persisted per-user in localStorage"
+        - kind: added
+          description: "CronJob manual trigger — Run Now button with JIT approval workflow for viewers"
+        - kind: added
+          description: "Custom JIT duration — hours/days input up to 7 days max alongside preset durations"
+        - kind: added
+          description: "Pod restart timeline — color-coded scatter chart showing restart events with reasons on pod and workload detail views"
+        - kind: added
+          description: "Init container visibility — all workload types now display init containers with an INIT badge"
+        - kind: fixed
+          description: "JIT restore log moved to DEBUG level to stop spamming INFO logs every 30 seconds"
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: GitHub
+          url: https://github.com/manishchaudhary101/kube-argus
+      artifacthub.io/screenshots: |
+        - title: Cluster Overview — Real-time node and pod status
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png
+        - title: Node Detail — Pod heatmap, conditions, and drain wizard
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-node-detail.png
+        - title: Pod Metrics — Prometheus CPU and memory charts
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-pod-metrics.png
+        - title: Spot Advisor — Cost optimization and instance recommendations
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
+    apiVersion: v2
+    appVersion: 1.2.2
+    created: "2026-04-05T17:46:02.939567289Z"
+    description: Real-time Kubernetes dashboard with live state, cost analysis, and
+      AI-powered diagnostics
+    digest: 115cbcb7f042ae764d2b1c5414ac3df55ff468beafb5b2bdaa494619da7560e0
+    home: https://github.com/manishchaudhary101/kube-argus
+    icon: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/logo.svg
+    keywords:
+    - kubernetes
+    - dashboard
+    - monitoring
+    - sre
+    - jit-access
+    - security
+    maintainers:
+    - email: imanishchaudhary@gmail.com
+      name: manishchaudhary101
+      url: https://github.com/manishchaudhary101
+    name: kube-argus
+    sources:
+    - https://github.com/manishchaudhary101/kube-argus
+    type: application
+    urls:
+    - https://manishchaudhary101.github.io/kube-argus/kube-argus-1.2.2.tgz
+    version: 1.2.2
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: "Structured JSON logging via Go's log/slog — all log output is now machine-readable JSON to stdout"
         - kind: added
           description: "Configurable LOG_LEVEL environment variable (debug, info, warn, error) with case-insensitive parsing"
@@ -28,7 +81,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.1
-    created: "2026-04-05T04:24:57.539804355Z"
+    created: "2026-04-05T17:46:02.938944069Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: a15d2ed0e8ae43acaf9a2de3382c86c76f846e9f8919094d78115fd446db5527
@@ -81,7 +134,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.0
-    created: "2026-04-05T04:24:57.539171321Z"
+    created: "2026-04-05T17:46:02.938282307Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: d89054ea7a2fd00428d0cff5cae73298639402c85a9129fc910bb10fc0be57b6
@@ -105,4 +158,4 @@ entries:
     urls:
     - https://manishchaudhary101.github.io/kube-argus/kube-argus-1.2.0.tgz
     version: 1.2.0
-generated: "2026-04-05T04:24:57.537449531Z"
+generated: "2026-04-05T17:46:02.936642851Z"
