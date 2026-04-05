@@ -95,9 +95,9 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
           ) : (
             <button
               onClick={() => setShowJITModal(true)}
-              className="rounded-lg bg-gradient-to-r from-amber-950/40 to-amber-950/20 border border-amber-900/30 px-3 py-1.5 text-[11px] font-semibold text-neon-amber transition-all hover:shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+              className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-900/20"
             >
-              🔒 Request Access
+              Request Access
             </button>
           )}
         </div>
