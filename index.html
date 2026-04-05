@@ -828,61 +828,58 @@
       </div>
       <div class="card">
         <div class="card-icon">📜</div>
-        <h3>Streaming Logs & Exec</h3>
-        <p>Live pod logs via SSE with follow mode, previous container logs, and browser-based terminal via xterm.js.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🔧</div>
-        <h3>Node Drain Wizard</h3>
-        <p>Safe, guided drains with PDB awareness, eviction preview, and real-time progress streaming.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">💰</div>
-        <h3>Cost Analysis</h3>
-        <p>Namespace cost allocation, spot instance advisor, and resource right-sizing recommendations.</p>
+        <h3>Streaming Logs & Web Shell</h3>
+        <p>Live pod logs via SSE, aggregated workload logs, and browser-based terminal via xterm.js.</p>
       </div>
       <div class="card">
         <div class="card-icon">🤖</div>
-        <h3>AI Diagnostics</h3>
-        <p>LLM-powered root cause analysis for troubled pods. Works with any OpenAI-compatible API.</p>
+        <h3>AI-Powered Diagnostics</h3>
+        <p>LLM root cause analysis for troubled pods. Works with any OpenAI-compatible API.</p>
       </div>
       <div class="card">
-        <div class="card-icon">📝</div>
-        <h3>YAML Editor</h3>
-        <p>View and edit raw YAML for 11 resource types directly from the dashboard with syntax highlighting.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🔗</div>
-        <h3>Dependency Graph</h3>
-        <p>Visual map of Deployments → Services → Ingresses → HPAs → Secrets with config drift detection.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🚨</div>
-        <h3>Troubled Pods Screen</h3>
-        <p>A dedicated, high-signal view of only broken pods — perfect for NOC teams and incident response.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🔑</div>
-        <h3>Just-in-Time Exec Access</h3>
-        <p>Zero-trust shell access — viewers request time-bound exec, admins approve/deny. Workload-scoped,
-          auto-expiring, fully audited.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🔐</div>
-        <h3>SSO & RBAC Built In</h3>
-        <p>Google SSO, any OIDC provider (Okta, Auth0, Keycloak), or no auth. Role-based access out of the box.</p>
+        <div class="card-icon">💰</div>
+        <h3>Spot Advisor & Cost Analysis</h3>
+        <p>Instance risk scoring, namespace cost allocation, and intelligent consolidation recommendations.</p>
       </div>
       <div class="card">
         <div class="card-icon">📊</div>
-        <h3>Prometheus Metrics</h3>
-        <p>Node, pod, and workload CPU/memory charts with selectable time ranges. Compatible with Grafana Cloud and
-          Thanos.</p>
+        <h3>Restart Timeline</h3>
+        <p>Color-coded scatter chart of restart events — OOMKills, probe failures, crash loops — spot patterns at a glance.</p>
       </div>
       <div class="card">
-        <div class="card-icon">👥</div>
-        <h3>Audit Trail & Presence</h3>
-        <p>Full audit log of every admin action. See who's online with live presence indicators and session tracking.
-        </p>
+        <div class="card-icon">�</div>
+        <h3>Node Drain Wizard</h3>
+        <p>Safe, guided drains with PDB awareness, eviction preview, and real-time streaming progress.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">�</div>
+        <h3>Just-in-Time Access</h3>
+        <p>Zero-trust shell and CronJob access. Viewers request, admins approve. Workload-scoped, auto-expiring.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">▶️</div>
+        <h3>CronJob Manual Trigger</h3>
+        <p>Run scheduled jobs on demand. JIT-gated for viewers, instant for admins. Full audit trail.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">�</div>
+        <h3>YAML Editor & Config Drift</h3>
+        <p>View and edit YAML for 11 resource kinds. Detect when pods run stale ConfigMaps or Secrets.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">�</div>
+        <h3>Dependency Graph</h3>
+        <p>Visual map of Deployments → Services → Ingresses → HPAs → Secrets with drift highlighting.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">�</div>
+        <h3>Troubled Pods NOC Screen</h3>
+        <p>Dedicated fullscreen view of broken pods. Put it on a TV and walk away.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔐</div>
+        <h3>SSO, RBAC & Audit Trail</h3>
+        <p>Google SSO, any OIDC provider, role-based access, full audit log, online user presence.</p>
       </div>
     </div>
   </section>
@@ -1025,6 +1022,8 @@
       '"who deleted that pod?" with zero audit trail.',
       'manual kubectl access to the cluster.',
       'scattered logs across multiple terminals.',
+      'switching namespaces 50 times a day.',
+      'running kubectl create job --from=cronjob manually.',
     ];
     const tickerEl = document.getElementById('ticker');
     let phraseIdx = 0;
