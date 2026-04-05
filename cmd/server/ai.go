@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -40,7 +40,7 @@ func initLLM() {
 	llmGatewayKey = os.Getenv("LLM_GATEWAY_KEY")
 	llmGatewayModel = os.Getenv("LLM_GATEWAY_MODEL")
 	if llmGatewayURL == "" {
-		log.Println("ai: LLM_GATEWAY_URL not set — AI features disabled")
+		slog.Info("ai: LLM_GATEWAY_URL not set, AI features disabled")
 		return
 	}
 	// Extract model from ?model= query param if not set via env
@@ -57,7 +57,7 @@ func initLLM() {
 		}
 	}
 	aiEnabled = true
-	log.Printf("ai: LLM Gateway configured (url=%s model=%s)", llmGatewayURL, llmGatewayModel)
+	slog.Info("ai: LLM Gateway configured", "url", llmGatewayURL, "model", llmGatewayModel)
 }
 
 func aiRateOK() bool {
@@ -108,7 +108,7 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 	}
 	reqBody, _ := json.Marshal(payload)
 
-	log.Printf("ai: POST %s (model=%s, body_len=%d)", llmGatewayURL, llmGatewayModel, len(reqBody))
+	slog.Debug("ai: POST request", "url", llmGatewayURL, "model", llmGatewayModel, "body_len", len(reqBody))
 
 	req, err := http.NewRequest("POST", llmGatewayURL, bytes.NewReader(reqBody))
 	if err != nil {
@@ -123,7 +123,7 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("ai: llm gateway error: %v", err)
+		slog.Error("ai: llm gateway error", "error", err)
 		http.Error(w, fmt.Sprintf(`{"error":"LLM Gateway error: %s"}`, err.Error()), 502)
 		return
 	}
@@ -131,7 +131,7 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		log.Printf("ai: llm gateway returned %d: %s (url=%s)", resp.StatusCode, string(bodyBytes), llmGatewayURL)
+		slog.Error("ai: llm gateway returned non-200", "status", resp.StatusCode, "body", string(bodyBytes), "url", llmGatewayURL)
 		http.Error(w, fmt.Sprintf(`{"error":"LLM Gateway returned %d"}`, resp.StatusCode), 502)
 		return
 	}

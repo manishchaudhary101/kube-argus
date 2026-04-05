@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"sort"
@@ -60,18 +60,18 @@ func detectRegion() string {
 func (s *spotAdvisorData) refresh() {
 	region := detectRegion()
 	if region == "" {
-		log.Println("spot-advisor: could not detect region, skipping")
+		slog.Warn("spot-advisor: could not detect region, skipping")
 		return
 	}
 
 	resp, err := http.Get("https://spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json")
 	if err != nil {
-		log.Printf("spot-advisor: fetch failed: %v", err)
+		slog.Error("spot-advisor: fetch failed", "error", err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		log.Printf("spot-advisor: HTTP %d", resp.StatusCode)
+		slog.Error("spot-advisor: unexpected HTTP status", "status", resp.StatusCode)
 		return
 	}
 
@@ -80,7 +80,7 @@ func (s *spotAdvisorData) refresh() {
 		SpotAdvisor   map[string]map[string]map[string]spotAdvisorEntry `json:"spot_advisor"` // region -> OS -> type -> entry
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		log.Printf("spot-advisor: decode failed: %v", err)
+		slog.Error("spot-advisor: decode failed", "error", err)
 		return
 	}
 
@@ -137,7 +137,7 @@ func (s *spotAdvisorData) refresh() {
 				}
 				out, err := ec2Client.DescribeSpotPriceHistory(input)
 				if err != nil {
-					log.Printf("spot-advisor: price fetch failed: %v", err)
+					slog.Warn("spot-advisor: price fetch failed", "error", err)
 					return
 				}
 				for _, sp := range out.SpotPriceHistory {
@@ -161,7 +161,7 @@ func (s *spotAdvisorData) refresh() {
 	s.region = region
 	s.lastRefresh = time.Now()
 	s.mu.Unlock()
-	log.Printf("spot-advisor: loaded %d entries for %s, %d prices", len(entries), region, len(spotPrices))
+	slog.Info("spot-advisor: loaded data", "entries", len(entries), "region", region, "prices", len(spotPrices))
 }
 
 func parseInstanceType(instanceType string) (baseChar string, gen int, suffix string, size string) {

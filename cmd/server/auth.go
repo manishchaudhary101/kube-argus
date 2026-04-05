@@ -9,7 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -60,7 +60,7 @@ func envWithFallback(primary, legacy string) string {
 func loadSecretsFromAWS() {
 	secretName := os.Getenv("AWS_SECRET_NAME")
 	if secretName == "" {
-		log.Println("AWS_SECRET_NAME not set — skipping Secrets Manager")
+		slog.Info("AWS_SECRET_NAME not set, skipping Secrets Manager")
 		return
 	}
 	region := os.Getenv("AWS_REGION")
@@ -73,7 +73,7 @@ func loadSecretsFromAWS() {
 
 	sess, err := session.NewSession(&aws.Config{Region: aws.String(region)})
 	if err != nil {
-		log.Printf("AWS session init failed (secrets won't load from SM): %v", err)
+		slog.Warn("AWS session init failed, secrets won't load from SM", "error", err)
 		return
 	}
 	svc := secretsmanager.New(sess)
@@ -81,17 +81,17 @@ func loadSecretsFromAWS() {
 		SecretId: aws.String(secretName),
 	})
 	if err != nil {
-		log.Printf("Failed to fetch secret %q: %v", secretName, err)
+		slog.Error("failed to fetch secret", "secret", secretName, "error", err)
 		return
 	}
 	if result.SecretString == nil {
-		log.Printf("Secret %q has no string value", secretName)
+		slog.Warn("secret has no string value", "secret", secretName)
 		return
 	}
 
 	var secrets map[string]string
 	if err := json.Unmarshal([]byte(*result.SecretString), &secrets); err != nil {
-		log.Printf("Failed to parse secret JSON: %v", err)
+		slog.Error("failed to parse secret JSON", "error", err)
 		return
 	}
 
@@ -103,7 +103,7 @@ func loadSecretsFromAWS() {
 			loaded++
 		}
 	}
-	log.Printf("Loaded %d auth secrets from AWS Secrets Manager (%s)", loaded, secretName)
+	slog.Info("loaded auth secrets from AWS Secrets Manager", "count", loaded, "secret", secretName)
 }
 
 func initAuth() {
@@ -166,7 +166,7 @@ func initAuth() {
 	default:
 		authMode = "none"
 		authEnabled = false
-		log.Printf("Auth mode: none (no login required, default role: %s)", defaultRole)
+		slog.Info("auth mode: none", "default_role", defaultRole)
 		return
 	}
 
@@ -178,7 +178,7 @@ func initAuth() {
 		b := make([]byte, 32)
 		rand.Read(b)
 		sessionKey = b
-		log.Println("SESSION_SECRET not set, generated random key (sessions won't survive restarts)")
+		slog.Warn("SESSION_SECRET not set, generated random key (sessions won't survive restarts)")
 	} else {
 		var err error
 		sessionKey, err = hex.DecodeString(secret)
@@ -192,7 +192,8 @@ func initAuth() {
 	var err error
 	oidcProvider, err = oidc.NewProvider(ctx, issuer)
 	if err != nil {
-		log.Fatalf("OIDC provider init failed: %v", err)
+		slog.Error("OIDC provider init failed", "error", err)
+		os.Exit(1)
 	}
 
 	oauthConfig = &oauth2.Config{
@@ -204,7 +205,7 @@ func initAuth() {
 
 	oidcVerifier = oidcProvider.Verifier(&oidc.Config{ClientID: clientID})
 	authEnabled = true
-	log.Printf("Auth mode: %s (issuer=%s)", authMode, issuer)
+	slog.Info("auth mode configured", "mode", authMode, "issuer", issuer)
 }
 
 func signSession(sd sessionData) (string, error) {
@@ -347,7 +348,7 @@ func authCallback(w http.ResponseWriter, r *http.Request) {
 
 	sd := sessionData{Email: claims.Email, Role: role, Exp: time.Now().Add(sessionTTL).Unix()}
 	setSessionCookie(w, sd)
-	log.Printf("auth: %s logged in as %s", claims.Email, role)
+	slog.Info("auth: user logged in", "email", claims.Email, "role", role)
 	auditRecord(claims.Email, role, "login", "", "role: "+role, clientIP(r))
 
 	redirectTo := "/"

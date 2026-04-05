@@ -1,13 +1,36 @@
-# Kube-Argus
+<p align="center">
+  <img src="docs/logo.svg" alt="Kube-Argus Logo" width="120">
+</p>
 
-**The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.** Live cluster state, streaming pod logs, just-in-time exec access, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a single binary with zero dependencies.
+<h1 align="center">Kube-Argus</h1>
+<h3 align="center">Real-time Kubernetes Dashboard</h3>
+<p align="center">A Project by <a href="https://github.com/manishchaudhary101">Manish Chaudhary</a></p>
 
-[![CI](https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml/badge.svg)](https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml)
-![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
-![License](https://img.shields.io/badge/License-Apache%202.0-blue)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24+-326CE5?logo=kubernetes&logoColor=white)
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kube-argus)](https://artifacthub.io/packages/search?repo=kube-argus)
+<p align="center">
+  <a href="https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml"><img src="https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml/badge.svg" alt="build"></a>
+  <a href="https://github.com/manishchaudhary101/kube-argus/releases/latest"><img src="https://img.shields.io/github/v/release/manishchaudhary101/kube-argus?color=green&label=release" alt="release"></a>
+  <a href="https://github.com/manishchaudhary101/kube-argus/commits/master"><img src="https://img.shields.io/github/last-commit/manishchaudhary101/kube-argus?color=blue&label=last%20commit" alt="last commit"></a>
+  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React">
+  <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="License">
+  <img src="https://img.shields.io/badge/Kubernetes-1.24+-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes">
+  <a href="https://artifacthub.io/packages/search?repo=kube-argus"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kube-argus" alt="Artifact Hub"></a>
+  <a href="https://github.com/manishchaudhary101/kube-argus/pkgs/container/kube-argus"><img src="https://img.shields.io/badge/GHCR-image-blue?logo=docker&logoColor=white" alt="Docker Image"></a>
+  <a href="https://github.com/manishchaudhary101/kube-argus/stargazers"><img src="https://img.shields.io/github/stars/manishchaudhary101/kube-argus?style=flat&color=yellow" alt="GitHub Stars"></a>
+  <a href="https://github.com/manishchaudhary101/kube-argus/issues"><img src="https://img.shields.io/github/issues/manishchaudhary101/kube-argus" alt="Issues"></a>
+  <img src="https://img.shields.io/github/repo-size/manishchaudhary101/kube-argus?color=orange&label=code%20size" alt="code size">
+  <a href="https://github.com/manishchaudhary101/kube-argus/blob/master/LICENSE"><img src="https://img.shields.io/badge/license%20scan-passing-brightgreen?logo=fossa" alt="license scan"></a>
+</p>
+
+<p align="center">
+  Live cluster state, streaming pod logs, just-in-time exec access, interactive shell, YAML editor, drain wizard, cost analysis, and AI-powered diagnostics — in a <strong>single binary</strong> with <strong>zero dependencies</strong>.
+</p>
+
+<p align="center">
+  If you already use Kube-Argus, add yourself as an <a href="https://github.com/manishchaudhary101/kube-argus/issues">adopter</a>!
+</p>
+
+---
 
 <table>
 <tr>
@@ -40,176 +63,174 @@
 
 ## Why Kube-Argus?
 
-Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, real-time operating picture** of your cluster — what's **happening now**, what it **costs**, and how to **fix** it — with the same immediacy as k9s, but in a web UI you can share with your team and put on a wall screen.
+Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, real-time operating picture** of your cluster — what's happening now, what it costs, and how to fix it — with the same immediacy as k9s, but in a web UI you can share with your team.
 
-### Lightweight & fast
+### Key Features
 
-- **Single binary (~20 MB)** — one Go binary serves the API and the pre-built React frontend; nothing else to install
-- **~30 MB Docker image** — Alpine-based, multi-arch (amd64 + arm64), starts in under a second
-- **Zero dependencies** — no database, no CRDs, no operators, no agents on worker nodes, no metrics-server requirement
-- **Minimal cluster load** — one cached API call per 10-second cycle regardless of how many users are connected; 100 users don't mean 100x API load
-- **Deploys in under a minute** — `helm install` or `kubectl apply` and you're running
-- **Low resource footprint** — runs comfortably on 100m CPU / 128Mi memory
+- 💡 **Single binary (~20 MB)** — one Go binary serves the API and React frontend; ~30 MB Docker image
+- ⚡ **10-second auto-refresh** — every view updates automatically, no manual reload
+- 🔒 **Zero dependencies** — no database, no CRDs, no operators, no agents on worker nodes
+- 📊 **Prometheus metrics** — node, pod, and workload metrics with selectable time ranges
+- 🤖 **AI-powered diagnosis** — LLM-powered pod troubleshooting with streaming responses
+- 💰 **Cost analysis** — spot instance risk scoring, namespace cost allocation, consolidation recommendations
+- 🖥️ **Interactive web shell** — exec into any pod over WebSocket with full terminal
+- 📋 **YAML editor** — view and edit raw YAML for 11 resource kinds
+- 🔐 **JIT exec access** — zero-trust shell access with approval workflow and auto-expiry
+- 📝 **Audit trail** — track logins, pod deletions, scaling actions, exec sessions
 
-### Built for real-time operations
-
-- **10-second auto-refresh** — every view updates automatically, no manual reload
-- **Live log streaming** — tail pod logs in real-time via Server-Sent Events, with container selector and init container support
-- **Aggregated workload logs** — stream logs from all pods of a Deployment/StatefulSet/DaemonSet into one color-coded view
-- **Interactive web shell** — exec into any pod over WebSocket, full xterm.js terminal in the browser
-- **Pod sparklines** — inline CPU/MEM trend charts in the pods table, updated every 10 seconds
-- **Instant action feedback** — cordon, drain, restart, scale, and delete trigger immediate cache refresh so you see the result in seconds, not minutes
-- **Streaming AI diagnosis** — LLM responses stream token-by-token as they're generated
-- **Troubled pods view with fullscreen mode** — dedicated NOC screen for wall-mounted monitors showing CrashLoopBackOff, OOMKilled, Pending pods live
-- **Drain wizard** — preview affected pods with PDB awareness before draining, with real-time SSE streaming progress
-- **YAML viewer/editor** — view and edit raw YAML for 11 resource kinds directly from the dashboard
-- **Config drift detection** — identify pods running stale ConfigMaps/Secrets after changes
-
-### Feature comparison
-
-| Capability | Kube-Argus | K8s Dashboard | Lens | Headlamp | k9s |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Single binary, zero dependencies | **Yes** | Needs metrics-server | Desktop app | Needs plugins | Terminal app |
-| Docker image size | **~30 MB** | ~250 MB | ~500 MB | ~200 MB | N/A |
-| Startup time | **< 1s** | ~10s | ~5s | ~5s | < 1s |
-| Per-user API load | **None (shared cache)** | Per-user | Per-user | Per-user | Per-user |
-| Live auto-refresh (10s cycle) | **Yes** | Manual | Yes | Yes | **Yes** |
-| Streaming pod logs (SSE) | **Yes** | — | Yes | Yes | **Yes** |
-| Web terminal (exec into pods) | **Yes** | — | Yes | Yes | Terminal-native |
-| Spot instance cost analysis & consolidation | **Yes** | — | — | — | — |
-| AI-powered pod diagnosis (any LLM) | **Yes** | — | — | — | — |
-| Resource right-sizing recommendations | **Yes** | — | — | — | — |
-| Topology spread constraint validation | **Yes** | — | — | — | — |
-| Namespace-level cost allocation | **Yes** | — | — | — | — |
-| Prometheus metrics (node, pod, workload) | **Yes** | — | Partial | — | — |
-| Workload dependency graph | **Yes** | — | — | — | — |
-| PDB status inline on workloads | **Yes** | — | — | — | — |
-| Drain wizard with PDB preview & streaming | **Yes** | — | — | — | — |
-| YAML view/edit (11 resource kinds) | **Yes** | — | Yes | Yes | **Yes** |
-| Config drift detection | **Yes** | — | — | — | — |
-| Pod sparklines (CPU/MEM trends) | **Yes** | — | — | — | — |
-| Aggregated workload logs | **Yes** | — | — | — | — |
-| Storage dashboard (PVC/PV/StorageClass) | **Yes** | Partial | Yes | Partial | **Yes** |
-| Just-in-Time exec access (approval workflow) | **Yes** | — | — | — | — |
-| Audit trail & online users | **Yes** | — | — | — | — |
-| Node pod heatmap (noisy neighbors) | **Yes** | — | — | — | — |
-| Spot interruption resilience scoring | **Yes** | — | — | — | — |
-| Troubled pods / NOC screen mode | **Yes** | — | — | — | — |
-| Web-based (sharable, no install) | **Yes** | Yes | No | Yes | No |
-| Open source (Apache 2.0) | **Yes** | Yes | Freemium | Yes | Yes |
-
-**In short**: Kube-Argus gives you k9s-level real-time visibility in a web UI, plus cost optimisation and AI diagnostics — all in a ~30 MB image that deploys in under a minute with no CRDs, no databases, no agents.
-
-### Works on
+### Works On
 
 | Platform | Support Level | Notes |
 |----------|:---:|---|
-| **Amazon EKS** | Full | All features including Spot Advisor, cost analysis, and spot interruption tracking |
-| **Google GKE** | Core + Metrics | All features except Spot Advisor (GCP Spot VMs use different APIs) |
-| **Azure AKS** | Core + Metrics | All features except Spot Advisor (Azure Spot VMs use different APIs) |
-| **Minikube / kind / k3s** | Core | All features except cloud-specific cost analysis and spot features |
-| **Self-managed / on-prem** | Core + Metrics | Full functionality with Prometheus; no cloud cost features |
-
-> Spot Advisor and cost analysis are currently EKS-specific. Cloud-agnostic support for GCP and Azure spot instances is on the roadmap.
+| **Amazon EKS** | Full | All features including Spot Advisor and cost analysis |
+| **Google GKE** | Core + Metrics | All features except Spot Advisor |
+| **Azure AKS** | Core + Metrics | All features except Spot Advisor |
+| **Minikube / kind / k3s** | Core | All features except cloud-specific cost analysis |
+| **Self-managed / on-prem** | Core + Metrics | Full functionality with Prometheus |
 
 ---
 
-## Features
+## Getting Started
 
-### Cluster Overview
-- **Live cluster state refreshed every 10 seconds** — no manual reload needed
-- Node status (Ready, NotReady, Draining, Cordoned) with k9s-style transitions
-- Cluster-wide CPU and memory utilisation at a glance
-- Warning counts and top resource consumers by namespace
+### Prerequisites
 
-### Node Management
-- All nodes with status, instance type, capacity, allocatable resources, and age
-- Click any node for `kubectl describe`-style detail with live events (Karpenter, spot interruptions, drain failures)
-- **Drain wizard** — preview which pods will be evicted, check PDB budgets, and stream progress in real-time
-- **Pod heatmap** — "noisy neighbors" visualization showing per-pod resource usage on a node
-- **Admin actions**: cordon, uncordon, drain — with instant feedback
-- Per-node Prometheus metrics: CPU, memory, disk, and network
+- Access to a Kubernetes cluster (kubeconfig or in-cluster)
+- (Optional) Prometheus endpoint for metrics
+- (Optional) OIDC provider for authentication
 
-### Workloads
-- Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs in one filterable view
-- **Restart and scale** directly from the workload detail page
-- **Aggregated logs** — stream logs from all pods of a workload in one color-coded view
-- ReplicaSet history (last 5) inside Deployments
-- Rolling update strategy details (maxSurge, maxUnavailable, partition)
-- PodDisruptionBudget (PDB) status badges inline on workload rows
-- Prometheus CPU and memory metrics with selectable time ranges (1h, 6h, 12h, 24h)
-- Resource right-sizing recommendations based on 7-day average usage
-- Interactive dependency graph with **config drift** detection (stale ConfigMaps/Secrets highlighted)
+### With Docker Compose (easiest)
 
-### Pod Management
-- All pods with phase, restarts, resource usage bars, and node placement
-- **Table and card views** with search, status filters, owner filters, and sortable columns
-- **Pod sparklines** — inline CPU/MEM trend charts updated every 10 seconds
-- **Owner navigation** — click through from pod to parent Deployment/StatefulSet/DaemonSet
-- **Live log streaming** with container selector (including init containers)
-- **Previous container logs** — view logs from crashed/restarted containers
-- **Interactive web shell** — exec into any pod directly from the browser
-- **AI-powered diagnosis** for unhealthy pods (streams response in real-time)
-- Health probe details (liveness, readiness, startup) and last termination info
-- Per-pod CPU and memory metrics
+```bash
+docker compose up
+```
 
-### Networking
-- Services (ClusterIP, NodePort, LoadBalancer) with ports and selectors
-- Ingress rules with hosts, paths, TLS status, and backend services
+Open http://localhost:8080. Edit `docker-compose.yaml` to configure auth, Prometheus, or AI.
 
-### Storage
-- **PersistentVolumeClaims** with status, capacity, StorageClass, and bound PV details
-- **PersistentVolumes** with reclaim policy and capacity
-- **StorageClasses** with provisioner and parameters
-- Expandable rows showing pod-to-PVC mapping
+### With Helm
 
-### Configuration
-- ConfigMaps and Secrets with last-modified timestamps
-- **Config drift detection** — identify when a ConfigMap or Secret has been modified but pods are still running the old version
-- Data key inspection (Secrets are masked)
+```bash
+helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus
+helm install kube-argus kube-argus/kube-argus \
+  --namespace kube-argus --create-namespace \
+  --set env.CLUSTER_NAME="my-cluster"
+```
 
-### Cost & Optimisation
-- **Spot Advisor**: Spot instance risk analysis with intelligent consolidation suggestions
-- **Cost Allocation**: Namespace-level and nodepool-level cost breakdown
-- **Total Cluster Cost**: Aggregated cost panel
+<details>
+<summary>Alternative: OCI registry (no <code>helm repo add</code> needed)</summary>
 
-### Topology Spread Analysis
-- Validates workloads against their topologySpreadConstraints
-- Shows violations grouped by topology key (zone, hostname, instance-type)
-- Distinguishes soft (ScheduleAnyway) vs hard (DoNotSchedule) constraints
+```bash
+helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
+  --namespace kube-argus --create-namespace \
+  --set env.CLUSTER_NAME="my-cluster"
+```
+</details>
 
-### Troubled Pods (NOC Screen)
-- Non-running pods (CrashLoopBackOff, ImagePullBackOff, Pending, OOMKilled) in one dedicated view
-- **Spot interruptions** — track disruption events with per-reason filtering
-- **Pod resilience scoring** — workload resilience scores (0-100) with deductions for single replica, zone, node, and disruptions
-- **Fullscreen mode** designed for wall-mounted NOC/SRE monitoring screens
-- Auto-refreshes — put it on a TV and walk away
+### With plain manifests
 
-### YAML Viewer/Editor
-- View raw YAML for 11 resource kinds (Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, Services, Ingresses, ConfigMaps, Secrets, HPAs)
-- **Edit and apply** changes directly from the dashboard (admin only)
-- Syntax highlighting and copy-to-clipboard
-- managedFields auto-stripped for readability
+```bash
+kubectl apply -f deploy/k8s/
+```
 
-### Events
-- Cluster events filtered by namespace with type, reason, source, and message
+### Local Development
 
-### Just-in-Time (JIT) Exec Access
-- **Zero-trust shell access** — viewers request time-bound exec access, admins approve/deny from the dashboard
-- **Workload-scoped grants** — access is scoped to the Deployment/StatefulSet/DaemonSet, not individual pods
-- **Admin notification badge** — amber badge on admin avatar shows pending request count at a glance
-- **Auto-expiring access** — approved grants expire after the requested duration; pending requests expire after 48h
-- **ConfigMap persistence** — JIT state survives restarts and is shared across replicas (no database required)
-- **Full audit trail** — every JIT action (request, approve, deny, revoke, expire) is recorded
+```bash
+git clone https://github.com/manishchaudhary101/kube-argus.git
+cd kube-argus
+cd web && npm install && npm run build && cd ..
+go run ./cmd/server
+```
 
-### Security & Observability
-- **Three auth modes**: Google SSO, generic OIDC (Okta, Auth0, Keycloak, Azure AD, Dex), or no login
-- Role-based access: admin vs viewer (via OIDC groups or email allowlist)
-- **Just-in-Time exec access** — viewers must request and get admin approval for shell access (see above)
-- **Audit trail** — track logins, logouts, pod deletions, scaling actions, exec sessions, JIT approvals, and YAML edits
-- **Online users** — see who's currently viewing the dashboard with presence indicators
-- Session cookies with HMAC signing
-- Container runs as non-root (`USER nobody`)
+---
+
+## Configuration
+
+All configuration is via environment variables. No config files to manage.
+
+### Core
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | HTTP listen port |
+| `CLUSTER_NAME` | auto-detected | Display name for the cluster |
+| `LOG_LEVEL` | `info` | Minimum log level (`debug`, `info`, `warn`, `error`) |
+
+### Authentication
+
+Auth mode is auto-detected from which env vars you set:
+
+| Mode | When | Login screen |
+|------|------|-------------|
+| **Google SSO** | `GOOGLE_CLIENT_ID` is set | "Sign in with Google" button |
+| **Generic OIDC** | `OIDC_ISSUER` is set | "Sign in with SSO" button |
+| **None** | Neither set | No login wall, everyone gets `DEFAULT_ROLE` |
+
+<details>
+<summary>Authentication variables</summary>
+
+#### Google SSO
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_CLIENT_ID` | Google OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth2 client secret |
+
+#### Generic OIDC
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OIDC_ISSUER` | — | OIDC issuer URL |
+| `OIDC_CLIENT_ID` | — | OAuth2 client ID |
+| `OIDC_CLIENT_SECRET` | — | OAuth2 client secret |
+| `OIDC_ADMIN_GROUP` | `admin` | OIDC group claim that grants admin role |
+
+#### Roles & Session
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ADMIN_EMAILS` | — | Comma-separated admin email addresses |
+| `DEFAULT_ROLE` | `viewer` | Role when auth is disabled: `viewer` or `admin` |
+| `SESSION_SECRET` | random | HMAC key for session cookies |
+| `SESSION_TTL` | `8h` | Session duration |
+
+</details>
+
+### Integrations
+
+<details>
+<summary>Prometheus, AI, JIT, and AWS variables</summary>
+
+#### Prometheus Metrics
+
+| Variable | Description |
+|----------|-------------|
+| `PROMETHEUS_URL` | Prometheus base URL (Grafana Cloud URLs auto-detected) |
+| `PROMETHEUS_USER` | Basic auth username |
+| `PROMETHEUS_KEY` | Basic auth password/API key |
+
+#### AI Diagnosis
+
+| Variable | Description |
+|----------|-------------|
+| `LLM_GATEWAY_URL` | OpenAI-compatible chat completions endpoint |
+| `LLM_GATEWAY_KEY` | Bearer token for the LLM API |
+| `LLM_GATEWAY_MODEL` | Model name (e.g. `gpt-4o`, `claude-3`) |
+
+#### JIT Exec Access
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JIT_CONFIGMAP_NAME` | `kube-argus-jit` | ConfigMap name for JIT requests |
+| `AUDIT_CONFIGMAP_NAME` | `kube-argus-audit` | ConfigMap name for audit trail |
+| `JIT_RETENTION_DAYS` | `7` | Days to keep terminal JIT requests |
+
+#### AWS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AWS_SECRET_NAME` | — | AWS Secrets Manager secret ID |
+| `AWS_REGION` | `us-east-1` | AWS region |
+
+</details>
 
 ---
 
@@ -234,258 +255,116 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 └──────────────────────────────────────────────┘
 ```
 
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Recharts
-- **Backend**: Go with client-go, single binary, in-memory cache with configurable poll interval
-- **Metrics**: Prometheus API (compatible with Grafana Cloud, Thanos, vanilla Prometheus)
-- **Auth**: OIDC/OAuth2 (any compliant provider)
-- **AI**: Any OpenAI-compatible chat completion API (optional)
-- **Secrets**: AWS Secrets Manager (optional) or direct environment variables
-
----
-
-## Quick Start
-
-### Prerequisites
-- Go 1.25+
-- Node.js 20+
-- Access to a Kubernetes cluster (kubeconfig or in-cluster)
-- (Optional) Prometheus endpoint for metrics
-- (Optional) OIDC provider for authentication
-
-### Local Development
-
-```bash
-# Clone the repository
-git clone https://github.com/manishchaudhary101/kube-argus.git
-cd kube-argus
-
-# Build the frontend
-cd web && npm install && npm run build && cd ..
-
-# Run the backend (uses ~/.kube/config by default)
-go run ./cmd/server
-```
-
-Open http://localhost:8080.
-
-### With Docker Compose (easiest for local eval)
-
-```bash
-docker compose up
-```
-
-This uses the pre-built image from GHCR, mounts your kubeconfig, and starts the dashboard on http://localhost:8080. Edit `docker-compose.yaml` to configure auth, Prometheus, or AI diagnosis.
-
-### With Docker
-
-```bash
-docker build -t kube-argus .
-docker run -p 8080:8080 \
-  -v ~/.kube/config:/home/nobody/.kube/config:ro \
-  kube-argus
-```
-
-### On Kubernetes (Helm)
-
-```bash
-helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus
-helm install kube-argus kube-argus/kube-argus \
-  --namespace kube-argus --create-namespace \
-  --set env.CLUSTER_NAME="my-cluster"
-```
-
-To customise, download the default values and edit:
-
-```bash
-helm show values kube-argus/kube-argus > values.yaml
-# Edit values.yaml, then:
-helm install kube-argus kube-argus/kube-argus \
-  --namespace kube-argus --create-namespace \
-  -f values.yaml
-```
-
-<details>
-<summary>Alternative: install via OCI registry (no <code>helm repo add</code> needed)</summary>
-
-```bash
-helm install kube-argus oci://ghcr.io/manishchaudhary101/charts/kube-argus \
-  --namespace kube-argus --create-namespace \
-  --set env.CLUSTER_NAME="my-cluster"
-```
-</details>
-
-### On Kubernetes (plain manifests)
-
-```bash
-kubectl apply -f deploy/k8s/
-```
-
----
-
-## Configuration
-
-All configuration is via environment variables. No config files to manage.
-
-### Core
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PORT` | No | `8080` | HTTP listen port |
-| `CLUSTER_NAME` | No | auto-detected | Display name for the cluster |
-| `KUBECONFIG` | No | `~/.kube/config` | Path to kubeconfig (ignored when running in-cluster) |
-
-### Authentication
-
-Auth mode is **auto-detected** from which env vars you set:
-
-| Mode | When | Login screen |
-|------|------|-------------|
-| **Google SSO** | `GOOGLE_CLIENT_ID` is set | "Sign in with Google" button |
-| **Generic OIDC** | `OIDC_ISSUER` is set | "Sign in with SSO" button |
-| **None** | Neither set | No login wall, everyone gets `DEFAULT_ROLE` |
-
-#### Option A: Google SSO (simplest)
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GOOGLE_CLIENT_ID` | Yes | — | Google OAuth2 client ID ([console.cloud.google.com](https://console.cloud.google.com/apis/credentials)) |
-| `GOOGLE_CLIENT_SECRET` | Yes | — | Google OAuth2 client secret |
-
-Set the authorized redirect URI in Google Cloud Console to `https://YOUR_DOMAIN/auth/callback`.
-
-#### Option B: Generic OIDC (any provider)
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OIDC_ISSUER` | Yes | — | OIDC issuer URL (e.g. `https://your-org.okta.com/oauth2/default`) |
-| `OIDC_CLIENT_ID` | Yes | — | OAuth2 client ID |
-| `OIDC_CLIENT_SECRET` | Yes | — | OAuth2 client secret |
-| `OIDC_ADMIN_GROUP` | No | `admin` | OIDC group claim value that grants admin role |
-
-> **Note**: Legacy `OKTA_*` env var names are still supported for backward compatibility.
-
-#### Option C: No Login
-
-Leave all auth env vars blank. Everyone gets `DEFAULT_ROLE` (default: `viewer`). Suitable for local dev or trusted networks.
-
-#### Roles & Access
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ADMIN_EMAILS` | No | — | Comma-separated admin email addresses (works with any auth mode) |
-| `DEFAULT_ROLE` | No | `viewer` | Role when auth is disabled: `viewer` or `admin` |
-| `SESSION_SECRET` | No | random | HMAC key for session cookies (hex-encoded recommended) |
-| `SESSION_TTL` | No | `8h` | Session duration (Go duration format: `1h`, `30m`, `24h`) |
-| `INSECURE_COOKIE` | No | `false` | Set to `true` for HTTP-only dev environments |
-| `CORS_ORIGIN` | No | `*` | Allowed CORS origin (set to your dashboard URL in production) |
-
-Admin access (pod delete, exec, scale) is granted when **any** of these match:
-1. User's email is in `ADMIN_EMAILS`
-2. User's OIDC group matches `OIDC_ADMIN_GROUP`
-3. Auth is disabled and `DEFAULT_ROLE=admin`
-
-### Prometheus Metrics
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PROMETHEUS_URL` | No | — | Prometheus base URL. Grafana Cloud URLs (`*.grafana.net`) get `/api/prom` auto-appended |
-| `PROMETHEUS_USER` | No | — | Basic auth username (for Grafana Cloud or protected Prometheus) |
-| `PROMETHEUS_KEY` | No | — | Basic auth password/API key |
-
-### AI Diagnosis (Optional)
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `LLM_GATEWAY_URL` | No | — | OpenAI-compatible chat completions endpoint |
-| `LLM_GATEWAY_KEY` | No | — | Bearer token for the LLM API |
-| `LLM_GATEWAY_MODEL` | No | — | Model name (e.g. `gpt-4o`, `claude-3`) |
-
-### Just-in-Time (JIT) Exec Access
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `JIT_CONFIGMAP_NAME` | No | `kube-argus-jit` | ConfigMap name for persisting JIT requests |
-| `AUDIT_CONFIGMAP_NAME` | No | `kube-argus-audit` | ConfigMap name for persisting audit trail |
-| `JIT_RETENTION_DAYS` | No | `7` | Days to keep terminal JIT requests before auto-cleanup |
-| `POD_NAMESPACE` | No | auto-detected | Namespace for JIT/audit ConfigMaps (set automatically via Downward API in Helm) |
-
-When deployed via Helm with `jit.persistence.enabled: true` (default), these environment variables are automatically configured. The ConfigMaps are created on first write — no manual setup required.
-
-### AWS Integration (Optional)
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `AWS_SECRET_NAME` | No | — | AWS Secrets Manager secret ID to load config from |
-| `AWS_REGION` | No | `us-east-1` | AWS region for Secrets Manager and EC2 spot pricing |
-
-When `AWS_SECRET_NAME` is set, the app loads config values from Secrets Manager at startup. Any env var already set takes precedence. The secret should be a JSON object with keys matching the env var names above.
-
 ---
 
 ## Cluster Impact
 
-Kube-Argus is designed to be lightweight despite its real-time nature:
-- **Cached**: All K8s list operations are cached in-memory, refreshed every **10 seconds** server-side
-- **Multi-batch refresh**: Cache loads in 3 sequential batches — overview renders after batch 1, no waiting for all resources
-- **Single connection**: One set of API calls per refresh cycle, **not per-user** — 100 users don't mean 100x API load
-- **Gzip compression**: All API responses are automatically compressed via middleware
-- **Read-only**: No write operations to the K8s API (except admin actions: cordon, drain, scale, restart, delete, exec, YAML edit)
-- **No CRDs**: No custom resources or operators needed
-- **No agents**: Nothing deployed to worker nodes
-- **Prometheus**: Standard PromQL range queries, no recording rules required (but supported)
+- **Cached**: All K8s list operations cached in-memory, refreshed every 10 seconds server-side
+- **Single connection**: One set of API calls per refresh cycle, not per-user
+- **No CRDs, no agents**: Nothing deployed to worker nodes
+- **Low footprint**: Runs on 100m CPU / 128Mi memory
 
 ---
 
-## RBAC
+## Feature Comparison
 
-The service account needs the following permissions:
+| Capability | Kube-Argus | K8s Dashboard | Lens | Headlamp | k9s |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Single binary, zero deps | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Docker image size | ~30 MB | ~250 MB | ~500 MB | ~200 MB | N/A |
+| Shared cache (no per-user load) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Live auto-refresh | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Streaming pod logs | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Web terminal (exec) | ✅ | ❌ | ✅ | ✅ | Native |
+| Spot cost analysis & consolidation | ✅ | ❌ | ❌ | ❌ | ❌ |
+| AI-powered pod diagnosis | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Resource right-sizing | ✅ | ❌ | ❌ | ❌ | ❌ |
+| JIT exec access (approval workflow) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Audit trail & online users | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Config drift detection | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Drain wizard with PDB preview | ✅ | ❌ | ❌ | ❌ | ❌ |
+| NOC/wall screen mode | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Web-based (sharable) | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Open source (Apache 2.0) | ✅ | ✅ | Freemium | ✅ | ✅ |
 
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kube-argus
-rules:
-  - apiGroups: [""]
-    resources: [nodes, pods, pods/log, services, events, configmaps, secrets, namespaces, resourcequotas, persistentvolumeclaims, persistentvolumes]
-    verbs: [get, list, watch]
-  - apiGroups: [""]
-    resources: [nodes]
-    verbs: [patch]
-  - apiGroups: [""]
-    resources: [services, configmaps, secrets]
-    verbs: [create, update]
-  - apiGroups: [""]
-    resources: [pods, pods/exec]
-    verbs: [get, list, watch, delete, create]
-  - apiGroups: [""]
-    resources: [pods/eviction]
-    verbs: [create]
-  - apiGroups: [apps]
-    resources: [deployments, statefulsets, daemonsets, replicasets]
-    verbs: [get, list, watch, patch, update]
-  - apiGroups: [apps]
-    resources: [deployments/scale, statefulsets/scale]
-    verbs: [get, update]
-  - apiGroups: [batch]
-    resources: [jobs, cronjobs]
-    verbs: [get, list, watch, update]
-  - apiGroups: [networking.k8s.io]
-    resources: [ingresses]
-    verbs: [get, list, watch]
-  - apiGroups: [autoscaling]
-    resources: [horizontalpodautoscalers]
-    verbs: [get, list, watch, update]
-  - apiGroups: [policy]
-    resources: [poddisruptionbudgets]
-    verbs: [get, list, watch]
-  - apiGroups: [storage.k8s.io]
-    resources: [storageclasses]
-    verbs: [get, list, watch]
-  - apiGroups: [metrics.k8s.io]
-    resources: [nodes, pods]
-    verbs: [get, list]
-```
+---
+
+## Features
+
+<details>
+<summary><strong>Cluster Overview</strong></summary>
+
+- Live cluster state refreshed every 10 seconds
+- Node status (Ready, NotReady, Draining, Cordoned)
+- Cluster-wide CPU and memory utilisation
+- Warning counts and top resource consumers by namespace
+</details>
+
+<details>
+<summary><strong>Node Management</strong></summary>
+
+- All nodes with status, instance type, capacity, and age
+- `kubectl describe`-style detail with live events
+- Drain wizard with PDB preview and streaming progress
+- Pod heatmap for noisy neighbor detection
+- Admin actions: cordon, uncordon, drain
+- Per-node Prometheus metrics
+</details>
+
+<details>
+<summary><strong>Workloads</strong></summary>
+
+- Deployments, StatefulSets, DaemonSets, Jobs, CronJobs
+- Restart and scale directly from the UI
+- Aggregated logs from all pods in one color-coded view
+- ReplicaSet history, rolling update details
+- PDB status badges inline
+- Resource right-sizing recommendations (7-day Prometheus data)
+- Config drift detection
+</details>
+
+<details>
+<summary><strong>Pod Management</strong></summary>
+
+- Table and card views with search, filters, and sorting
+- Pod sparklines (CPU/MEM trends updated every 10s)
+- Live log streaming with container selector
+- Previous container logs for crash debugging
+- Interactive web shell via WebSocket
+- AI-powered diagnosis for unhealthy pods
+</details>
+
+<details>
+<summary><strong>Cost & Optimisation</strong></summary>
+
+- Spot Advisor: risk analysis with consolidation suggestions
+- Namespace-level cost allocation
+- Total cluster cost panel (spot + on-demand)
+</details>
+
+<details>
+<summary><strong>Security</strong></summary>
+
+- Three auth modes: Google SSO, generic OIDC, or none
+- Role-based access: admin vs viewer
+- JIT exec access with approval workflow and auto-expiry
+- Audit trail for all actions
+- Online users with presence indicators
+- Runs as non-root (`USER nobody`)
+</details>
+
+<details>
+<summary><strong>More Features</strong></summary>
+
+- Networking: Services, Ingresses with hosts/paths/TLS
+- Storage: PVCs, PVs, StorageClasses with pod mapping
+- Configuration: ConfigMaps, Secrets with drift detection
+- YAML viewer/editor for 11 resource kinds
+- Topology spread constraint validation
+- Troubled pods / NOC screen with fullscreen mode
+- Spot interruption tracking with resilience scoring
+- Events filtered by namespace
+</details>
 
 ---
 

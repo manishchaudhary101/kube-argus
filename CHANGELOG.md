@@ -2,6 +2,28 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.2.1] — 2026-04-05
+
+### 📋 Structured JSON Logging
+
+Production-grade structured logging with configurable log levels. All log output is now machine-readable JSON, compatible with CloudWatch, Datadog, ELK, and other log aggregation tools.
+
+#### Changes
+
+- **Structured JSON output** — replaced Go's standard `log` package with `log/slog` across all 9 server source files. Every log line is now a single-line JSON object with `time`, `level`, and `msg` fields plus structured key-value attributes.
+- **Configurable `LOG_LEVEL`** — new environment variable accepts `debug`, `info`, `warn`, or `error` (case-insensitive). Defaults to `info`. Invalid values fall back to `info` with a warning.
+- **Helm chart support** — `LOG_LEVEL` added to `values.yaml` (default: `info`) and `values.schema.json` for declarative configuration.
+- **Appropriate log levels** — startup messages at INFO, degraded states (metrics-server unavailable) at WARN, failures at ERROR, verbose detail (AI request bodies) at DEBUG.
+- **ASCII banner preserved** — the startup banner uses `fmt.Fprint` to avoid wrapping decorative output in JSON.
+- **Standard log bridge** — `slog.SetDefault()` ensures any third-party library using Go's standard `log` package also emits structured JSON.
+
+### 📄 README Redesign
+
+- Centered hero section with logo, title, and author attribution
+- Expanded badge row: build status, release version, last commit, code size, stars, issues, Docker image, Artifact Hub
+- Feature details collapsed into expandable sections for cleaner presentation
+- Feature comparison table with checkmark icons
+
 ## [v1.2.0] — 2026-04-03
 
 ### 🔐 New Feature: Just-in-Time (JIT) Exec Access

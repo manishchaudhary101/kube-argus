@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -55,7 +55,7 @@ func apiExec(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("websocket upgrade failed: %v", err)
+		slog.Error("websocket upgrade failed", "error", err)
 		return
 	}
 	defer conn.Close()

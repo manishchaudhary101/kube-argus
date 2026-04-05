@@ -32,6 +32,7 @@ resources:
 env:
   CLUSTER_NAME: ""
   DEFAULT_ROLE: "viewer"
+  LOG_LEVEL: "info"
   # ── Google SSO (Option A) ──
   # GOOGLE_CLIENT_ID: ""
   # GOOGLE_CLIENT_SECRET: ""

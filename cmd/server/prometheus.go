@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
@@ -23,7 +23,7 @@ var promBaseURL string
 func initPrometheus() {
 	promURL := os.Getenv("PROMETHEUS_URL")
 	if promURL == "" {
-		log.Println("PROMETHEUS_URL not set — metrics graphs will be disabled")
+		slog.Info("PROMETHEUS_URL not set, metrics graphs disabled")
 		return
 	}
 	base := strings.TrimRight(promURL, "/")
@@ -31,7 +31,7 @@ func initPrometheus() {
 		base += "/api/prom"
 	}
 	promBaseURL = base
-	log.Printf("Prometheus configured: %s/api/v1/query_range", promBaseURL)
+	slog.Info("prometheus configured", "endpoint", promBaseURL+"/api/v1/query_range")
 }
 
 func promQuery(query, start, end, step string) ([]byte, error) {
@@ -213,7 +213,7 @@ func apiWorkloadSizing(w http.ResponseWriter, r *http.Request) {
 	for i := 0; i < 4; i++ {
 		r := <-ch
 		if r.err != nil {
-			log.Printf("sizing query %s failed: %v", r.key, r.err)
+			slog.Warn("sizing query failed", "query", r.key, "error", r.err)
 		}
 		vals[r.key] = r.val
 	}
@@ -710,7 +710,7 @@ func promQueryParallel(queries map[string]string, startStr, endStr, step string)
 		go func(n, q string) {
 			raw, err := promQuery(q, startStr, endStr, step)
 			if err != nil {
-				log.Printf("prom query %s failed: %v", n, err)
+				slog.Warn("prom query failed", "query", n, "error", err)
 				ch <- queryResult{name: n}
 				return
 			}

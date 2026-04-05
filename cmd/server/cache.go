@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"runtime"
 	"sort"
 	"sync"
@@ -114,7 +114,7 @@ func (c *clusterCache) refresh() {
 			var err error
 			nodeMetrics, err = metricsCl.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
 			if err != nil {
-				log.Printf("metrics-server node metrics: %v", err)
+				slog.Warn("metrics-server node metrics failed", "error", err)
 			}
 		}
 	}()
@@ -124,7 +124,7 @@ func (c *clusterCache) refresh() {
 			var err error
 			podMetrics, err = metricsCl.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{})
 			if err != nil {
-				log.Printf("metrics-server pod metrics: %v", err)
+				slog.Warn("metrics-server pod metrics failed", "error", err)
 			}
 		}
 	}()

@@ -2,8 +2,8 @@ apiVersion: v2
 name: kube-argus
 description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
-version: 1.2.0
-appVersion: "1.2.0"
+version: 1.2.1
+appVersion: "1.2.1"
 keywords:
   - kubernetes
   - dashboard
@@ -23,17 +23,15 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
     - kind: added
-      description: Just-in-Time (JIT) exec access — viewers request time-bound shell access, admins approve/deny from the dashboard
+      description: "Structured JSON logging via Go's log/slog — all log output is now machine-readable JSON to stdout"
     - kind: added
-      description: JIT persistence via ConfigMap — access requests survive restarts and are shared across replicas
+      description: "Configurable LOG_LEVEL environment variable (debug, info, warn, error) with case-insensitive parsing"
     - kind: added
-      description: Notification badge on admin avatar showing pending JIT request count
-    - kind: added
-      description: Access Requests in admin dropdown (alongside Online Users and Audit Trail)
-    - kind: added
-      description: Deployment-scoped JIT grants — access is scoped to the workload, not individual pods
-    - kind: added
-      description: Auto-expiring pending requests (48h TTL) and configurable retention for terminal states
+      description: "LOG_LEVEL exposed in Helm values.yaml with default 'info'"
+    - kind: changed
+      description: "Replaced all standard log package usage with slog across 9 Go source files"
+    - kind: changed
+      description: "README redesigned with centered hero layout, expanded badge row, and collapsible feature sections"
   artifacthub.io/links: |
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus

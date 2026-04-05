@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"sort"
@@ -87,7 +87,7 @@ func auditRecord(actor, role, action, resource, detail, ip string) {
 	}
 	auditDirty = true
 	auditTrail.mu.Unlock()
-	log.Printf("audit: %s %s %s %s %s", actor, action, resource, detail, ip)
+	slog.Info("audit", "actor", actor, "action", action, "resource", resource, "detail", detail, "ip", ip)
 }
 
 // ─── Audit ConfigMap Persistence ─────────────────────────────────────
@@ -104,7 +104,7 @@ func auditInitPersistence() {
 		auditCMName = "kube-argus-audit"
 	}
 	auditPersistOn = true
-	log.Printf("audit: persistence enabled, configmap=%s/%s", jitCMNamespace, auditCMName)
+	slog.Info("audit: persistence enabled", "configmap", jitCMNamespace+"/"+auditCMName)
 }
 
 func auditRestore() {
@@ -119,7 +119,7 @@ func auditRestore() {
 		if k8serr.IsNotFound(err) {
 			return
 		}
-		log.Printf("audit: restore failed: %v", err)
+		slog.Error("audit: restore failed", "error", err)
 		return
 	}
 
@@ -130,14 +130,14 @@ func auditRestore() {
 
 	var loaded []auditEntry
 	if err := json.Unmarshal([]byte(data), &loaded); err != nil {
-		log.Printf("audit: restore unmarshal failed: %v", err)
+		slog.Error("audit: restore unmarshal failed", "error", err)
 		return
 	}
 
 	auditTrail.mu.Lock()
 	auditTrail.entries = loaded
 	auditTrail.mu.Unlock()
-	log.Printf("audit: restored %d entries from configmap", len(loaded))
+	slog.Info("audit: restored entries from configmap", "count", len(loaded))
 }
 
 func auditPersist() {
@@ -153,7 +153,7 @@ func auditPersist() {
 
 	raw, err := json.Marshal(snapshot)
 	if err != nil {
-		log.Printf("audit: persist marshal failed: %v", err)
+		slog.Error("audit: persist marshal failed", "error", err)
 		return
 	}
 
@@ -171,12 +171,12 @@ func auditPersist() {
 			Data: map[string]string{"audit.json": string(raw)},
 		}
 		if _, err := clientset.CoreV1().ConfigMaps(jitCMNamespace).Create(ctx, newCM, metav1.CreateOptions{}); err != nil {
-			log.Printf("audit: persist create failed: %v", err)
+			slog.Error("audit: persist create failed", "error", err)
 		}
 		return
 	}
 	if err != nil {
-		log.Printf("audit: persist get failed: %v", err)
+		slog.Error("audit: persist get failed", "error", err)
 		return
 	}
 
@@ -187,10 +187,10 @@ func auditPersist() {
 
 	if _, err := clientset.CoreV1().ConfigMaps(jitCMNamespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
 		if k8serr.IsConflict(err) {
-			log.Printf("audit: persist conflict, will retry next cycle")
+			slog.Warn("audit: persist conflict, will retry next cycle")
 			return
 		}
-		log.Printf("audit: persist update failed: %v", err)
+		slog.Error("audit: persist update failed", "error", err)
 	}
 }
 

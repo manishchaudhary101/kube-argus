@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -78,7 +78,7 @@ func jitInitPersistence() {
 	jitRetention = time.Duration(days) * 24 * time.Hour
 
 	jitPersistOn = true
-	log.Printf("jit: persistence enabled, configmap=%s/%s, retention=%dd", jitCMNamespace, jitCMName, days)
+	slog.Info("jit: persistence enabled", "configmap", jitCMNamespace+"/"+jitCMName, "retention_days", days)
 }
 
 // jitRestore loads JIT requests from the ConfigMap into the in-memory store.
@@ -95,7 +95,7 @@ func jitRestore() {
 		if k8serr.IsNotFound(err) {
 			return
 		}
-		log.Printf("jit: restore failed: %v", err)
+		slog.Error("jit: restore failed", "error", err)
 		return
 	}
 
@@ -106,14 +106,14 @@ func jitRestore() {
 
 	var loaded []jitRequest
 	if err := json.Unmarshal([]byte(data), &loaded); err != nil {
-		log.Printf("jit: restore unmarshal failed: %v", err)
+		slog.Error("jit: restore unmarshal failed", "error", err)
 		return
 	}
 
 	jitStore.mu.Lock()
 	jitStore.requests = loaded
 	jitStore.mu.Unlock()
-	log.Printf("jit: restored %d requests from configmap", len(loaded))
+	slog.Info("jit: restored requests from configmap", "count", len(loaded))
 }
 
 // jitPersist writes the current in-memory JIT requests to the ConfigMap.
@@ -142,7 +142,7 @@ func jitPersist() {
 
 	raw, err := json.Marshal(snapshot)
 	if err != nil {
-		log.Printf("jit: persist marshal failed: %v", err)
+		slog.Error("jit: persist marshal failed", "error", err)
 		return
 	}
 
@@ -160,12 +160,12 @@ func jitPersist() {
 			Data: map[string]string{"requests.json": string(raw)},
 		}
 		if _, err := clientset.CoreV1().ConfigMaps(jitCMNamespace).Create(ctx, newCM, metav1.CreateOptions{}); err != nil {
-			log.Printf("jit: persist create failed: %v", err)
+			slog.Error("jit: persist create failed", "error", err)
 		}
 		return
 	}
 	if err != nil {
-		log.Printf("jit: persist get failed: %v", err)
+		slog.Error("jit: persist get failed", "error", err)
 		return
 	}
 
@@ -176,10 +176,10 @@ func jitPersist() {
 
 	if _, err := clientset.CoreV1().ConfigMaps(jitCMNamespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
 		if k8serr.IsConflict(err) {
-			log.Printf("jit: persist conflict, will retry next cycle")
+			slog.Warn("jit: persist conflict, will retry next cycle")
 			return
 		}
-		log.Printf("jit: persist update failed: %v", err)
+		slog.Error("jit: persist update failed", "error", err)
 	}
 }
 
@@ -222,7 +222,7 @@ func requireAdminOrJIT(w http.ResponseWriter, r *http.Request, namespace, ownerK
 	if authEnabled {
 		sd, ok := r.Context().Value(userCtxKey).(*sessionData)
 		if !ok || sd == nil {
-			log.Printf("jit-exec: denied (no session) ns=%s %s/%s", namespace, ownerKind, ownerName)
+			slog.Warn("jit-exec: denied, no session", "namespace", namespace, "owner_kind", ownerKind, "owner_name", ownerName)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(403)
 			json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
@@ -237,11 +237,11 @@ func requireAdminOrJIT(w http.ResponseWriter, r *http.Request, namespace, ownerK
 	}
 
 	if hasActiveJIT(email, namespace, ownerKind, ownerName) {
-		log.Printf("jit-exec: granted via JIT for %s ns=%s %s/%s", email, namespace, ownerKind, ownerName)
+		slog.Info("jit-exec: granted via JIT", "email", email, "namespace", namespace, "owner_kind", ownerKind, "owner_name", ownerName)
 		return true
 	}
 
-	log.Printf("jit-exec: denied for %s (role=%s) ns=%s %s/%s — no active JIT grant", email, role, namespace, ownerKind, ownerName)
+	slog.Warn("jit-exec: denied, no active JIT grant", "email", email, "role", role, "namespace", namespace, "owner_kind", ownerKind, "owner_name", ownerName)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(403)
 	json.NewEncoder(w).Encode(map[string]string{"error": "forbidden", "message": "admin access or approved JIT request required"})
@@ -292,13 +292,13 @@ func jitExpiryLoop() {
 			if r.Status == "active" && r.ExpiresAt != nil && now.After(*r.ExpiresAt) {
 				r.Status = "expired"
 				changed = true
-				log.Printf("jit: request %s for %s ns=%s expired", r.ID, r.Email, r.Namespace)
+				slog.Info("jit: request expired", "id", r.ID, "email", r.Email, "namespace", r.Namespace)
 				auditRecord(r.Email, "viewer", "jit.expired", fmt.Sprintf("Namespace %s", r.Namespace), "auto-expired", "")
 			}
 			if r.Status == "pending" && now.Sub(r.CreatedAt) > jitPendingTTL {
 				r.Status = "expired"
 				changed = true
-				log.Printf("jit: pending request %s for %s ns=%s timed out after 48h", r.ID, r.Email, r.Namespace)
+				slog.Info("jit: pending request timed out", "id", r.ID, "email", r.Email, "namespace", r.Namespace)
 				auditRecord(r.Email, "viewer", "jit.expired", fmt.Sprintf("Namespace %s", r.Namespace), "pending request timed out", "")
 			}
 		}
@@ -380,7 +380,7 @@ func apiJITCreate(w http.ResponseWriter, r *http.Request) {
 	go jitPersist()
 
 	auditRecord(email, role, "jit.request", fmt.Sprintf("Namespace %s, Pod %s", body.Namespace, body.Pod), "duration: "+body.Duration+", reason: "+body.Reason, clientIP(r))
-	log.Printf("jit: new request %s from %s for ns=%s pod=%s", req.ID, email, body.Namespace, body.Pod)
+	slog.Info("jit: new request", "id", req.ID, "email", email, "namespace", body.Namespace, "pod", body.Pod)
 
 	j(w, req)
 }
@@ -483,7 +483,7 @@ func apiJITAction(w http.ResponseWriter, r *http.Request) {
 		req.ExpiresAt = &exp
 		jitStore.mu.Unlock()
 		auditRecord(adminEmail, "admin", "jit.approve", fmt.Sprintf("Namespace %s", req.Namespace), fmt.Sprintf("for %s, duration: %s", req.Email, req.Duration), clientIP(r))
-		log.Printf("jit: request %s approved by %s for %s", id, adminEmail, req.Duration)
+		slog.Info("jit: request approved", "id", id, "approved_by", adminEmail, "duration", req.Duration)
 
 	case "deny":
 		if req.Status != "pending" {
@@ -495,7 +495,7 @@ func apiJITAction(w http.ResponseWriter, r *http.Request) {
 		req.ApprovedBy = adminEmail
 		jitStore.mu.Unlock()
 		auditRecord(adminEmail, "admin", "jit.deny", fmt.Sprintf("Namespace %s", req.Namespace), fmt.Sprintf("requester: %s", req.Email), clientIP(r))
-		log.Printf("jit: request %s denied by %s", id, adminEmail)
+		slog.Info("jit: request denied", "id", id, "denied_by", adminEmail)
 
 	case "revoke":
 		if req.Status != "active" {
@@ -506,7 +506,7 @@ func apiJITAction(w http.ResponseWriter, r *http.Request) {
 		req.Status = "revoked"
 		jitStore.mu.Unlock()
 		auditRecord(adminEmail, "admin", "jit.revoke", fmt.Sprintf("Namespace %s", req.Namespace), fmt.Sprintf("requester: %s", req.Email), clientIP(r))
-		log.Printf("jit: request %s revoked by %s", id, adminEmail)
+		slog.Info("jit: request revoked", "id", id, "revoked_by", adminEmail)
 	}
 
 	go jitPersist()

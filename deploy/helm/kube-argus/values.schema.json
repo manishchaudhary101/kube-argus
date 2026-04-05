@@ -151,6 +151,11 @@
           "default": "viewer",
           "description": "Default role for authenticated users (viewer or admin)"
         },
+        "LOG_LEVEL": {
+          "type": "string",
+          "default": "info",
+          "description": "Minimum log level for structured logging output (debug, info, warn, error)"
+        },
         "GOOGLE_CLIENT_ID": {
           "type": "string",
           "default": "",

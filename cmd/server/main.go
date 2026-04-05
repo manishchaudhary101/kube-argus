@@ -1,7 +1,8 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,44 +26,79 @@ var (
 	clusterName string
 )
 
+// parseLogLevel maps a case-insensitive level string to a slog.Level.
+// Returns (level, true) for recognized values; (slog.LevelInfo, false) otherwise.
+func parseLogLevel(s string) (slog.Level, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "debug":
+		return slog.LevelDebug, true
+	case "info":
+		return slog.LevelInfo, true
+	case "warn":
+		return slog.LevelWarn, true
+	case "error":
+		return slog.LevelError, true
+	default:
+		return slog.LevelInfo, false
+	}
+}
+
+// initLogger configures the global slog default logger with a JSON handler
+// writing to stdout. The minimum level is read from the LOG_LEVEL env var.
+func initLogger() {
+	levelStr := os.Getenv("LOG_LEVEL")
+	level, recognized := parseLogLevel(levelStr)
+
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	})
+	slog.SetDefault(slog.New(handler))
+
+	if levelStr != "" && !recognized {
+		slog.Warn("unrecognized LOG_LEVEL value, defaulting to info", "LOG_LEVEL", levelStr)
+	}
+}
+
 func main() {
-	log.SetFlags(0)
+	initLogger()
+
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	cyan, bold, uline, reset := "\033[36m", "\033[1m", "\033[4m", "\033[0m"
 	if !isTTY {
 		cyan, bold, uline, reset = "", "", "", ""
 	}
-	log.Println(cyan + `
+	fmt.Fprint(os.Stdout, cyan+`
   _  ___   _ ____  _____      _    ____   ____ _   _ ____
  | |/ / | | | __ )| ____|    / \  |  _ \ / ___| | | / ___|
  | ' /| | | |  _ \|  _|     / _ \ | |_) | |  _| | | \___ \
  | . \| |_| | |_) | |___   / ___ \|  _ <| |_| | |_| |___) |
  |_|\_\\___/|____/|_____| /_/   \_\_| \_\\____|\___/|____/
-` + reset)
-	log.Println("  " + bold + "Real-time Kubernetes Dashboard" + reset)
-	log.Println("  Created by " + cyan + "Manish Chaudhary" + reset + " (" + uline + "https://github.com/manishchaudhary101" + reset + ")")
-	log.Println()
-	log.SetFlags(log.LstdFlags)
+`+reset+"\n")
+	fmt.Fprint(os.Stdout, "  "+bold+"Real-time Kubernetes Dashboard"+reset+"\n")
+	fmt.Fprint(os.Stdout, "  Created by "+cyan+"Manish Chaudhary"+reset+" ("+uline+"https://github.com/manishchaudhary101"+reset+")\n")
+	fmt.Fprintln(os.Stdout)
 
 	loadSecretsFromAWS()
 
 	cfg, err := kubeConfig()
 	if err != nil {
-		log.Fatalf("kubeconfig: %v", err)
+		slog.Error("kubeconfig failed", "error", err)
+		os.Exit(1)
 	}
 	restCfg = cfg
 	clientset, err = kubernetes.NewForConfig(cfg)
 	if err != nil {
-		log.Fatalf("clientset: %v", err)
+		slog.Error("clientset init failed", "error", err)
+		os.Exit(1)
 	}
 	metricsCl, err = metricsv.NewForConfig(cfg)
 	if err != nil {
-		log.Printf("metrics-server client init failed: %v", err)
+		slog.Warn("metrics-server client init failed", "error", err)
 	} else {
-		log.Println("metrics-server client initialized")
+		slog.Info("metrics-server client initialized")
 	}
 
-	log.Println("warming cache...")
+	slog.Info("warming cache...")
 	prevGC := debug.SetGCPercent(400)
 	startCacheLoop()
 	debug.SetGCPercent(prevGC)
@@ -71,13 +107,13 @@ func main() {
 	nm, pm := cache.nodeMetrics != nil, cache.podMetrics != nil
 	cache.mu.RUnlock()
 	if nm && pm {
-		log.Println("cache ready (metrics-server: node + pod metrics available)")
+		slog.Info("cache ready", "metrics_server", "node + pod metrics available")
 	} else if nm || pm {
-		log.Printf("cache ready (metrics-server: partial — node=%v pod=%v)", nm, pm)
+		slog.Info("cache ready", "metrics_server", "partial", "node", nm, "pod", pm)
 	} else if metricsCl != nil {
-		log.Println("cache ready (metrics-server: no data returned — check APIService and RBAC)")
+		slog.Warn("cache ready", "metrics_server", "no data returned — check APIService and RBAC")
 	} else {
-		log.Println("cache ready (metrics-server: disabled)")
+		slog.Info("cache ready", "metrics_server", "disabled")
 	}
 
 	startSpotAdvisorLoop()
@@ -182,8 +218,11 @@ func main() {
 	if p := os.Getenv("PORT"); p != "" {
 		addr = ":" + p
 	}
-	log.Printf("kube-argus listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, gzipWrap(authMiddleware(corsWrap(mux)))))
+	slog.Info("kube-argus listening", "addr", addr)
+	if err := http.ListenAndServe(addr, gzipWrap(authMiddleware(corsWrap(mux)))); err != nil {
+		slog.Error("server exited", "error", err)
+		os.Exit(1)
+	}
 }
 
 func kubeConfig() (*rest.Config, error) {
