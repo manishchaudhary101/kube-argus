@@ -3,9 +3,12 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -459,4 +462,325 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "use /logs, /events, /describe, or /delete", 400)
 	}
+}
+
+// ─── Restart Timeline ────────────────────────────────────────────────
+
+type restartEvent struct {
+	Timestamp int64  `json:"timestamp"`
+	Container string `json:"container"`
+	Reason    string `json:"reason"`
+	ExitCode  *int32 `json:"exitCode"`
+}
+
+type restartTimelineResponse struct {
+	Events []restartEvent `json:"events"`
+	Source string         `json:"source"`
+}
+
+func apiRestartTimeline(w http.ResponseWriter, r *http.Request) {
+	ns := r.URL.Query().Get("namespace")
+	pod := r.URL.Query().Get("pod")
+	workload := r.URL.Query().Get("workload")
+	kind := r.URL.Query().Get("kind")
+	rangeStr := r.URL.Query().Get("range")
+
+	if ns == "" {
+		http.Error(w, `{"error":"namespace parameter required"}`, 400)
+		return
+	}
+	if pod == "" && (workload == "" || kind == "") {
+		http.Error(w, `{"error":"pod or workload+kind parameters required"}`, 400)
+		return
+	}
+
+	// Validate range, default to 6h
+	validRanges := map[string]bool{"1h": true, "6h": true, "12h": true, "24h": true}
+	if !validRanges[rangeStr] {
+		rangeStr = "6h"
+	}
+
+	cache.mu.RLock()
+	if cache.pods == nil {
+		cache.mu.RUnlock()
+		http.Error(w, `{"error":"cache not ready"}`, 503)
+		return
+	}
+	cache.mu.RUnlock()
+
+	// Build pod regex for matching
+	var podRegex string
+	if pod != "" {
+		podRegex = pod
+	} else {
+		switch kind {
+		case "Deployment":
+			podRegex = workload + "-[a-z0-9]+-[a-z0-9]+"
+		case "StatefulSet":
+			podRegex = workload + "-[0-9]+"
+		case "DaemonSet":
+			podRegex = workload + "-[a-z0-9]+"
+		default:
+			podRegex = workload + "-[a-z0-9]+-[a-z0-9]+"
+		}
+	}
+
+	// Determine step size based on range
+	stepMap := map[string]string{"1h": "60s", "6h": "300s", "12h": "600s", "24h": "600s"}
+	step := stepMap[rangeStr]
+
+	dur, _ := time.ParseDuration(rangeStr)
+	if dur == 0 {
+		dur = 6 * time.Hour
+	}
+	end := time.Now()
+	start := end.Add(-dur)
+	startStr := fmt.Sprintf("%d", start.Unix())
+	endStr := fmt.Sprintf("%d", end.Unix())
+
+	// Try Prometheus primary path
+	if promBaseURL != "" {
+		events, err := restartTimelineFromProm(ns, pod, podRegex, startStr, endStr, step)
+		if err == nil {
+			resp := restartTimelineResponse{Events: events, Source: "prometheus"}
+			if resp.Events == nil {
+				resp.Events = []restartEvent{}
+			}
+			jGz(w, r, resp)
+			return
+		}
+		slog.Warn("restart timeline prometheus query failed, falling back", "error", err)
+	}
+
+	// Fallback path: events + container status
+	events := restartTimelineFromFallback(ns, pod, podRegex, start)
+	resp := restartTimelineResponse{Events: events, Source: "events+status"}
+	if resp.Events == nil {
+		resp.Events = []restartEvent{}
+	}
+	jGz(w, r, resp)
+}
+
+func restartTimelineFromProm(ns, pod, podRegex, startStr, endStr, step string) ([]restartEvent, error) {
+	var podFilter string
+	if pod != "" {
+		podFilter = fmt.Sprintf(`namespace="%s",pod="%s"`, ns, pod)
+	} else {
+		podFilter = fmt.Sprintf(`namespace="%s",pod=~"%s"`, ns, podRegex)
+	}
+
+	queries := map[string]string{
+		"changes": fmt.Sprintf(`changes(kube_pod_container_status_restarts_total{%s}[%s])`, podFilter, step),
+		"reasons": fmt.Sprintf(`kube_pod_container_status_last_terminated_reason{%s}`, podFilter),
+	}
+
+	results := promQueryParallel(queries, startStr, endStr, step)
+
+	// Build reason map: pod/container -> reason
+	reasonMap := map[string]string{}
+	if reasons, ok := results["reasons"]; ok {
+		for _, s := range reasons {
+			for _, v := range s.Values {
+				if v[1] > 0 {
+					reasonMap[s.Name] = s.Name
+				}
+			}
+		}
+	}
+
+	// Parse raw reasons response for proper reason labels
+	// Re-query reasons to get metric labels
+	if promBaseURL != "" {
+		var podFilterQ string
+		if pod != "" {
+			podFilterQ = fmt.Sprintf(`namespace="%s",pod="%s"`, ns, pod)
+		} else {
+			podFilterQ = fmt.Sprintf(`namespace="%s",pod=~"%s"`, ns, podRegex)
+		}
+		reasonQuery := fmt.Sprintf(`kube_pod_container_status_last_terminated_reason{%s} == 1`, podFilterQ)
+		raw, err := promQuery(reasonQuery, startStr, endStr, step)
+		if err == nil {
+			var promResp struct {
+				Data struct {
+					Result []struct {
+						Metric map[string]string `json:"metric"`
+						Values [][]interface{}   `json:"values"`
+					} `json:"result"`
+				} `json:"data"`
+			}
+			if json.Unmarshal(raw, &promResp) == nil {
+				for _, r := range promResp.Data.Result {
+					key := r.Metric["pod"] + "/" + r.Metric["container"]
+					if reason := r.Metric["reason"]; reason != "" {
+						reasonMap[key] = reason
+					}
+				}
+			}
+		}
+	}
+
+	// Parse changes to find restart events
+	var events []restartEvent
+	if changes, ok := results["changes"]; ok {
+		for _, s := range changes {
+			// s.Name is typically the container or pod name from the metric label
+			for _, v := range s.Values {
+				if v[1] > 0 {
+					// There was a restart at this timestamp
+					ts := int64(v[0])
+					container := s.Name
+					reason := "Unknown"
+
+					// Look up reason
+					for key, r := range reasonMap {
+						parts := strings.SplitN(key, "/", 2)
+						if len(parts) == 2 && parts[1] == container {
+							reason = r
+							break
+						}
+						if key == container {
+							reason = r
+							break
+						}
+					}
+
+					events = append(events, restartEvent{
+						Timestamp: ts,
+						Container: container,
+						Reason:    reason,
+					})
+				}
+			}
+		}
+	}
+
+	if events == nil {
+		events = []restartEvent{}
+	}
+	return events, nil
+}
+
+func restartTimelineFromFallback(ns, pod, podRegex string, since time.Time) []restartEvent {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	re := regexp.MustCompile("^" + podRegex + "$")
+	restartReasons := map[string]bool{
+		"BackOff":    true,
+		"Killing":    true,
+		"OOMKilling": true,
+		"Unhealthy":  true,
+	}
+
+	var events []restartEvent
+
+	// 1. Filter cache.events for restart-related Warning events
+	if cache.events != nil {
+		for _, e := range cache.events.Items {
+			if e.Namespace != ns {
+				continue
+			}
+			if e.Type != "Warning" {
+				continue
+			}
+			if !restartReasons[e.Reason] {
+				continue
+			}
+			objName := e.InvolvedObject.Name
+			if pod != "" {
+				if objName != pod {
+					continue
+				}
+			} else {
+				if !re.MatchString(objName) {
+					continue
+				}
+			}
+
+			var ts time.Time
+			if !e.LastTimestamp.IsZero() {
+				ts = e.LastTimestamp.Time
+			} else if !e.EventTime.IsZero() {
+				ts = e.EventTime.Time
+			} else {
+				ts = e.CreationTimestamp.Time
+			}
+
+			if ts.Before(since) {
+				continue
+			}
+
+			reason := e.Reason
+			if reason == "BackOff" {
+				reason = "CrashLoopBackOff"
+			}
+
+			events = append(events, restartEvent{
+				Timestamp: ts.Unix(),
+				Container: objName,
+				Reason:    reason,
+			})
+		}
+	}
+
+	// 2. Read containerStatuses[].lastTerminationState from cache.pods
+	if cache.pods != nil {
+		for i := range cache.pods.Items {
+			p := &cache.pods.Items[i]
+			if p.Namespace != ns {
+				continue
+			}
+			if pod != "" {
+				if p.Name != pod {
+					continue
+				}
+			} else {
+				if !re.MatchString(p.Name) {
+					continue
+				}
+			}
+
+			for _, cs := range p.Status.ContainerStatuses {
+				if cs.LastTerminationState.Terminated != nil {
+					lt := cs.LastTerminationState.Terminated
+					ts := lt.FinishedAt.Time
+					if ts.IsZero() || ts.Before(since) {
+						continue
+					}
+
+					// Check if we already have an event within 60s
+					duplicate := false
+					for _, existing := range events {
+						if existing.Container == cs.Name || existing.Container == p.Name {
+							diff := ts.Unix() - existing.Timestamp
+							if diff < 60 && diff > -60 {
+								duplicate = true
+								break
+							}
+						}
+					}
+					if duplicate {
+						continue
+					}
+
+					reason := lt.Reason
+					if reason == "" {
+						reason = "Unknown"
+					}
+					ec := lt.ExitCode
+					events = append(events, restartEvent{
+						Timestamp: ts.Unix(),
+						Container: cs.Name,
+						Reason:    reason,
+						ExitCode:  &ec,
+					})
+				}
+			}
+		}
+	}
+
+	if events == nil {
+		events = []restartEvent{}
+	}
+	return events
 }

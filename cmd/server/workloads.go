@@ -203,6 +203,30 @@ func apiWorkloads(w http.ResponseWriter, r *http.Request) {
 }
 
 // /api/workloads/{ns}/{name}/restart or /api/workloads/{ns}/{name}/scale?replicas=N
+
+// buildContainerInfo converts a corev1.Container to a map for the describe response.
+func buildContainerInfo(ct corev1.Container, isInit bool) map[string]interface{} {
+	cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
+	if isInit {
+		cm["init"] = true
+	}
+	if ct.Resources.Requests != nil {
+		cm["cpuReq"] = ct.Resources.Requests.Cpu().String()
+		cm["memReq"] = ct.Resources.Requests.Memory().String()
+	}
+	if ct.Resources.Limits != nil {
+		cm["cpuLim"] = ct.Resources.Limits.Cpu().String()
+		cm["memLim"] = ct.Resources.Limits.Memory().String()
+	}
+	ports := []string{}
+	for _, p := range ct.Ports {
+		ports = append(ports, fmt.Sprintf("%d/%s", p.ContainerPort, p.Protocol))
+	}
+	cm["ports"] = ports
+	cm["envCount"] = len(ct.Env) + len(ct.EnvFrom)
+	return cm
+}
+
 func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/workloads/"), "/"), "/")
 	if len(parts) != 3 {
@@ -238,22 +262,11 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["annotations"] = d.Annotations
 			result["age"] = shortDur(time.Since(d.CreationTimestamp.Time))
 			containers := []map[string]interface{}{}
+			for _, ct := range d.Spec.Template.Spec.InitContainers {
+				containers = append(containers, buildContainerInfo(ct, true))
+			}
 			for _, ct := range d.Spec.Template.Spec.Containers {
-				cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
-				if ct.Resources.Requests != nil {
-					cm["cpuReq"] = ct.Resources.Requests.Cpu().String()
-					cm["memReq"] = ct.Resources.Requests.Memory().String()
-				}
-				if ct.Resources.Limits != nil {
-					cm["cpuLim"] = ct.Resources.Limits.Cpu().String()
-					cm["memLim"] = ct.Resources.Limits.Memory().String()
-				}
-				ports := []string{}
-				for _, p := range ct.Ports { ports = append(ports, fmt.Sprintf("%d/%s", p.ContainerPort, p.Protocol)) }
-				cm["ports"] = ports
-				envCount := len(ct.Env) + len(ct.EnvFrom)
-				cm["envCount"] = envCount
-				containers = append(containers, cm)
+				containers = append(containers, buildContainerInfo(ct, false))
 			}
 			result["containers"] = containers
 			conds := []map[string]string{}
@@ -313,9 +326,11 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			}
 			result["strategy"] = sStrat
 			containers := []map[string]interface{}{}
+			for _, ct := range s.Spec.Template.Spec.InitContainers {
+				containers = append(containers, buildContainerInfo(ct, true))
+			}
 			for _, ct := range s.Spec.Template.Spec.Containers {
-				cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
-				containers = append(containers, cm)
+				containers = append(containers, buildContainerInfo(ct, false))
 			}
 			result["containers"] = containers
 		case "DaemonSet":
@@ -335,9 +350,11 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			}
 			result["strategy"] = dStrat
 			containers := []map[string]interface{}{}
+			for _, ct := range d.Spec.Template.Spec.InitContainers {
+				containers = append(containers, buildContainerInfo(ct, true))
+			}
 			for _, ct := range d.Spec.Template.Spec.Containers {
-				cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
-				containers = append(containers, cm)
+				containers = append(containers, buildContainerInfo(ct, false))
 			}
 			result["containers"] = containers
 		case "CronJob":
@@ -352,9 +369,11 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			if cj.Status.LastScheduleTime != nil { result["lastSchedule"] = shortDur(time.Since(cj.Status.LastScheduleTime.Time)) + " ago" }
 			if cj.Status.LastSuccessfulTime != nil { result["lastSuccess"] = shortDur(time.Since(cj.Status.LastSuccessfulTime.Time)) + " ago" }
 			containers := []map[string]interface{}{}
+			for _, ct := range cj.Spec.JobTemplate.Spec.Template.Spec.InitContainers {
+				containers = append(containers, buildContainerInfo(ct, true))
+			}
 			for _, ct := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
-				cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
-				containers = append(containers, cm)
+				containers = append(containers, buildContainerInfo(ct, false))
 			}
 			result["containers"] = containers
 			result["ownerKind"] = "CronJob"
@@ -375,9 +394,11 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			}
 			result["conditions"] = conds
 			containers := []map[string]interface{}{}
+			for _, ct := range jb.Spec.Template.Spec.InitContainers {
+				containers = append(containers, buildContainerInfo(ct, true))
+			}
 			for _, ct := range jb.Spec.Template.Spec.Containers {
-				cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
-				containers = append(containers, cm)
+				containers = append(containers, buildContainerInfo(ct, false))
 			}
 			result["containers"] = containers
 		case "ReplicaSet":
@@ -394,20 +415,11 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["annotations"] = rs.Annotations
 			result["age"] = shortDur(time.Since(rs.CreationTimestamp.Time))
 			containers := []map[string]interface{}{}
+			for _, ct := range rs.Spec.Template.Spec.InitContainers {
+				containers = append(containers, buildContainerInfo(ct, true))
+			}
 			for _, ct := range rs.Spec.Template.Spec.Containers {
-				cm := map[string]interface{}{"name": ct.Name, "image": ct.Image}
-				if ct.Resources.Requests != nil {
-					cm["cpuReq"] = ct.Resources.Requests.Cpu().String()
-					cm["memReq"] = ct.Resources.Requests.Memory().String()
-				}
-				if ct.Resources.Limits != nil {
-					cm["cpuLim"] = ct.Resources.Limits.Cpu().String()
-					cm["memLim"] = ct.Resources.Limits.Memory().String()
-				}
-				ports := []string{}
-				for _, p := range ct.Ports { ports = append(ports, fmt.Sprintf("%d/%s", p.ContainerPort, p.Protocol)) }
-				cm["ports"] = ports
-				containers = append(containers, cm)
+				containers = append(containers, buildContainerInfo(ct, false))
 			}
 			result["containers"] = containers
 			conds := []map[string]string{}

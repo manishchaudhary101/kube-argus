@@ -1,13 +1,42 @@
-import { useFetch } from '../../hooks/useFetch'
+import { useState } from 'react'
+import { useFetch, post } from '../../hooks/useFetch'
+import { useAuth } from '../../context/AuthContext'
+import { JITRequestModal } from '../modals/JITRequestModal'
 import { Pill, Spinner } from '../ui/Atoms'
 
 type CronJobRun = { name: string; startTime: string | null; endTime: string | null; durationS: number; status: string; succeeded: number; failed: number; active: number }
 type CronJobHistory = { name: string; namespace: string; schedule: string; suspended: boolean; lastSchedule: string | null; activeCount: number; runs: CronJobRun[] }
+type JITGrant = { namespace: string; ownerKind: string; ownerName: string; status: string; expiresAt: string | null }
 
 export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; name: string; onBack: () => void; onPod: (ns: string, name: string) => void }) {
-  const { data, err, loading } = useFetch<CronJobHistory>(`/api/cronjobs/${name}?namespace=${ns}`, 10000)
+  const { data, err, loading, refetch } = useFetch<CronJobHistory>(`/api/cronjobs/${name}?namespace=${ns}`, 10000)
+  const { role } = useAuth()
+  const { data: grants } = useFetch<JITGrant[]>(role === 'viewer' ? '/api/jit/my-grants' : null)
+
+  const [triggerLoading, setTriggerLoading] = useState(false)
+  const [triggerError, setTriggerError] = useState<string | null>(null)
+  const [showJITModal, setShowJITModal] = useState(false)
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void onPod
+
+  const hasGrant = role === 'admin' || (grants ?? []).some(
+    g => g.ownerKind === 'CronJob' && g.ownerName === name && g.namespace === ns
+  )
+  const canTrigger = role === 'admin' || hasGrant
+
+  const handleTrigger = async () => {
+    setTriggerLoading(true)
+    setTriggerError(null)
+    try {
+      await post(`/api/cronjobs/${ns}/${name}/trigger`)
+      refetch()
+    } catch (e: unknown) {
+      setTriggerError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTriggerLoading(false)
+    }
+  }
 
   if (loading) return <div className="p-4"><Spinner /></div>
   if (err) return <div className="p-4"><button onClick={onBack} className="text-neon-cyan text-xs mb-2">← Back</button><p className="text-neon-red">{err}</p></div>
@@ -32,14 +61,46 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
 
   return (
     <div className="p-4 space-y-3">
+      {showJITModal && (
+        <JITRequestModal
+          ns={ns}
+          pod=""
+          ownerKind="CronJob"
+          ownerName={name}
+          onClose={() => setShowJITModal(false)}
+          onSubmitted={() => setShowJITModal(false)}
+        />
+      )}
+
       <div className="flex items-center gap-2">
         <button onClick={onBack} className="text-neon-cyan text-xs hover:underline">← Back</button>
         <Pill color="border bg-sky-950/30 text-sky-300 border-sky-900/30">CRONJOB</Pill>
       </div>
 
-      <div>
-        <h2 className="text-base font-bold text-white">{data.name}</h2>
-        <p className="text-[10px] text-gray-500">{data.namespace}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-white">{data.name}</h2>
+          <p className="text-[10px] text-gray-500">{data.namespace}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {triggerError && <span className="text-[10px] text-neon-red">{triggerError}</span>}
+          {canTrigger ? (
+            <button
+              onClick={handleTrigger}
+              disabled={triggerLoading}
+              className="rounded-lg bg-gradient-to-r from-neon-cyan/20 to-neon-green/10 border border-neon-cyan/30 px-3 py-1.5 text-[11px] font-semibold text-neon-cyan transition-all hover:shadow-[0_0_12px_rgba(6,214,224,0.15)] disabled:opacity-40"
+            >
+              {triggerLoading ? 'Running…' : '▶ Run Now'}
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowJITModal(true)}
+              className="rounded-lg bg-gradient-to-r from-amber-950/40 to-amber-950/20 border border-amber-900/30 px-3 py-1.5 text-[11px] font-semibold text-neon-amber transition-all hover:shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+            >
+              🔒 Request Access
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

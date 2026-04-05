@@ -4,6 +4,7 @@ import { useFetch, post } from '../../hooks/useFetch'
 import { useAuth } from '../../context/AuthContext'
 import { Spinner, StatusDot, ContainerStateBadge } from '../ui/Atoms'
 import { MetricChart, useMetrics, METRIC_RANGES, YamlModal } from './WorkloadDetailView'
+import { RestartTimeline } from '../ui/RestartTimeline'
 import type { MetricsData, RefLine } from './WorkloadDetailView'
 import { JITRequestModal } from '../modals/JITRequestModal'
 
@@ -294,6 +295,7 @@ export function PodMetricsPanel({ namespace, pod }: { namespace: string; pod: st
             {podData.restarts && podData.restarts.length > 0 && (
               <MetricChart title="Container Restarts — increasing = crash loop" series={podData.restarts} unit="" height={80} />
             )}
+            <RestartTimeline namespace={namespace} pod={pod} />
           </>
           )
         })()}

@@ -123,6 +123,9 @@ func main() {
 	initAuth()
 	jitInitPersistence()
 	jitRestore()
+	if len(jitStore.requests) > 0 {
+		slog.Info("jit: restored requests", "count", len(jitStore.requests))
+	}
 	go jitExpiryLoop()
 
 	auditInitPersistence()
@@ -159,6 +162,7 @@ func main() {
 	mux.HandleFunc("/api/metrics/node", apiMetricsNode)
 	mux.HandleFunc("/api/metrics/pod", apiMetricsPod)
 	mux.HandleFunc("/api/metrics/workload", apiMetricsWorkload)
+	mux.HandleFunc("/api/restart-timeline", apiRestartTimeline)
 	mux.HandleFunc("/api/pdbs", apiPDBs)
 	mux.HandleFunc("/api/cronjobs/", apiCronJobHistory)
 	mux.HandleFunc("/api/namespace-costs", apiNamespaceCosts)

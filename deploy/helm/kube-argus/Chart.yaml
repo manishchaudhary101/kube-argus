@@ -2,8 +2,8 @@ apiVersion: v2
 name: kube-argus
 description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
-version: 1.2.1
-appVersion: "1.2.1"
+version: 1.2.2
+appVersion: "1.2.2"
 keywords:
   - kubernetes
   - dashboard
@@ -23,15 +23,17 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
     - kind: added
-      description: "Structured JSON logging via Go's log/slog — all log output is now machine-readable JSON to stdout"
+      description: "Namespace favorites — star namespaces in the picker, persisted per-user in localStorage"
     - kind: added
-      description: "Configurable LOG_LEVEL environment variable (debug, info, warn, error) with case-insensitive parsing"
+      description: "CronJob manual trigger — Run Now button with JIT approval workflow for viewers"
     - kind: added
-      description: "LOG_LEVEL exposed in Helm values.yaml with default 'info'"
-    - kind: changed
-      description: "Replaced all standard log package usage with slog across 9 Go source files"
-    - kind: changed
-      description: "README redesigned with centered hero layout, expanded badge row, and collapsible feature sections"
+      description: "Custom JIT duration — hours/days input up to 7 days max alongside preset durations"
+    - kind: added
+      description: "Pod restart timeline — color-coded scatter chart showing restart events with reasons on pod and workload detail views"
+    - kind: added
+      description: "Init container visibility — all workload types now display init containers with an INIT badge"
+    - kind: fixed
+      description: "JIT restore log moved to DEBUG level to stop spamming INFO logs every 30 seconds"
   artifacthub.io/links: |
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus

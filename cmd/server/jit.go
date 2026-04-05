@@ -113,7 +113,7 @@ func jitRestore() {
 	jitStore.mu.Lock()
 	jitStore.requests = loaded
 	jitStore.mu.Unlock()
-	slog.Info("jit: restored requests from configmap", "count", len(loaded))
+	slog.Debug("jit: restored requests from configmap", "count", len(loaded))
 }
 
 // jitPersist writes the current in-memory JIT requests to the ConfigMap.
@@ -346,8 +346,11 @@ func apiJITCreate(w http.ResponseWriter, r *http.Request) {
 
 	validDurations := map[string]bool{"30m": true, "1h": true, "2h": true, "4h": true}
 	if !validDurations[body.Duration] {
-		http.Error(w, "duration must be 30m, 1h, 2h, or 4h", 400)
-		return
+		// Also accept any valid Go duration up to 7 days
+		if d, err := time.ParseDuration(body.Duration); err != nil || d <= 0 || d > 7*24*time.Hour {
+			http.Error(w, "duration must be a valid duration up to 7 days (e.g. 30m, 1h, 2h, 4h, 8h, 24h, 48h, 168h)", 400)
+			return
+		}
 	}
 
 	email := "anonymous"

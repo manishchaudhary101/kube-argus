@@ -2,6 +2,44 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.2.2] — 2026-04-05
+
+### ⭐ Namespace Favorites
+
+Pin your most-used namespaces to the top of the namespace picker. Click the star icon next to any namespace — favorites persist per-user in your browser across sessions. Works across all views (pods, workloads, services, events, etc.).
+
+### ⏱️ CronJob Manual Trigger
+
+New **"▶ Run Now"** button on the CronJob detail view. Creates a one-off Job from the CronJob's template — no more `kubectl create job --from=cronjob/...` in the terminal.
+
+- 🔓 **Admins** can trigger directly
+- 🔒 **Viewers** need JIT approval first (scoped to the specific CronJob)
+- 📝 Every trigger is recorded in the audit trail
+- 🔗 Created Jobs appear in the CronJob's execution history with owner references
+
+### 🕐 Custom JIT Duration
+
+The JIT access request modal now supports **custom durations** alongside the preset 30m / 1h / 2h / 4h buttons. Enter any value in hours or days, up to a maximum of 7 days. Applies to both pod exec access and CronJob trigger access.
+
+### 📊 Pod Restart Timeline
+
+A new **color-coded scatter chart** showing individual restart events over time, visible on both the Pod Detail View and Workload Detail View.
+
+- 🔴 **Red** dots = OOMKilled
+- 🟡 **Amber** dots = Liveness/readiness probe failures
+- ⚪ **Gray** dots = Other reasons (Error, Completed, etc.)
+- 🔍 Hover any dot to see timestamp, container name, reason, and exit code
+- ⏰ Selectable time range: 1h, 6h, 12h, 24h
+- 📡 Uses Prometheus as primary data source, falls back to K8s events + container status when Prometheus is unavailable
+
+### 📦 Init Container Visibility
+
+All workload types (Deployment, StatefulSet, DaemonSet, CronJob, Job, ReplicaSet) now display **init containers** in the Containers tab with an amber **INIT** badge. Previously only regular containers were shown. Container info (resources, ports, env count) is now standardized across all workload types.
+
+### 🐛 Fixes
+
+- **JIT restore log spam** — The `jit: restored requests from configmap` message that repeated every 30 seconds is now logged at DEBUG level instead of INFO
+
 ## [v1.2.1] — 2026-04-05
 
 ### 📋 Structured JSON Logging

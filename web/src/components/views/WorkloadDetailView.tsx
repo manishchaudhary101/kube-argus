@@ -4,6 +4,7 @@ import yaml from 'js-yaml'
 import { useFetch, post } from '../../hooks/useFetch'
 import { useAuth } from '../../context/AuthContext'
 import { Spinner } from '../ui/Atoms'
+import { RestartTimeline } from '../ui/RestartTimeline'
 
 type DriftEntry = { kind: string; name: string; modifiedAgo: string; driftedCount: number; totalPods: number }
 
@@ -516,6 +517,7 @@ export function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: stri
               <div key={i} className="stat-card p-3">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm font-bold text-white">{ct.name}</span>
+                  {ct.init && <span className="rounded bg-amber-950/50 border border-amber-900/30 px-1.5 py-0.5 text-[8px] font-bold uppercase text-neon-amber">Init</span>}
                 </div>
                 <p className="text-[10px] font-mono text-neon-cyan break-all">{ct.image}</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
@@ -1018,6 +1020,7 @@ export function WorkloadMetricsPanel({ namespace, name, kind }: { namespace: str
           {wlData.restarts && wlData.restarts.length > 0 && (
             <MetricChart title="Container Restarts — each line is one pod (spikes = crash loops)" series={wlData.restarts} unit="" height={80} />
           )}
+          <RestartTimeline namespace={namespace} workload={name} kind={kind} />
         </>
       )}
     </div>

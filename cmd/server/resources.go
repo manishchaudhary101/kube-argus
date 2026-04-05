@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -69,7 +70,14 @@ func apiPDBs(w http.ResponseWriter, r *http.Request) {
 
 // ─── CronJob Execution History ──────────────────────────────────────
 func apiCronJobHistory(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimPrefix(r.URL.Path, "/api/cronjobs/")
+	// Dispatch POST /api/cronjobs/<namespace>/<name>/trigger to trigger handler
+	trimmed := strings.TrimPrefix(r.URL.Path, "/api/cronjobs/")
+	if r.Method == http.MethodPost && strings.HasSuffix(trimmed, "/trigger") {
+		apiCronJobTrigger(w, r)
+		return
+	}
+
+	name := trimmed
 	ns := r.URL.Query().Get("namespace")
 	if name == "" || ns == "" {
 		http.Error(w, "need name and namespace", 400)
@@ -168,6 +176,90 @@ func apiCronJobHistory(w http.ResponseWriter, r *http.Request) {
 		"activeCount":  len(cronJob.Status.Active),
 		"runs":         runs,
 	})
+}
+
+// ─── CronJob Manual Trigger ──────────────────────────────────────────
+func apiCronJobTrigger(w http.ResponseWriter, r *http.Request) {
+	// Parse /api/cronjobs/<namespace>/<name>/trigger
+	trimmed := strings.TrimPrefix(r.URL.Path, "/api/cronjobs/")
+	trimmed = strings.TrimSuffix(trimmed, "/trigger")
+	parts := strings.SplitN(trimmed, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(400)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace and name required"})
+		return
+	}
+	namespace, name := parts[0], parts[1]
+
+	if !requireAdminOrJIT(w, r, namespace, "CronJob", name) {
+		return
+	}
+
+	email := "anonymous"
+	role := defaultRole
+	if authEnabled {
+		if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {
+			email = sd.Email
+			role = sd.Role
+		}
+	}
+
+	c, cancel := ctx()
+	defer cancel()
+
+	cronJob, err := clientset.BatchV1().CronJobs(namespace).Get(c, name, metav1.GetOptions{})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(err.Error(), "not found") {
+			w.WriteHeader(404)
+			json.NewEncoder(w).Encode(map[string]string{"error": "cronjob not found"})
+		} else {
+			w.WriteHeader(500)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		}
+		return
+	}
+
+	timestamp := time.Now().Unix()
+	jobName := fmt.Sprintf("%s-manual-%d", name, timestamp)
+
+	labels := map[string]string{"triggered-by": "kube-argus"}
+	for k, v := range cronJob.Spec.JobTemplate.Labels {
+		labels[k] = v
+	}
+
+	isController := true
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: namespace,
+			Labels:    labels,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "batch/v1",
+					Kind:               "CronJob",
+					Name:               cronJob.Name,
+					UID:                cronJob.UID,
+					Controller:         &isController,
+					BlockOwnerDeletion: &isController,
+				},
+			},
+		},
+		Spec: cronJob.Spec.JobTemplate.Spec,
+	}
+
+	created, err := clientset.BatchV1().Jobs(namespace).Create(c, job, metav1.CreateOptions{})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	auditRecord(email, role, "cronjob.trigger", fmt.Sprintf("CronJob %s/%s", namespace, name), "job: "+created.Name, clientIP(r))
+
+	j(w, map[string]string{"job": created.Name, "namespace": namespace})
 }
 
 // ─── Namespace Cost Allocation ──────────────────────────────────────

@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { useFavorites } from '../hooks/useFavorites'
 
 export function NamespacePicker({ namespaces, value, onChange }: { namespaces: string[]; value: string; onChange: (ns: string) => void }) {
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+  const { email } = useAuth()
+  const { favorites, toggle, isFavorite } = useFavorites(email)
 
   useEffect(() => {
     if (!open) return
@@ -15,6 +19,30 @@ export function NamespacePicker({ namespaces, value, onChange }: { namespaces: s
   useEffect(() => { if (!open) setFilter('') }, [open])
 
   const filtered = filter ? namespaces.filter(n => n.toLowerCase().includes(filter.toLowerCase())) : namespaces
+
+  // Split into favorites (intersection with live namespaces) and the rest
+  const favFiltered = filtered.filter(n => favorites.includes(n))
+  const nonFavFiltered = filtered.filter(n => !favorites.includes(n))
+  const hasFavs = favFiltered.length > 0
+
+  const starBtn = (ns: string, filled: boolean) => (
+    <button
+      onClick={e => { e.stopPropagation(); toggle(ns) }}
+      className={`ml-auto text-[11px] transition-colors ${filled ? 'text-neon-amber hover:text-gray-500' : 'text-gray-700 hover:text-neon-amber'}`}
+      aria-label={filled ? `Remove ${ns} from favorites` : `Add ${ns} to favorites`}
+    >
+      {filled ? '★' : '☆'}
+    </button>
+  )
+
+  const nsButton = (n: string, fav: boolean) => (
+    <button key={n} onClick={() => { onChange(n); setOpen(false) }}
+      className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors flex items-center gap-2 ${value === n ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-gray-400 hover:bg-hull-800/60 hover:text-white'}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${value === n ? 'bg-neon-cyan' : 'bg-gray-700'}`} />
+      <span className="truncate font-mono">{n}</span>
+      {starBtn(n, fav)}
+    </button>
+  )
 
   return (
     <div className="relative" ref={ref}>
@@ -41,13 +69,14 @@ export function NamespacePicker({ namespaces, value, onChange }: { namespaces: s
               All Namespaces
               <span className="ml-auto text-[9px] text-gray-600">{namespaces.length}</span>
             </button>
-            {filtered.map(n => (
-              <button key={n} onClick={() => { onChange(n); setOpen(false) }}
-                className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors flex items-center gap-2 ${value === n ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-gray-400 hover:bg-hull-800/60 hover:text-white'}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${value === n ? 'bg-neon-cyan' : 'bg-gray-700'}`} />
-                <span className="truncate font-mono">{n}</span>
-              </button>
-            ))}
+            {hasFavs && (
+              <>
+                <div className="px-3 pt-2 pb-1 text-[9px] font-bold uppercase tracking-widest text-neon-amber/70">★ Favorites</div>
+                {favFiltered.map(n => nsButton(n, true))}
+                <div className="px-3 pt-2 pb-1 text-[9px] font-bold uppercase tracking-widest text-gray-600">All Namespaces</div>
+              </>
+            )}
+            {nonFavFiltered.map(n => nsButton(n, isFavorite(n)))}
             {filtered.length === 0 && <p className="px-3 py-3 text-[10px] text-gray-600 text-center">No namespaces match</p>}
           </div>
         </div>

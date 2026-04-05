@@ -71,7 +71,10 @@ Most Kubernetes dashboards show you resources. Kube-Argus gives you a **live, re
 - 💰 **Cost analysis** — spot instance risk scoring, namespace cost allocation, consolidation recommendations
 - 🖥️ **Interactive web shell** — exec into any pod over WebSocket with full terminal
 - 📋 **YAML editor** — view and edit raw YAML for 11 resource kinds
-- 🔐 **JIT exec access** — zero-trust shell access with approval workflow and auto-expiry
+- 🔐 **JIT exec access** — zero-trust shell access with approval workflow, auto-expiry, and custom durations up to 7 days
+- ⭐ **Namespace favorites** — star frequently-used namespaces, persisted per-user
+- ⏱️ **CronJob manual trigger** — run CronJobs on demand with JIT approval for viewers
+- 📈 **Pod restart timeline** — color-coded scatter chart of restart events with reasons
 - 📝 **Audit trail** — track logins, pod deletions, scaling actions, exec sessions
 
 ### Works On
@@ -278,6 +281,10 @@ Auth mode is auto-detected from which env vars you set:
 | JIT exec access (approval workflow) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Audit trail & online users | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Config drift detection | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Namespace favorites | ✅ | ❌ | ❌ | ❌ | ❌ |
+| CronJob manual trigger (with JIT) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Pod restart reason timeline | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Init container visibility | ✅ | ❌ | ✅ | ❌ | ✅ |
 | Drain wizard with PDB preview | ✅ | ❌ | ❌ | ❌ | ❌ |
 | NOC/wall screen mode | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Web-based (sharable) | ✅ | ✅ | ❌ | ✅ | ❌ |
@@ -328,6 +335,7 @@ Auth mode is auto-detected from which env vars you set:
 - Previous container logs for crash debugging
 - Interactive web shell via WebSocket
 - AI-powered diagnosis for unhealthy pods
+- Restart reason timeline — color-coded scatter chart showing when and why containers restarted
 </details>
 
 <details>
@@ -343,7 +351,8 @@ Auth mode is auto-detected from which env vars you set:
 
 - Three auth modes: Google SSO, generic OIDC, or none
 - Role-based access: admin vs viewer
-- JIT exec access with approval workflow and auto-expiry
+- JIT exec access with approval workflow, auto-expiry, and custom durations (up to 7 days)
+- JIT-gated CronJob manual trigger for viewers
 - Audit trail for all actions
 - Online users with presence indicators
 - Runs as non-root (`USER nobody`)
@@ -360,6 +369,9 @@ Auth mode is auto-detected from which env vars you set:
 - Troubled pods / NOC screen with fullscreen mode
 - Spot interruption tracking with resilience scoring
 - Events filtered by namespace
+- Namespace favorites with per-user persistence
+- Init container visibility across all workload types
+- CronJob manual trigger with JIT approval
 </details>
 
 ---

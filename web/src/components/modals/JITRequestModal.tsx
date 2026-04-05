@@ -3,8 +3,15 @@ import { useState } from 'react'
 export function JITRequestModal({ ns, pod, ownerKind, ownerName, onClose, onSubmitted }: { ns: string; pod: string; ownerKind?: string; ownerName?: string; onClose: () => void; onSubmitted: () => void }) {
   const [reason, setReason] = useState('')
   const [duration, setDuration] = useState('1h')
+  const [custom, setCustom] = useState(false)
+  const [customVal, setCustomVal] = useState('8')
+  const [customUnit, setCustomUnit] = useState<'h' | 'd'>('h')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const effectiveDuration = custom
+    ? (customUnit === 'd' ? `${parseInt(customVal || '0') * 24}h` : `${customVal || '0'}h`)
+    : duration
 
   const submit = async () => {
     if (!reason.trim()) { setError('Reason is required'); return }
@@ -14,7 +21,7 @@ export function JITRequestModal({ ns, pod, ownerKind, ownerName, onClose, onSubm
       const r = await fetch('/api/jit/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ namespace: ns, pod, ownerKind: ownerKind || '', ownerName: ownerName || '', reason: reason.trim(), duration })
+        body: JSON.stringify({ namespace: ns, pod, ownerKind: ownerKind || '', ownerName: ownerName || '', reason: reason.trim(), duration: effectiveDuration })
       })
       if (!r.ok) {
         const text = await r.text()
@@ -57,18 +64,29 @@ export function JITRequestModal({ ns, pod, ownerKind, ownerName, onClose, onSubm
 
           <div>
             <label className="block text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">Duration</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {(['30m', '1h', '2h', '4h'] as const).map(d => (
-                <button key={d} onClick={() => setDuration(d)}
+            <div className="grid grid-cols-5 gap-1.5">
+              {(['30m', '1h', '2h', '4h', 'custom'] as const).map(d => (
+                <button key={d} onClick={() => { if (d === 'custom') { setDuration(''); setCustom(true) } else { setDuration(d); setCustom(false) } }}
                   className={`rounded-lg py-1.5 text-xs font-medium transition-all ${
-                    duration === d
+                    (d === 'custom' ? custom : duration === d && !custom)
                       ? 'bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan'
                       : 'bg-hull-800 border border-hull-700 text-gray-400 hover:text-white hover:border-hull-600'
                   }`}>
-                  {d}
+                  {d === 'custom' ? 'Custom' : d}
                 </button>
               ))}
             </div>
+            {custom && (
+              <div className="flex items-center gap-2 mt-2">
+                <input type="number" min={1} max={168} value={customVal} onChange={e => setCustomVal(e.target.value)}
+                  className="w-20 rounded-lg bg-hull-800 border border-hull-700 px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-neon-cyan/40" />
+                <select value={customUnit} onChange={e => setCustomUnit(e.target.value as 'h' | 'd')}
+                  className="rounded-lg bg-hull-800 border border-hull-700 px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-neon-cyan/40">
+                  <option value="h">hours</option>
+                  <option value="d">days</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <div>
