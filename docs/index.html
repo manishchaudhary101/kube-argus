@@ -578,83 +578,98 @@
     /* ── No More Section ─────────────────────── */
     .nomore-section {
       text-align: center;
-      padding: 4.5rem 1.5rem 3rem;
+      padding: 5rem 1.5rem 4rem;
+    }
+    .nomore-card {
+      position: relative;
+      max-width: 640px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2.5rem 3rem;
+      border-radius: 20px;
+      background: radial-gradient(ellipse at 50% 0%, rgba(6, 214, 224, 0.06) 0%, transparent 70%);
+      border: 1px solid rgba(6, 214, 224, 0.12);
+      overflow: hidden;
+    }
+    .nomore-card::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 20px;
+      padding: 1px;
+      z-index: -1;
+      background: conic-gradient(from var(--nm-angle, 0deg), rgba(6,214,224,0.4), transparent 25%, rgba(0,255,136,0.3) 50%, transparent 75%, rgba(6,214,224,0.4));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
     }
     .nomore-title {
       font-size: clamp(1.6rem, 3.5vw, 2.2rem);
       font-weight: 900;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, var(--cyan), #00ff88);
+      letter-spacing: 0.02em;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--cyan), #00ff88, var(--cyan));
+      background-size: 200% auto;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      animation: textShimmer 3s linear infinite;
     }
-    .nomore-sub {
-      color: var(--muted);
-      font-size: 0.85rem;
-      margin-bottom: 2.5rem;
+    .nomore-divider {
+      width: 60px;
+      height: 2px;
+      margin: 0 auto 1.5rem;
+      background: linear-gradient(90deg, transparent, rgba(6,214,224,0.4), transparent);
+      border-radius: 2px;
     }
-    .nomore-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 0.6rem;
-      max-width: 900px;
-      margin: 0 auto;
-    }
-    .nomore-item {
+    .nomore-phrase-area {
+      height: 2.2rem;
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      padding: 0.7rem 1rem;
-      border-radius: 10px;
-      border: 1px solid rgba(6, 214, 224, 0.06);
-      background: rgba(6, 214, 224, 0.02);
-      opacity: 0;
-      transform: translateX(-10px);
-      transition: opacity 0.5s, transform 0.5s, border-color 0.4s, background 0.4s;
+      justify-content: center;
+      overflow: hidden;
     }
-    .nomore-item.struck {
-      opacity: 1;
-      transform: translateX(0);
-      border-color: rgba(0, 255, 136, 0.12);
-      background: rgba(0, 255, 136, 0.03);
+    .nomore-phrase {
+      position: relative;
+      display: inline-block;
+      font-size: clamp(0.95rem, 2.2vw, 1.2rem);
+      font-weight: 500;
+      color: rgba(255,255,255,0.75);
+      letter-spacing: 0.01em;
+      white-space: nowrap;
     }
-    .nomore-check {
+    .nomore-phrase .nm-strike {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      height: 2px;
+      width: 0;
+      background: linear-gradient(90deg, var(--cyan), #00ff88);
+      box-shadow: 0 0 8px rgba(6,214,224,0.4), 0 0 20px rgba(6,214,224,0.15);
+      border-radius: 2px;
+      transform: translateY(-50%);
+      transition: width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    .nomore-phrase.struck { color: rgba(255,255,255,0.25); }
+    .nomore-phrase.struck .nm-strike { width: 100%; }
+    .nomore-phrase .nm-check {
+      position: absolute;
+      right: -1.8rem;
+      top: 50%;
+      transform: translateY(-50%) scale(0);
+      font-size: 0.9rem;
+      font-weight: 700;
       color: #00ff88;
-      font-size: 0.85rem;
-      flex-shrink: 0;
-      opacity: 0;
-      transform: scale(0);
-      transition: opacity 0.3s 0.3s, transform 0.3s 0.3s;
+      filter: drop-shadow(0 0 6px rgba(0,255,136,0.6));
+      transition: transform 0.3s 0.4s;
     }
-    .nomore-item.struck .nomore-check {
-      opacity: 1;
-      transform: scale(1);
-    }
-    .nomore-text {
-      font-size: 0.8rem;
-      color: rgba(255, 255, 255, 0.6);
-      text-decoration: line-through;
-      text-decoration-color: transparent;
-      transition: text-decoration-color 0.4s 0.15s, color 0.4s 0.15s;
-    }
-    .nomore-item.struck .nomore-text {
-      text-decoration-color: rgba(6, 214, 224, 0.5);
-      color: rgba(255, 255, 255, 0.35);
-    }
+    .nomore-phrase.struck .nm-check { transform: translateY(-50%) scale(1); }
     .nomore-stats {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
       gap: 2.5rem;
       margin-top: 3rem;
-      opacity: 0;
-      transform: translateY(15px);
-      transition: opacity 0.6s, transform 0.6s;
-    }
-    .nomore-stats.visible {
-      opacity: 1;
-      transform: translateY(0);
     }
     .nomore-stat-val {
       font-size: 1.6rem;
@@ -800,19 +815,14 @@
 
   <!-- No More section -->
   <div class="nomore-section">
-    <h2 class="nomore-title">No more.</h2>
-    <p class="nomore-sub">Kube-Argus replaces your scattered toolkit with a single dashboard.</p>
-    <div class="nomore-grid" id="nomore-grid">
-      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Juggling k9s, Grafana &amp; kubectl in 5 tabs</span></div>
-      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Handing out permanent cluster shell access</span></div>
-      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Hitting refresh and waiting... and waiting</span></div>
-      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Guessing which pods are wasting resources</span></div>
-      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Staring at CrashLoopBackOff with no clue why</span></div>
-      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">&quot;Who deleted that pod?&quot; with zero audit trail</span></div>
-      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Copy-pasting YAML between terminals</span></div>
-      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Running kubectl create job --from=cronjob manually</span></div>
+    <div class="nomore-card">
+      <div class="nomore-title">No more.</div>
+      <div class="nomore-divider"></div>
+      <div class="nomore-phrase-area">
+        <div class="nomore-phrase" id="nomore-phrase"></div>
+      </div>
     </div>
-    <div class="nomore-stats">
+    <div class="nomore-stats" id="nomore-stats">
       <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--cyan)">~30MB</div><div class="nomore-stat-label">Docker Image</div></div>
       <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--green)">0</div><div class="nomore-stat-label">Dependencies</div></div>
       <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--cyan)">&lt;1s</div><div class="nomore-stat-label">Startup Time</div></div>
@@ -1013,24 +1023,61 @@
     document.querySelectorAll('.screenshot-item').forEach((el, i) => { el.dataset.delay = i * 100; obs.observe(el); });
     document.querySelectorAll('.section-heading').forEach(el => obs.observe(el));
 
-    /* ── No More staggered reveal ─────────── */
-    const nomoreGrid = document.getElementById('nomore-grid');
-    if (nomoreGrid) {
-      const items = nomoreGrid.querySelectorAll('.nomore-item');
-      const stats = document.querySelector('.nomore-stats');
-      const nomoreObs = new IntersectionObserver(entries => {
-        if (entries[0].isIntersecting) {
-          items.forEach((el, i) => {
-            setTimeout(() => el.classList.add('struck'), i * 200);
-          });
-          if (stats) {
-            setTimeout(() => stats.classList.add('visible'), items.length * 200 + 300);
-          }
-          nomoreObs.disconnect();
+    /* ── No More rotating ticker ──────────── */
+    (function() {
+      const phrases = [
+        'Juggling k9s, Grafana & kubectl in 5 tabs.',
+        'Handing out permanent cluster shell access.',
+        'Hitting refresh and waiting... and waiting.',
+        'Guessing which pods are wasting resources.',
+        'Staring at CrashLoopBackOff with no clue why.',
+        'Copy-pasting YAML between terminals.',
+        '"Who deleted that pod?" with zero audit trail.',
+        'Running kubectl create job --from=cronjob manually.',
+        'Switching namespaces 50 times a day.',
+        'Scattered logs across multiple terminals.',
+      ];
+      const el = document.getElementById('nomore-phrase');
+      if (!el) return;
+      let idx = 0;
+      let running = false;
+
+      function show() {
+        if (!running) return;
+        const text = phrases[idx];
+        el.className = 'nomore-phrase';
+        el.innerHTML = text + '<span class="nm-strike"></span><span class="nm-check">&#10003;</span>';
+        el.style.opacity = '1';
+
+        setTimeout(function() {
+          el.classList.add('struck');
+          setTimeout(function() {
+            el.style.opacity = '0';
+            setTimeout(function() {
+              idx = (idx + 1) % phrases.length;
+              show();
+            }, 400);
+          }, 1400);
+        }, 1600);
+      }
+
+      var nmObs = new IntersectionObserver(function(entries) {
+        if (entries[0].isIntersecting && !running) {
+          running = true;
+          show();
+          nmObs.disconnect();
         }
-      }, { threshold: 0.2 });
-      nomoreObs.observe(nomoreGrid);
-    }
+      }, { threshold: 0.3 });
+      nmObs.observe(el.closest('.nomore-section'));
+
+      /* spinning border */
+      var card = document.querySelector('.nomore-card');
+      if (card) {
+        var angle = 0;
+        function spin() { angle = (angle + 0.5) % 360; card.style.setProperty('--nm-angle', angle + 'deg'); requestAnimationFrame(spin); }
+        spin();
+      }
+    })();
   </script>
 
 </body>
