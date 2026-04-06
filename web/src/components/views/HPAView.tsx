@@ -4,7 +4,7 @@ import { useFetch } from '../../hooks/useFetch'
 import { Spinner } from '../ui/Atoms'
 import { YamlModal } from '../modals/YamlModal'
 
-export function HPAView({ namespace }: { namespace: string }) {
+export function HPAView({ namespace, onHPA }: { namespace: string; onHPA?: (ns: string, name: string) => void }) {
   const q = namespace ? `?namespace=${namespace}` : ''
   const { data, err, loading } = useFetch<HPA[]>(`/api/hpa${q}`, 10000)
   const [yamlTarget, setYamlTarget] = useState<{ ns: string; name: string } | null>(null)
@@ -38,7 +38,7 @@ export function HPAView({ namespace }: { namespace: string }) {
         const health = scaleHealth(h)
         const pct = h.maxReplicas > 0 ? (h.currentReplicas / h.maxReplicas) * 100 : 0
         return (
-          <div key={`${h.namespace}-${h.name}`} className="stat-card p-3 space-y-2">
+          <div key={`${h.namespace}-${h.name}`} className={`stat-card p-3 space-y-2 ${onHPA ? 'cursor-pointer hover:bg-hull-800/40 transition-colors' : ''}`} onClick={() => onHPA?.(h.namespace, h.name)}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white truncate">{h.name}</p>

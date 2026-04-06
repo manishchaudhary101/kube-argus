@@ -788,14 +788,14 @@ export function DependencyGraph({ ns, name, kind }: { ns: string; name: string; 
     items.push({
       kind: 'Service', name: s.name, relation: '→ exposes',
       detail: `${s.type} · ${s.clusterIP} · ${s.ports}`,
-      onClick: () => navigate(`/services`),
+      onClick: () => navigate(`/services/${ns}/${s.name}`),
     })
   })
   hpas.forEach((h: any) => {
     items.push({
       kind: 'HPA', name: h.name, relation: '↔ scales',
       detail: `${h.currentReplicas}/${h.desiredReplicas} replicas (${h.minReplicas}–${h.maxReplicas}) ${h.metrics || ''}`,
-      onClick: () => navigate(`/hpa`),
+      onClick: () => navigate(`/hpa/${ns}/${h.name}`),
     })
   })
   if (pdb) {
@@ -809,8 +809,8 @@ export function DependencyGraph({ ns, name, kind }: { ns: string; name: string; 
     items.push({
       kind: c.kind, name: c.name, relation: `← ${c.source}`,
       detail: d ? `Modified ${d.modifiedAgo} ago · ${d.driftedCount}/${d.totalPods} pods stale` : `${c.kind} mounted via ${c.source}`,
-      onClick: () => navigate(`/config`),
       drift: d,
+      onClick: () => navigate(`/config?ns=${encodeURIComponent(ns)}&search=${encodeURIComponent(c.name)}`),
     })
   })
 

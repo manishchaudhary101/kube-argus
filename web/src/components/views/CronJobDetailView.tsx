@@ -42,9 +42,10 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
   if (err) return <div className="p-4"><button onClick={onBack} className="text-neon-cyan text-xs mb-2">← Back</button><p className="text-neon-red">{err}</p></div>
   if (!data) return null
 
-  const succeeded = data.runs.filter(r => r.status === 'succeeded').length
-  const failed = data.runs.filter(r => r.status === 'failed').length
-  const running = data.runs.filter(r => r.status === 'running').length
+  const runs = data.runs || []
+  const succeeded = runs.filter(r => r.status === 'succeeded').length
+  const failed = runs.filter(r => r.status === 'failed').length
+  const running = runs.filter(r => r.status === 'running').length
 
   const statusBadge = (s: string) =>
     s === 'succeeded' ? 'bg-green-950/50 text-neon-green border border-green-900/40' :
@@ -117,7 +118,7 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
           <p className="text-[9px] text-gray-500 uppercase tracking-wider">Active Jobs</p>
         </div>
         <div className="stat-card p-2.5 text-center">
-          <p className="text-lg font-extrabold text-white tabular-nums">{data.runs.length}</p>
+          <p className="text-lg font-extrabold text-white tabular-nums">{runs.length}</p>
           <p className="text-[9px] text-gray-500 uppercase tracking-wider">Total Runs</p>
         </div>
       </div>
@@ -132,7 +133,7 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
         <span className="text-neon-blue font-medium">{running} running</span>
       </div>
 
-      {data.runs.length === 0 ? (
+      {runs.length === 0 ? (
         <p className="text-gray-500 text-sm text-center py-8">No execution history yet</p>
       ) : (
         <div className="overflow-x-auto">
@@ -147,7 +148,7 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
               </tr>
             </thead>
             <tbody>
-              {data.runs.map(run => (
+              {runs.map(run => (
                 <tr key={run.name} className="border-b border-hull-800/40 hover:bg-hull-800/30 transition-colors">
                   <td className="py-1.5 pr-3 font-mono text-gray-300 truncate max-w-[200px]">{run.name}</td>
                   <td className="py-1.5 pr-3 text-gray-400">{run.startTime ? new Date(run.startTime).toLocaleString() : '—'}</td>

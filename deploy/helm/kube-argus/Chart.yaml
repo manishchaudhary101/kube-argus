@@ -2,8 +2,8 @@ apiVersion: v2
 name: kube-argus
 description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
-version: 1.2.2
-appVersion: "1.2.2"
+version: 1.2.3
+appVersion: "1.2.3"
 keywords:
   - kubernetes
   - dashboard
@@ -34,7 +34,18 @@ annotations:
       description: "Init container visibility — all workload types now display init containers with an INIT badge"
     - kind: fixed
       description: "JIT restore log moved to DEBUG level to stop spamming INFO logs every 30 seconds"
-  artifacthub.io/links: |
+    - kind: added
+      description: "Service detail view — type, clusterIP, ports, selector, endpoint pods, labels, annotations"
+    - kind: added
+      description: "HPA detail view — target workload, replicas, metrics, conditions"
+    - kind: changed
+      description: "Resource graph click-through — Service and HPA open detail views, ConfigMap/Secret open filtered config view"
+    - kind: fixed
+      description: "CronJob detail crash when no job history (null runs)"
+    - kind: fixed
+      description: "Restart timeline OOMKilled events showing as Other instead of red"
+    - kind: fixed
+      description: "JIT modal title now context-aware (CronTrigger vs Pod Shell/Exec)"  artifacthub.io/links: |
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus
   artifacthub.io/screenshots: |

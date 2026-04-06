@@ -32,6 +32,8 @@ import { ConfigView } from './components/views/ConfigView'
 import { PVCsView } from './components/views/PVCsView'
 import { SpotAdvisorView } from './components/views/SpotAdvisorView'
 import { CronJobDetailView } from './components/views/CronJobDetailView'
+import { ServiceDetailView } from './components/views/ServiceDetailView'
+import { HPADetailView } from './components/views/HPADetailView'
 import { JITRequestsModal } from './components/views/JITRequestsView'
 
 function App() {
@@ -43,6 +45,8 @@ function App() {
   const [nodeTarget, setNodeTargetRaw] = useState<string | null>(initial.node)
   const [ingressTarget, setIngressTargetRaw] = useState<{ ns: string; name: string } | null>(initial.ingress)
   const [workloadTarget, setWorkloadTargetRaw] = useState<{ ns: string; name: string; kind: string } | null>(initial.workload)
+  const [serviceTarget, setServiceTargetRaw] = useState<{ ns: string; name: string } | null>(initial.service)
+  const [hpaTarget, setHpaTargetRaw] = useState<{ ns: string; name: string } | null>(initial.hpa)
   const [showSearch, setShowSearch] = useState(false)
   const [sideOpen, setSideOpen] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
@@ -87,6 +91,8 @@ function App() {
     setNodeTargetRaw(null)
     setIngressTargetRaw(null)
     setWorkloadTargetRaw(null)
+    setServiceTargetRaw(null)
+    setHpaTargetRaw(null)
     if (t !== 'nodes') setNodePoolRaw('')
     pushUrl(tabUrl(t))
   }, [pushUrl, tabUrl])
@@ -125,6 +131,18 @@ function App() {
     else pushUrl(tabUrl(tab))
   }, [pushUrl, tab, workloadUrl, tabUrl])
 
+  const setServiceTarget = useCallback((v: { ns: string; name: string } | null) => {
+    setServiceTargetRaw(v)
+    if (v) pushUrl(`/services/${v.ns}/${v.name}`)
+    else pushUrl('/services')
+  }, [pushUrl])
+
+  const setHpaTarget = useCallback((v: { ns: string; name: string } | null) => {
+    setHpaTargetRaw(v)
+    if (v) pushUrl(`/hpa/${v.ns}/${v.name}`)
+    else pushUrl('/hpa')
+  }, [pushUrl])
+
   useEffect(() => {
     const onPop = () => {
       const r = parseRoute()
@@ -133,7 +151,12 @@ function App() {
       setNodeTargetRaw(r.node)
       setIngressTargetRaw(r.ingress)
       setWorkloadTargetRaw(r.workload)
+      setServiceTargetRaw(r.service)
+      setHpaTargetRaw(r.hpa)
       setNodePoolRaw(r.nodePool)
+      const sp = new URLSearchParams(window.location.search)
+      const urlNs = sp.get('ns')
+      if (urlNs) setNs(urlNs)
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
@@ -209,8 +232,7 @@ function App() {
     } else if (['Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'].includes(r.kind)) {
       setWorkloadTarget({ ns: r.namespace, name: r.name, kind: r.kind })
     } else if (r.kind === 'Service') {
-      setNs(r.namespace)
-      setTab('services')
+      setServiceTarget({ ns: r.namespace, name: r.name })
     }
   }
 
@@ -224,6 +246,10 @@ function App() {
       : <WorkloadDetailView ns={workloadTarget.ns} name={workloadTarget.name} kind={workloadTarget.kind} onBack={() => setWorkloadTarget(null)} onPod={(pns: string, pname: string) => { setPodTargetRaw({ ns: pns, name: pname }); pushUrl(`/pods/${pns}/${pname}`) }} />
   ) : ingressTarget ? (
     <IngressDetailView ns={ingressTarget.ns} name={ingressTarget.name} onBack={() => setIngressTarget(null)} />
+  ) : serviceTarget ? (
+    <ServiceDetailView ns={serviceTarget.ns} name={serviceTarget.name} onBack={() => setServiceTarget(null)} onPod={(pns: string, pname: string) => { setPodTargetRaw({ ns: pns, name: pname }); pushUrl(`/pods/${pns}/${pname}`) }} />
+  ) : hpaTarget ? (
+    <HPADetailView ns={hpaTarget.ns} name={hpaTarget.name} onBack={() => setHpaTarget(null)} />
   ) : null
 
   return (
@@ -343,9 +369,9 @@ function App() {
             {tab === 'nodes' && <NodesView onNode={(name) => setNodeTarget(name)} poolFilter={nodePool} onPoolChange={setNodePool} />}
             {tab === 'workloads' && <WorkloadsView namespace={ns} initialKind={workloadKind} onWorkload={(ns, name, kind) => setWorkloadTarget({ ns, name, kind })} />}
             {tab === 'pods' && <PodsView namespace={ns} onPod={(ns, name) => setPodTarget({ ns, name })} />}
-            {tab === 'services' && <ServicesView namespace={ns} />}
+            {tab === 'services' && <ServicesView namespace={ns} onService={(sns: string, sname: string) => setServiceTarget({ ns: sns, name: sname })} />}
             {tab === 'ingress' && <IngressesView namespace={ns} onIngress={(ns, name) => setIngressTarget({ ns, name })} />}
-          {tab === 'hpa' && <HPAView namespace={ns} />}
+          {tab === 'hpa' && <HPAView namespace={ns} onHPA={(hns: string, hname: string) => setHpaTarget({ ns: hns, name: hname })} />}
           {tab === 'pvcs' && <PVCsView namespace={ns} />}
           {tab === 'config' && <ConfigView namespace={ns} />}
           {tab === 'spot' && <SpotAdvisorView />}

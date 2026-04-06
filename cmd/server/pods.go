@@ -714,6 +714,12 @@ func restartTimelineFromFallback(ns, pod, podRegex string, since time.Time) []re
 			if reason == "BackOff" {
 				reason = "CrashLoopBackOff"
 			}
+			if reason == "OOMKilling" || reason == "Killing" {
+				// Check if the event message mentions OOM
+				if strings.Contains(strings.ToLower(e.Message), "oom") || reason == "OOMKilling" {
+					reason = "OOMKilled"
+				}
+			}
 
 			events = append(events, restartEvent{
 				Timestamp: ts.Unix(),

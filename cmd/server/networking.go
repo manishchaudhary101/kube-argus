@@ -252,3 +252,148 @@ func apiServices(w http.ResponseWriter, r *http.Request) {
 	}
 	jGz(w, r, out)
 }
+
+// ─── Service Detail ──────────────────────────────────────────────────
+
+func apiServiceDetail(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/services/"), "/"), "/")
+	if len(parts) < 2 {
+		http.Error(w, "use /api/services/{namespace}/{name}", 400)
+		return
+	}
+	ns, name := parts[0], parts[1]
+
+	c, cancel := ctx()
+	defer cancel()
+	svc, err := clientset.CoreV1().Services(ns).Get(c, name, metav1.GetOptions{})
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	type portEntry struct {
+		Name       string `json:"name"`
+		Port       int32  `json:"port"`
+		TargetPort string `json:"targetPort"`
+		NodePort   int32  `json:"nodePort"`
+		Protocol   string `json:"protocol"`
+	}
+	ports := make([]portEntry, 0, len(svc.Spec.Ports))
+	for _, p := range svc.Spec.Ports {
+		ports = append(ports, portEntry{
+			Name:       p.Name,
+			Port:       p.Port,
+			TargetPort: p.TargetPort.String(),
+			NodePort:   p.NodePort,
+			Protocol:   string(p.Protocol),
+		})
+	}
+
+	externalIPs := make([]string, 0)
+	externalIPs = append(externalIPs, svc.Spec.ExternalIPs...)
+	for _, lb := range svc.Status.LoadBalancer.Ingress {
+		if lb.Hostname != "" {
+			externalIPs = append(externalIPs, lb.Hostname)
+		}
+		if lb.IP != "" {
+			externalIPs = append(externalIPs, lb.IP)
+		}
+	}
+
+	selector := make(map[string]string)
+	for k, v := range svc.Spec.Selector {
+		selector[k] = v
+	}
+	labels := make(map[string]string)
+	for k, v := range svc.Labels {
+		labels[k] = v
+	}
+	annotations := make(map[string]string)
+	for k, v := range svc.Annotations {
+		annotations[k] = v
+	}
+
+	// Fetch endpoints
+	type endpointAddr struct {
+		IP       string `json:"ip"`
+		Hostname string `json:"hostname"`
+		NodeName string `json:"nodeName"`
+		Ready    bool   `json:"ready"`
+	}
+	type endpointPort struct {
+		Name     string `json:"name"`
+		Port     int32  `json:"port"`
+		Protocol string `json:"protocol"`
+	}
+	type endpointSubset struct {
+		Addresses []endpointAddr `json:"addresses"`
+		Ports     []endpointPort `json:"ports"`
+	}
+	endpoints := make([]endpointSubset, 0)
+	ep, epErr := clientset.CoreV1().Endpoints(ns).Get(c, name, metav1.GetOptions{})
+	if epErr == nil && ep != nil {
+		for _, sub := range ep.Subsets {
+			es := endpointSubset{}
+			for _, addr := range sub.Addresses {
+				ea := endpointAddr{IP: addr.IP, Ready: true}
+				if addr.Hostname != "" {
+					ea.Hostname = addr.Hostname
+				}
+				if addr.NodeName != nil {
+					ea.NodeName = *addr.NodeName
+				}
+				es.Addresses = append(es.Addresses, ea)
+			}
+			for _, addr := range sub.NotReadyAddresses {
+				ea := endpointAddr{IP: addr.IP, Ready: false}
+				if addr.Hostname != "" {
+					ea.Hostname = addr.Hostname
+				}
+				if addr.NodeName != nil {
+					ea.NodeName = *addr.NodeName
+				}
+				es.Addresses = append(es.Addresses, ea)
+			}
+			for _, p := range sub.Ports {
+				es.Ports = append(es.Ports, endpointPort{
+					Name: p.Name, Port: p.Port, Protocol: string(p.Protocol),
+				})
+			}
+			endpoints = append(endpoints, es)
+		}
+	}
+
+	// Fetch related events
+	cache.mu.RLock()
+	evts := make([]map[string]interface{}, 0)
+	if cache.events != nil {
+		for _, e := range cache.events.Items {
+			if e.InvolvedObject.Kind == "Service" && e.InvolvedObject.Name == name && e.InvolvedObject.Namespace == ns {
+				ts := e.LastTimestamp.Time
+				if ts.IsZero() {
+					ts = e.CreationTimestamp.Time
+				}
+				evts = append(evts, map[string]interface{}{
+					"type": e.Type, "reason": e.Reason, "message": e.Message,
+					"age": shortDur(time.Since(ts)), "count": e.Count,
+				})
+			}
+		}
+	}
+	cache.mu.RUnlock()
+
+	j(w, map[string]interface{}{
+		"name":        svc.Name,
+		"namespace":   svc.Namespace,
+		"type":        string(svc.Spec.Type),
+		"clusterIP":   svc.Spec.ClusterIP,
+		"externalIPs": externalIPs,
+		"ports":       ports,
+		"selector":    selector,
+		"labels":      labels,
+		"annotations": annotations,
+		"endpoints":   endpoints,
+		"events":      evts,
+		"age":         shortDur(time.Since(svc.CreationTimestamp.Time)),
+	})
+}

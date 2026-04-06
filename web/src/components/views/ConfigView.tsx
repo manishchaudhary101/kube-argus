@@ -88,7 +88,10 @@ export function ConfigView({ namespace }: { namespace: string }) {
   const { data, err, loading } = useFetch<ConfigItem[]>(`/api/configs${q}`, 15000)
   const { data: driftData } = useFetch<DriftEntry[]>(`/api/config-drift${q}`, 30000)
   const [kindFilter, setKindFilter] = useState<'' | 'ConfigMap' | 'Secret'>('')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => {
+    const sp = new URLSearchParams(window.location.search)
+    return sp.get('search') || ''
+  })
   const [expanded, setExpanded] = useState<string | null>(null)
   const [viewing, setViewing] = useState<ConfigItem | null>(null)
   const [yamlTarget, setYamlTarget] = useState<{ kind: string; ns: string; name: string } | null>(null)

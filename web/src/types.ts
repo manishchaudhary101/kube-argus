@@ -56,3 +56,23 @@ export type NodeDescData = {
   events?: NodeEvent[]
   usedCpuM: number; usedMemMi: number; allocCpuM: number; allocMemMi: number; cpuPercent: number; memPercent: number
 }
+
+export type ServicePort = { name: string; port: number; targetPort: string; nodePort: number; protocol: string }
+export type EndpointAddr = { ip: string; hostname: string; nodeName: string; ready: boolean }
+export type EndpointPort = { name: string; port: number; protocol: string }
+export type EndpointSubset = { addresses: EndpointAddr[]; ports: EndpointPort[] }
+export type ServiceDescData = {
+  name: string; namespace: string; type: string; clusterIP: string; externalIPs: string[]
+  ports: ServicePort[]; selector: Record<string, string>; labels: Record<string, string>; annotations: Record<string, string>
+  endpoints: EndpointSubset[]
+  events: { type: string; reason: string; message: string; age: string; count: number }[]
+  age: string
+}
+export type HPADescData = {
+  name: string; namespace: string
+  scaleTargetRef: { kind: string; name: string }
+  minReplicas: number; maxReplicas: number; currentReplicas: number; desiredReplicas: number
+  metrics: HPAMetric[]; conditions: (HPACondition & { age?: string })[]
+  labels: Record<string, string>; annotations: Record<string, string>
+  age: string
+}

@@ -2,6 +2,28 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.2.3] — 2026-04-06
+
+### ⭐ New Features
+
+#### Service Detail View
+Click any Service in the resource graph to see its full details — type, ClusterIP, ports table, selector labels, endpoint pods (clickable), labels, and annotations.
+
+#### HPA Detail View
+Click any HPA in the resource graph to see target workload, min/max/current/desired replicas, metrics table with current vs target values, and conditions.
+
+#### Resource Graph Click-Through
+- **Service** → opens Service detail view
+- **HPA** → opens HPA detail view
+- **ConfigMap/Secret** → opens Config view pre-filtered by namespace and name
+- **PDB** → info shown inline (no detail view)
+
+### 🐛 Fixes
+- **CronJob detail crash** — fixed blank screen when opening a CronJob with no job history (`data.runs` null safety)
+- **Restart timeline OOMKilled** — `OOMKilling` events now correctly map to `OOMKilled` and show as red dots
+- **JIT modal titles** — "Request CronTrigger Access" for CronJobs, "Request Pod Shell/Exec Access" for pods
+- **Request Access button consistency** — CronJob and pod detail views now use the same amber button styling
+
 ## [v1.2.2] — 2026-04-05
 
 ### ⭐ Namespace Favorites

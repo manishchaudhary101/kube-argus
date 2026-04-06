@@ -1127,3 +1127,136 @@ func apiHPA(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(out, func(i, j int) bool { return out[i].Namespace+out[i].Name < out[j].Namespace+out[j].Name })
 	jGz(w, r, out)
 }
+
+// ─── HPA Detail ─────────────────────────────────────────────────────
+
+func apiHPADetail(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/hpa/"), "/"), "/")
+	if len(parts) < 2 {
+		http.Error(w, "use /api/hpa/{namespace}/{name}", 400)
+		return
+	}
+	ns, name := parts[0], parts[1]
+
+	c, cancel := ctx()
+	defer cancel()
+	h, err := clientset.AutoscalingV2().HorizontalPodAutoscalers(ns).Get(c, name, metav1.GetOptions{})
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	minReplicas := int32(1)
+	if h.Spec.MinReplicas != nil {
+		minReplicas = *h.Spec.MinReplicas
+	}
+
+	type metricEntry struct {
+		Name    string `json:"name"`
+		Type    string `json:"type"`
+		Current string `json:"current"`
+		Target  string `json:"target"`
+	}
+	metrics := make([]metricEntry, 0)
+	for i, m := range h.Spec.Metrics {
+		me := metricEntry{}
+		switch m.Type {
+		case autov2.ResourceMetricSourceType:
+			if m.Resource != nil {
+				me.Name = string(m.Resource.Name)
+				me.Type = "Resource"
+				if m.Resource.Target.AverageUtilization != nil {
+					me.Target = fmt.Sprintf("%d%%", *m.Resource.Target.AverageUtilization)
+				} else if !m.Resource.Target.AverageValue.IsZero() {
+					me.Target = m.Resource.Target.AverageValue.String()
+				}
+			}
+		case autov2.PodsMetricSourceType:
+			if m.Pods != nil {
+				me.Name = m.Pods.Metric.Name
+				me.Type = "Pods"
+				me.Target = m.Pods.Target.AverageValue.String()
+			}
+		case autov2.ObjectMetricSourceType:
+			if m.Object != nil {
+				me.Name = m.Object.Metric.Name
+				me.Type = "Object"
+				me.Target = m.Object.Target.Value.String()
+			}
+		default:
+			me.Name = string(m.Type)
+			me.Type = string(m.Type)
+		}
+		if h.Status.CurrentMetrics != nil && i < len(h.Status.CurrentMetrics) {
+			cm := h.Status.CurrentMetrics[i]
+			switch cm.Type {
+			case autov2.ResourceMetricSourceType:
+				if cm.Resource != nil {
+					if cm.Resource.Current.AverageUtilization != nil {
+						me.Current = fmt.Sprintf("%d%%", *cm.Resource.Current.AverageUtilization)
+					} else {
+						me.Current = cm.Resource.Current.AverageValue.String()
+					}
+				}
+			case autov2.PodsMetricSourceType:
+				if cm.Pods != nil {
+					me.Current = cm.Pods.Current.AverageValue.String()
+				}
+			case autov2.ObjectMetricSourceType:
+				if cm.Object != nil {
+					me.Current = cm.Object.Current.Value.String()
+				}
+			}
+		}
+		metrics = append(metrics, me)
+	}
+
+	type condEntry struct {
+		Type    string `json:"type"`
+		Status  string `json:"status"`
+		Reason  string `json:"reason"`
+		Message string `json:"message"`
+		Age     string `json:"age"`
+	}
+	conditions := make([]condEntry, 0)
+	for _, c := range h.Status.Conditions {
+		age := ""
+		if !c.LastTransitionTime.IsZero() {
+			age = shortDur(time.Since(c.LastTransitionTime.Time))
+		}
+		conditions = append(conditions, condEntry{
+			Type:    string(c.Type),
+			Status:  string(c.Status),
+			Reason:  c.Reason,
+			Message: c.Message,
+			Age:     age,
+		})
+	}
+
+	labels := make(map[string]string)
+	for k, v := range h.Labels {
+		labels[k] = v
+	}
+	annotations := make(map[string]string)
+	for k, v := range h.Annotations {
+		annotations[k] = v
+	}
+
+	j(w, map[string]interface{}{
+		"name":      h.Name,
+		"namespace": h.Namespace,
+		"scaleTargetRef": map[string]string{
+			"kind": h.Spec.ScaleTargetRef.Kind,
+			"name": h.Spec.ScaleTargetRef.Name,
+		},
+		"minReplicas":     minReplicas,
+		"maxReplicas":     h.Spec.MaxReplicas,
+		"currentReplicas": h.Status.CurrentReplicas,
+		"desiredReplicas": h.Status.DesiredReplicas,
+		"metrics":         metrics,
+		"conditions":      conditions,
+		"labels":          labels,
+		"annotations":     annotations,
+		"age":             shortDur(time.Since(h.CreationTimestamp.Time)),
+	})
+}

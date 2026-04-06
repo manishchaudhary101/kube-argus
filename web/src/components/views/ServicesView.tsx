@@ -4,7 +4,7 @@ import { useFetch } from '../../hooks/useFetch'
 import { Spinner } from '../ui/Atoms'
 import { YamlModal } from '../modals/YamlModal'
 
-export function ServicesView({ namespace }: { namespace: string }) {
+export function ServicesView({ namespace, onService }: { namespace: string; onService?: (ns: string, name: string) => void }) {
   const url = namespace ? `/api/services?namespace=${namespace}` : '/api/services'
   const { data, err, loading } = useFetch<Service[]>(url, 10000)
   const [sortCol, setSortCol] = useState<'name' | 'ns' | 'type' | 'ports' | 'age'>('name')
@@ -64,7 +64,7 @@ export function ServicesView({ namespace }: { namespace: string }) {
             </thead>
             <tbody>
               {sorted.map(s => (
-                <tr key={`${s.namespace}/${s.name}`} className="border-t border-hull-800 transition-colors hover:bg-hull-800/60">
+                <tr key={`${s.namespace}/${s.name}`} onClick={() => onService?.(s.namespace, s.name)} className={`border-t border-hull-800 transition-colors hover:bg-hull-800/60 ${onService ? 'cursor-pointer active:bg-hull-700' : ''}`}>
                   <td className="px-2 py-1.5 text-gray-500 max-w-[80px] truncate">{s.namespace}</td>
                   <td className="px-2 py-1.5 text-white font-semibold">{s.name}</td>
                   <td className={`px-2 py-1.5 font-bold ${typeColor(s.type)}`}>{s.type}</td>
