@@ -247,7 +247,7 @@ function App() {
   ) : ingressTarget ? (
     <IngressDetailView ns={ingressTarget.ns} name={ingressTarget.name} onBack={() => setIngressTarget(null)} />
   ) : serviceTarget ? (
-    <ServiceDetailView ns={serviceTarget.ns} name={serviceTarget.name} onBack={() => setServiceTarget(null)} onPod={(pns: string, pname: string) => { setPodTargetRaw({ ns: pns, name: pname }); pushUrl(`/pods/${pns}/${pname}`) }} />
+    <ServiceDetailView ns={serviceTarget.ns} name={serviceTarget.name} onBack={() => setServiceTarget(null)} />
   ) : hpaTarget ? (
     <HPADetailView ns={hpaTarget.ns} name={hpaTarget.name} onBack={() => setHpaTarget(null)} />
   ) : null
