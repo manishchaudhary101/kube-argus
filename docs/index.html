@@ -575,137 +575,98 @@
       margin-top: 0.75rem;
     }
 
-    /* ── Elimination ticker ─────────────────── */
-    .ticker {
+    /* ── No More Section ─────────────────────── */
+    .nomore-section {
       text-align: center;
-      padding: 4.5rem 1.5rem 5rem;
-      position: relative;
+      padding: 4.5rem 1.5rem 3rem;
     }
-
-    .ticker-card {
-      position: relative;
-      max-width: 620px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 2.5rem 3rem;
-      border-radius: 20px;
-      background: radial-gradient(ellipse at 50% 0%, rgba(6, 214, 224, 0.06) 0%, transparent 70%);
-      border: 1px solid rgba(6, 214, 224, 0.1);
-    }
-
-    .ticker-card::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 20px;
-      z-index: -1;
-      padding: 1px;
-      background: conic-gradient(from var(--ticker-angle, 0deg) at 50% 50%, rgba(6, 214, 224, 0.4), transparent 25%, rgba(0, 255, 136, 0.3) 50%, transparent 75%, rgba(6, 214, 224, 0.4));
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-    }
-
-    .ticker-label {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.6rem;
+    .nomore-title {
       font-size: clamp(1.6rem, 3.5vw, 2.2rem);
       font-weight: 900;
-      letter-spacing: 0.02em;
-      margin-bottom: 1.2rem;
-      background: linear-gradient(135deg, var(--cyan), #00ff88, var(--cyan));
-      background-size: 200% auto;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--cyan), #00ff88);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      animation: tickerGradient 3s ease infinite;
+      background-clip: text;
     }
-
-    .ticker-label .strike-icon {
-      display: inline-block;
-      width: 28px;
-      height: 28px;
-      background: linear-gradient(135deg, var(--cyan), #00ff88);
-      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='4.93' y1='4.93' x2='19.07' y2='19.07'/%3E%3C/svg%3E") center/contain no-repeat;
-      flex-shrink: 0;
+    .nomore-sub {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 2.5rem;
     }
-
-    @keyframes tickerGradient {
-
-      0%,
-      100% {
-        background-position: 0% center;
-      }
-
-      50% {
-        background-position: 200% center;
-      }
+    .nomore-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 0.6rem;
+      max-width: 900px;
+      margin: 0 auto;
     }
-
-    .ticker-divider {
-      width: 60px;
-      height: 2px;
-      margin: 0 auto 1.4rem;
-      background: linear-gradient(90deg, transparent, rgba(6, 214, 224, 0.4), transparent);
-      border-radius: 2px;
-    }
-
-    .ticker-phrase-wrap {
-      position: relative;
-      height: 1.8rem;
+    .nomore-item {
       display: flex;
       align-items: center;
-      justify-content: center;
-    }
-
-    .ticker-phrase {
-      position: relative;
-      display: inline-block;
-      font-size: clamp(1rem, 2.2vw, 1.25rem);
-      font-weight: 500;
-      color: rgba(255, 255, 255, 0.7);
-      letter-spacing: 0.01em;
-      white-space: nowrap;
-      transition: color 0.3s, opacity 0.3s;
-    }
-
-    .ticker-phrase.struck {
-      color: rgba(255, 255, 255, 0.2);
-    }
-
-    .ticker-strike {
-      position: absolute;
-      top: 50%;
-      left: 0;
-      height: 2px;
-      width: 0;
-      background: linear-gradient(90deg, var(--cyan), #00ff88);
-      box-shadow: 0 0 8px rgba(6, 214, 224, 0.4), 0 0 20px rgba(6, 214, 224, 0.15);
-      border-radius: 2px;
-      transform: translateY(-50%);
-      transition: width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    }
-
-    .ticker-phrase.struck .ticker-strike {
-      width: 100%;
-    }
-
-    .ticker-resolved {
-      position: absolute;
-      right: -2rem;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: #00ff88;
+      gap: 0.75rem;
+      padding: 0.7rem 1rem;
+      border-radius: 10px;
+      border: 1px solid rgba(6, 214, 224, 0.06);
+      background: rgba(6, 214, 224, 0.02);
       opacity: 0;
-      transition: opacity 0.3s 0.35s;
-      filter: drop-shadow(0 0 4px rgba(0, 255, 136, 0.5));
+      transform: translateX(-10px);
+      transition: opacity 0.5s, transform 0.5s, border-color 0.4s, background 0.4s;
     }
-
-    .ticker-phrase.struck .ticker-resolved {
+    .nomore-item.struck {
       opacity: 1;
+      transform: translateX(0);
+      border-color: rgba(0, 255, 136, 0.12);
+      background: rgba(0, 255, 136, 0.03);
+    }
+    .nomore-check {
+      color: #00ff88;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+      opacity: 0;
+      transform: scale(0);
+      transition: opacity 0.3s 0.3s, transform 0.3s 0.3s;
+    }
+    .nomore-item.struck .nomore-check {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .nomore-text {
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.6);
+      text-decoration: line-through;
+      text-decoration-color: transparent;
+      transition: text-decoration-color 0.4s 0.15s, color 0.4s 0.15s;
+    }
+    .nomore-item.struck .nomore-text {
+      text-decoration-color: rgba(6, 214, 224, 0.5);
+      color: rgba(255, 255, 255, 0.35);
+    }
+    .nomore-stats {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 2.5rem;
+      margin-top: 3rem;
+      opacity: 0;
+      transform: translateY(15px);
+      transition: opacity 0.6s, transform 0.6s;
+    }
+    .nomore-stats.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .nomore-stat-val {
+      font-size: 1.6rem;
+      font-weight: 900;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .nomore-stat-label {
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-top: 0.2rem;
     }
 
     /* ── Footer ───────────────────────────────── */
@@ -719,6 +680,36 @@
 
     footer a {
       color: var(--cyan);
+    }
+
+    /* ── Mobile Responsiveness ────────────────── */
+    @media (max-width: 768px) {
+      .hero { padding: 1.5rem 1rem; min-height: auto; padding-top: 3rem; padding-bottom: 3rem; }
+      .title { font-size: 1.8rem; }
+      .tagline { font-size: 0.85rem; margin: 0.75rem auto 1.5rem; }
+      .badges { gap: 0.3rem; }
+      .badges img { height: 18px; }
+      .buttons { gap: 0.5rem; }
+      .btn { padding: 0.6rem 1.2rem; font-size: 0.85rem; }
+      .install-box { font-size: 0.65rem; padding: 1rem 1rem; white-space: pre-wrap; word-break: break-all; }
+      .grid { grid-template-columns: 1fr; }
+      .features { padding: 3rem 1rem 4rem; }
+      .section-heading { font-size: 1.5rem; margin-bottom: 2rem; }
+      .card { padding: 1.5rem; }
+      .screenshot-grid { grid-template-columns: 1fr; }
+      .screenshots { padding: 0 1rem 4rem; }
+      footer { padding: 2rem 1rem; }
+    }
+
+    @media (max-width: 480px) {
+      .title { font-size: 1.5rem; letter-spacing: 0.03em; }
+      .tagline { font-size: 0.8rem; }
+      .badges img { height: 16px; }
+      .btn { padding: 0.5rem 1rem; font-size: 0.8rem; }
+      .install-box { font-size: 0.6rem; }
+      .logo svg { width: 56px; height: 56px; }
+      .logo-ring { width: 80px; height: 80px; margin: -40px 0 0 -40px; }
+      .logo-ring:nth-child(3) { width: 100px; height: 100px; margin: -50px 0 0 -50px; }
     }
   </style>
 </head>
@@ -807,14 +798,25 @@
     </div>
   </section>
 
-  <div class="ticker">
-    <div class="ticker-card">
-      <div class="ticker-label"><span class="strike-icon"></span> No more.</div>
-      <div class="ticker-divider"></div>
-      <div class="ticker-phrase-wrap">
-        <span class="ticker-phrase" id="ticker"><span class="ticker-strike"></span><span
-            class="ticker-resolved">&#10003;</span></span>
-      </div>
+  <!-- No More section -->
+  <div class="nomore-section">
+    <h2 class="nomore-title">No more.</h2>
+    <p class="nomore-sub">Kube-Argus replaces your scattered toolkit with a single dashboard.</p>
+    <div class="nomore-grid" id="nomore-grid">
+      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Juggling k9s, Grafana &amp; kubectl in 5 tabs</span></div>
+      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Handing out permanent cluster shell access</span></div>
+      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Hitting refresh and waiting... and waiting</span></div>
+      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Guessing which pods are wasting resources</span></div>
+      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Staring at CrashLoopBackOff with no clue why</span></div>
+      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">&quot;Who deleted that pod?&quot; with zero audit trail</span></div>
+      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Copy-pasting YAML between terminals</span></div>
+      <div class="nomore-item"><span class="nomore-check">&#10003;</span><span class="nomore-text">Running kubectl create job --from=cronjob manually</span></div>
+    </div>
+    <div class="nomore-stats">
+      <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--cyan)">~30MB</div><div class="nomore-stat-label">Docker Image</div></div>
+      <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--green)">0</div><div class="nomore-stat-label">Dependencies</div></div>
+      <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--cyan)">&lt;1s</div><div class="nomore-stat-label">Startup Time</div></div>
+      <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--green)">1</div><div class="nomore-stat-label">Binary</div></div>
     </div>
   </div>
 
@@ -1011,64 +1013,24 @@
     document.querySelectorAll('.screenshot-item').forEach((el, i) => { el.dataset.delay = i * 100; obs.observe(el); });
     document.querySelectorAll('.section-heading').forEach(el => obs.observe(el));
 
-    /* ── Rotating ticker ───────────────────── */
-    const phrases = [
-      'juggling k9s, Grafana & kubectl in 5 tabs.',
-      'handing out permanent cluster shell access.',
-      'hitting refresh and waiting... and waiting.',
-      'guessing which pods are wasting resources.',
-      'staring at CrashLoopBackOff with no clue why.',
-      'copy-pasting YAML between terminals',
-      '"who deleted that pod?" with zero audit trail.',
-      'manual kubectl access to the cluster.',
-      'scattered logs across multiple terminals.',
-      'switching namespaces 50 times a day.',
-      'running kubectl create job --from=cronjob manually.',
-    ];
-    const tickerEl = document.getElementById('ticker');
-    let phraseIdx = 0;
-
-    function showPhrase() {
-      const text = phrases[phraseIdx];
-      tickerEl.classList.remove('struck');
-      tickerEl.style.opacity = '0';
-      tickerEl.childNodes.forEach(n => {
-        if (n.nodeType === 3) n.textContent = '';
-      });
-
-      setTimeout(() => {
-        tickerEl.childNodes.forEach(n => { if (n.nodeType === 3) n.remove(); });
-        const textNode = document.createTextNode(text);
-        tickerEl.insertBefore(textNode, tickerEl.firstChild);
-        tickerEl.style.opacity = '1';
-
-        setTimeout(() => {
-          tickerEl.classList.add('struck');
-
-          setTimeout(() => {
-            tickerEl.style.opacity = '0';
-            setTimeout(() => {
-              phraseIdx = (phraseIdx + 1) % phrases.length;
-              showPhrase();
-            }, 400);
-          }, 1200);
-        }, 1800);
-      }, 150);
+    /* ── No More staggered reveal ─────────── */
+    const nomoreGrid = document.getElementById('nomore-grid');
+    if (nomoreGrid) {
+      const items = nomoreGrid.querySelectorAll('.nomore-item');
+      const stats = document.querySelector('.nomore-stats');
+      const nomoreObs = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) {
+          items.forEach((el, i) => {
+            setTimeout(() => el.classList.add('struck'), i * 200);
+          });
+          if (stats) {
+            setTimeout(() => stats.classList.add('visible'), items.length * 200 + 300);
+          }
+          nomoreObs.disconnect();
+        }
+      }, { threshold: 0.2 });
+      nomoreObs.observe(nomoreGrid);
     }
-
-    const tickerObs = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) { showPhrase(); tickerObs.disconnect(); }
-    }, { threshold: 0.3 });
-    tickerObs.observe(tickerEl.closest('.ticker'));
-
-    /* spinning conic border for ticker card */
-    (function () {
-      const card = document.querySelector('.ticker-card');
-      if (!card) return;
-      let angle = 0;
-      function spin() { angle = (angle + 0.6) % 360; card.style.setProperty('--ticker-angle', angle + 'deg'); requestAnimationFrame(spin); }
-      spin();
-    })();
   </script>
 
 </body>
