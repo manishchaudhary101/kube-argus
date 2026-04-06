@@ -23,29 +23,29 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
     - kind: added
-      description: "Namespace favorites — star namespaces in the picker, persisted per-user in localStorage"
+      description: "Namespace favorites - star namespaces in the picker, persisted per-user in localStorage"
     - kind: added
-      description: "CronJob manual trigger — Run Now button with JIT approval workflow for viewers"
+      description: "CronJob manual trigger - Run Now button with JIT approval workflow for viewers"
     - kind: added
-      description: "Custom JIT duration — hours/days input up to 7 days max alongside preset durations"
+      description: "Custom JIT duration - hours/days input up to 7 days max alongside preset durations"
     - kind: added
-      description: "Pod restart timeline — color-coded scatter chart showing restart events with reasons on pod and workload detail views"
+      description: "Pod restart timeline - color-coded scatter chart showing restart events with reasons"
     - kind: added
-      description: "Init container visibility — all workload types now display init containers with an INIT badge"
-    - kind: fixed
-      description: "JIT restore log moved to DEBUG level to stop spamming INFO logs every 30 seconds"
+      description: "Init container visibility - all workload types now display init containers with an INIT badge"
     - kind: added
-      description: "Service detail view — type, clusterIP, ports, selector, endpoint pods, labels, annotations"
+      description: "Service detail view - type, clusterIP, ports, selector, endpoint pods"
     - kind: added
-      description: "HPA detail view — target workload, replicas, metrics, conditions"
+      description: "HPA detail view - target workload, replicas, metrics, conditions"
     - kind: changed
-      description: "Resource graph click-through — Service and HPA open detail views, ConfigMap/Secret open filtered config view"
+      description: "Resource graph click-through - Service and HPA open detail views"
     - kind: fixed
-      description: "CronJob detail crash when no job history (null runs)"
+      description: "CronJob detail crash when no job history"
     - kind: fixed
       description: "Restart timeline OOMKilled events showing as Other instead of red"
     - kind: fixed
-      description: "JIT modal title now context-aware (CronTrigger vs Pod Shell/Exec)"  artifacthub.io/links: |
+      description: "JIT modal title now context-aware for CronTrigger vs Pod Shell"
+    - kind: fixed
+      description: "JIT restore log moved to DEBUG level"  artifacthub.io/links: |
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus
   artifacthub.io/screenshots: |
