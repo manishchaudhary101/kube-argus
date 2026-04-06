@@ -2,7 +2,7 @@ import type { ServiceDescData } from '../../types'
 import { useFetch } from '../../hooks/useFetch'
 import { Pill, Spinner } from '../ui/Atoms'
 
-export function ServiceDetailView({ ns, name, onBack, onPod }: { ns: string; name: string; onBack: () => void; onPod?: (ns: string, name: string) => void }) {
+export function ServiceDetailView({ ns, name, onBack, onPod: _onPod }: { ns: string; name: string; onBack: () => void; onPod?: (ns: string, name: string) => void }) {
   const { data, err, loading } = useFetch<ServiceDescData>(`/api/services/${ns}/${name}`)
 
   if (loading) return <div className="flex h-full items-center justify-center"><Spinner /></div>
