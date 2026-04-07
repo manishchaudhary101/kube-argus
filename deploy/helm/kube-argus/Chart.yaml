@@ -2,8 +2,8 @@ apiVersion: v2
 name: kube-argus
 description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
-version: 1.2.3
-appVersion: "1.2.3"
+version: 1.2.4
+appVersion: "1.2.4"
 keywords:
   - kubernetes
   - dashboard
@@ -23,29 +23,18 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
     - kind: added
-      description: "Namespace favorites - star namespaces in the picker, persisted per-user in localStorage"
+      description: "Workload restart with JIT - StatefulSets and DaemonSets can now be restarted, viewers request access via JIT approval"
     - kind: added
-      description: "CronJob manual trigger - Run Now button with JIT approval workflow for viewers"
-    - kind: added
-      description: "Custom JIT duration - hours/days input up to 7 days max alongside preset durations"
-    - kind: added
-      description: "Pod restart timeline - color-coded scatter chart showing restart events with reasons"
-    - kind: added
-      description: "Init container visibility - all workload types now display init containers with an INIT badge"
-    - kind: added
-      description: "Service detail view - type, clusterIP, ports, selector, endpoint pods"
-    - kind: added
-      description: "HPA detail view - target workload, replicas, metrics, conditions"
-    - kind: changed
-      description: "Resource graph click-through - Service and HPA open detail views"
+      description: "Light theme redesign - fresh blue/emerald/rose/violet palette with cool slate backgrounds"
     - kind: fixed
-      description: "CronJob detail crash when no job history"
+      description: "Auth crash when OIDC not configured - returns 500 instead of nil pointer panic"
     - kind: fixed
-      description: "Restart timeline OOMKilled events showing as Other instead of red"
+      description: "Contextual JIT buttons - Request Shell Access, Request Trigger Access, Request Restart"
     - kind: fixed
-      description: "JIT modal title now context-aware for CronTrigger vs Pod Shell"
-    - kind: fixed
-      description: "JIT restore log moved to DEBUG level"  artifacthub.io/links: |
+      description: "CronJob JIT modal no longer shifts page content when opened"
+    - kind: security
+      description: "Upgraded vite to 8.0.5 fixing CVE in versions 8.0.0-8.0.4"
+  artifacthub.io/links: |
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus
   artifacthub.io/screenshots: |

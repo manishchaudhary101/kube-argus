@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Workload } from '../../types'
 import { useFetch, post } from '../../hooks/useFetch'
 import { useAuth } from '../../context/AuthContext'
 import { Pill, Btn, Spinner, StatusDot } from '../ui/Atoms'
+import { JITRequestModal } from '../modals/JITRequestModal'
 
 export function ResourceBar({ used, req, lim, label, unit }: { used: number; req: number; lim: number; label: string; unit: string }) {
   const cap = lim || req || used || 1
@@ -38,11 +39,38 @@ export function WorkloadsView({ namespace, initialKind, onWorkload }: { namespac
   const [scaleTarget, setScaleTarget] = useState<{ ns: string; name: string; current: number } | null>(null)
   const [scaleVal, setScaleVal] = useState(0)
   const [kindFilter, setKindFilter] = useState(initialKind || '')
+  const [jitModal, setJitModal] = useState<{ ns: string; name: string; kind: string } | null>(null)
+  const [jitGrants, setJitGrants] = useState<Set<string>>(new Set())
+  const [jitPendings, setJitPendings] = useState<Set<string>>(new Set())
 
-  const restart = async (ns: string, name: string) => {
+  const jitKey = useCallback((ns: string, kind: string, name: string) => `${ns}/${kind}/${name}`, [])
+
+  useEffect(() => {
+    if (isAdmin) return
+    let cancelled = false
+    const poll = () => {
+      Promise.all([
+        fetch('/api/jit/my-grants').then(r => r.ok ? r.json() : []),
+        fetch('/api/jit/requests').then(r => r.ok ? r.json() : []),
+      ]).then(([grants, requests]) => {
+        if (cancelled) return
+        const g = new Set<string>()
+        const p = new Set<string>()
+        for (const r of grants as any[]) if (r.status === 'active') g.add(jitKey(r.namespace, r.ownerKind, r.ownerName))
+        for (const r of requests as any[]) if (r.status === 'pending') p.add(jitKey(r.namespace, r.ownerKind, r.ownerName))
+        setJitGrants(g)
+        setJitPendings(p)
+      }).catch(() => {})
+    }
+    poll()
+    const id = setInterval(poll, 5000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [isAdmin, jitKey])
+
+  const restart = async (ns: string, name: string, kind: string) => {
     const key = `restart:${ns}/${name}`
     setBusy(key)
-    try { await post(`/api/workloads/${ns}/${name}/restart`); setToast(`${name} restarting`); refetch() }
+    try { await post(`/api/workloads/${ns}/${name}/restart?kind=${kind}`); setToast(`${name} restarting`); refetch() }
     catch (e: any) { setToast(`Error: ${e.message}`) }
     finally { setBusy(null); setTimeout(() => setToast(null), 3000) }
   }
@@ -142,20 +170,30 @@ export function WorkloadsView({ namespace, initialKind, onWorkload }: { namespac
                 <ResourceBar used={w.memUsedMi} req={w.memReqMi} lim={w.memLimMi} label="Mem" unit="Mi" />
               </div>
             )}
-            {w.kind === 'Deployment' && isAdmin && (
+            {['Deployment', 'StatefulSet', 'DaemonSet'].includes(w.kind) && (
               <div className="mt-2 flex gap-2" onClick={e => e.stopPropagation()}>
-                <Btn small variant="primary" onClick={() => restart(w.namespace, w.name)} disabled={busy === `restart:${w.namespace}/${w.name}`}>
-                  {busy === `restart:${w.namespace}/${w.name}` ? 'Restarting…' : '↻ Restart'}
-                </Btn>
-                <Btn small onClick={() => { setScaleTarget({ ns: w.namespace, name: w.name, current: w.desired }); setScaleVal(w.desired) }}>
-                  ⇕ Scale
-                </Btn>
+                {(isAdmin || jitGrants.has(jitKey(w.namespace, w.kind, w.name))) && (
+                  <Btn small variant="primary" onClick={() => restart(w.namespace, w.name, w.kind)} disabled={busy === `restart:${w.namespace}/${w.name}`}>
+                    {busy === `restart:${w.namespace}/${w.name}` ? 'Restarting…' : '↻ Restart'}
+                  </Btn>
+                )}
+                {!isAdmin && !jitGrants.has(jitKey(w.namespace, w.kind, w.name)) && (
+                  <button onClick={() => jitPendings.has(jitKey(w.namespace, w.kind, w.name)) ? null : setJitModal({ ns: w.namespace, name: w.name, kind: w.kind })} disabled={jitPendings.has(jitKey(w.namespace, w.kind, w.name))} className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-900/20 disabled:opacity-40">
+                    {jitPendings.has(jitKey(w.namespace, w.kind, w.name)) ? '⏳ Pending…' : '↻ Request Restart'}
+                  </button>
+                )}
+                {w.kind === 'Deployment' && isAdmin && (
+                  <Btn small onClick={() => { setScaleTarget({ ns: w.namespace, name: w.name, current: w.desired }); setScaleVal(w.desired) }}>
+                    ⇕ Scale
+                  </Btn>
+                )}
               </div>
             )}
           </div>
         )
       })}
 
+      {jitModal && <JITRequestModal ns={jitModal.ns} pod="" ownerKind={jitModal.kind} ownerName={jitModal.name} accessType="restart" onClose={() => setJitModal(null)} onSubmitted={() => { setJitModal(null); setJitPendings(prev => new Set(prev).add(jitKey(jitModal.ns, jitModal.kind, jitModal.name))) }} />}
     </div>
   )
 }

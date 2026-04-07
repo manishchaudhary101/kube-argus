@@ -107,8 +107,6 @@ func loadSecretsFromAWS() {
 }
 
 func initAuth() {
-	loadSecretsFromAWS()
-
 	// ── Provider-independent settings ───────────────────────────────
 	sessionTTL = 8 * time.Hour
 	if ttl := os.Getenv("SESSION_TTL"); ttl != "" {
@@ -285,6 +283,10 @@ func callbackURL(r *http.Request) string {
 }
 
 func authLogin(w http.ResponseWriter, r *http.Request) {
+	if oauthConfig == nil {
+		http.Error(w, "authentication not configured — set OIDC_ISSUER, OIDC_CLIENT_ID, and OIDC_CLIENT_SECRET", 500)
+		return
+	}
 	oauthConfig.RedirectURL = callbackURL(r)
 	state := fmt.Sprintf("%d", time.Now().UnixNano())
 	http.SetCookie(w, &http.Cookie{Name: "oauth_state", Value: state, Path: "/", HttpOnly: true, MaxAge: 600, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"})
@@ -292,6 +294,10 @@ func authLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func authCallback(w http.ResponseWriter, r *http.Request) {
+	if oauthConfig == nil {
+		http.Error(w, "authentication not configured", 500)
+		return
+	}
 	// IdP-initiated flow (e.g. clicking an app tile in the IdP portal): no code/state params.
 	// Redirect to /auth/login to start the proper OIDC authorization flow.
 	if r.URL.Query().Get("code") == "" {

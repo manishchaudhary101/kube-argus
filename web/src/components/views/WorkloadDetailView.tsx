@@ -5,6 +5,7 @@ import { useFetch, post } from '../../hooks/useFetch'
 import { useAuth } from '../../context/AuthContext'
 import { Spinner } from '../ui/Atoms'
 import { RestartTimeline } from '../ui/RestartTimeline'
+import { JITRequestModal } from '../modals/JITRequestModal'
 
 type DriftEntry = { kind: string; name: string; modifiedAgo: string; driftedCount: number; totalPods: number }
 
@@ -16,6 +17,16 @@ export type RefLine = { value: number; label: string; color: string }
 
 export const CHART_COLORS = ['#06b6d4', '#f59e0b', '#22c55e', '#a78bfa', '#f87171', '#38bdf8', '#facc15', '#4ade80', '#c084fc', '#fb923c']
 export const METRIC_RANGES = ['1h', '3h', '6h', '12h', '24h'] as const
+
+const isLightTheme = () => document.documentElement.getAttribute('data-theme') === 'notion'
+export const refColor = {
+  get req()      { return isLightTheme() ? '#b45309' : '#facc15' },
+  get lim()      { return isLightTheme() ? '#be123c' : '#f87171' },
+  get warn()     { return isLightTheme() ? '#92400e' : '#f59e0b' },
+  get capacity() { return isLightTheme() ? '#be123c' : '#ef4444' },
+  get limits()   { return isLightTheme() ? '#7c3aed' : '#a78bfa' },
+  get requests() { return isLightTheme() ? '#b45309' : '#f59e0b' },
+}
 
 export function useMetrics(url: string, timeRange: string) {
   const [data, setData] = useState<MetricsData | null>(null)
@@ -124,11 +135,11 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-          <XAxis dataKey="ts" tickFormatter={formatTime} tick={{ fontSize: 9, fill: '#4b5563' }} tickLine={false} axisLine={false} minTickGap={40} />
-          <YAxis tickFormatter={formatVal} tick={{ fontSize: 9, fill: '#4b5563' }} tickLine={false} axisLine={false} width={52} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+          <XAxis dataKey="ts" tickFormatter={formatTime} tick={{ fontSize: 9, fill: 'var(--chart-axis)' }} tickLine={false} axisLine={false} minTickGap={40} />
+          <YAxis tickFormatter={formatVal} tick={{ fontSize: 9, fill: 'var(--chart-axis)' }} tickLine={false} axisLine={false} width={52} />
           <Tooltip
-            contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, fontSize: 10, fontFamily: 'monospace' }}
+            contentStyle={{ background: 'var(--chart-tooltip-bg)', border: '1px solid var(--chart-tooltip-border)', borderRadius: 8, fontSize: 10, fontFamily: 'monospace' }}
             labelFormatter={(ts) => new Date(Number(ts)).toLocaleTimeString()}
             formatter={(value) => [formatVal(Number(value))]}
           />
@@ -296,10 +307,36 @@ export function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: stri
   const [scaleOpen, setScaleOpen] = useState(false)
   const [scaleVal, setScaleVal] = useState(0)
   const [showYaml, setShowYaml] = useState(false)
+  const [showJITModal, setShowJITModal] = useState(false)
+  const [jitGranted, setJitGranted] = useState(false)
+  const [jitPending, setJitPending] = useState(false)
+
+  const restartable = ['Deployment', 'StatefulSet', 'DaemonSet'].includes(kind)
+  const canRestart = isAdmin || jitGranted
+
+  useEffect(() => {
+    if (isAdmin || !restartable) return
+    let cancelled = false
+    const poll = () => {
+      Promise.all([
+        fetch('/api/jit/my-grants').then(r => r.ok ? r.json() : []),
+        fetch('/api/jit/requests').then(r => r.ok ? r.json() : []),
+      ]).then(([grants, requests]) => {
+        if (cancelled) return
+        const granted = (grants as any[]).some((g: any) => g.namespace === ns && g.ownerKind === kind && g.ownerName === name && g.status === 'active')
+        const pending = (requests as any[]).some((g: any) => g.namespace === ns && g.ownerKind === kind && g.ownerName === name && g.status === 'pending')
+        setJitGranted(granted)
+        setJitPending(pending)
+      }).catch(() => {})
+    }
+    poll()
+    const id = setInterval(poll, 5000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [isAdmin, restartable, ns, kind, name])
 
   const doRestart = async () => {
     setBusy('restart')
-    try { await post(`/api/workloads/${ns}/${name}/restart`); setToast(`${name} restarting`); refetch() }
+    try { await post(`/api/workloads/${ns}/${name}/restart?kind=${kind}`); setToast(`${name} restarting`); refetch() }
     catch (e: any) { setToast(`Error: ${e.message}`) }
     finally { setBusy(null); setTimeout(() => setToast(null), 3000) }
   }
@@ -371,19 +408,25 @@ export function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: stri
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button onClick={() => setShowYaml(true)} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors">YAML</button>
+          {restartable && canRestart && (
+            <button onClick={doRestart} disabled={busy === 'restart'} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors disabled:opacity-40">
+              {busy === 'restart' ? 'Restarting…' : '↻ Restart'}
+            </button>
+          )}
+          {restartable && !isAdmin && !jitGranted && (
+            <button onClick={() => jitPending ? null : setShowJITModal(true)} disabled={jitPending} className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-900/20 disabled:opacity-40">
+              {jitPending ? '⏳ Pending…' : '↻ Request Restart'}
+            </button>
+          )}
           {kind === 'Deployment' && isAdmin && (
-            <>
-              <button onClick={doRestart} disabled={busy === 'restart'} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors disabled:opacity-40">
-                {busy === 'restart' ? 'Restarting…' : '↻ Restart'}
-              </button>
-              <button onClick={() => { setScaleVal(data.replicas ?? 0); setScaleOpen(true) }} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors">
-                ⇕ Scale
-              </button>
-            </>
+            <button onClick={() => { setScaleVal(data.replicas ?? 0); setScaleOpen(true) }} className="rounded-lg border border-hull-600 bg-hull-800 px-2.5 py-1 text-[10px] font-medium text-gray-300 hover:text-white hover:bg-hull-700 transition-colors">
+              ⇕ Scale
+            </button>
           )}
         </div>
       </div>
       {showYaml && <YamlModal kind={kind} ns={ns} name={name} onClose={() => setShowYaml(false)} />}
+      {showJITModal && <JITRequestModal ns={ns} pod="" ownerKind={kind} ownerName={name} accessType="restart" onClose={() => setShowJITModal(false)} onSubmitted={() => { setShowJITModal(false); setJitPending(true) }} />}
 
       <div className="flex gap-1 px-3 py-2 overflow-x-auto scrollbar-hide border-b border-hull-800/50">
         {sections.map(s => (
@@ -622,7 +665,9 @@ export function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: stri
 
 // ─── Aggregated Log Viewer ──────────────────────────────────────────
 
-export const AGG_LOG_COLORS = ['#06d6e0', '#00ff88', '#f59e0b', '#a78bfa', '#f472b6', '#38bdf8', '#fb923c', '#34d399', '#e879f9', '#fbbf24']
+const AGG_LOG_DARK  = ['#06d6e0', '#00ff88', '#f59e0b', '#a78bfa', '#f472b6', '#38bdf8', '#fb923c', '#34d399', '#e879f9', '#fbbf24']
+const AGG_LOG_LIGHT = ['#2563eb', '#059669', '#b45309', '#7c3aed', '#be123c', '#0369a1', '#c2410c', '#047857', '#6d28d9', '#854d0e']
+export const AGG_LOG_COLORS = AGG_LOG_DARK
 
 export function AggLogsView({ ns, name, kind }: { ns: string; name: string; kind: string }) {
   const [lines, setLines] = useState<{ pod: string; line: string }[]>([])
@@ -685,7 +730,9 @@ export function AggLogsView({ ns, name, kind }: { ns: string; name: string; kind
 
   const getPodColor = (pod: string) => {
     if (!podColorMap.current.has(pod)) {
-      podColorMap.current.set(pod, AGG_LOG_COLORS[podColorMap.current.size % AGG_LOG_COLORS.length])
+      const isLight = document.documentElement.getAttribute('data-theme') === 'notion'
+      const palette = isLight ? AGG_LOG_LIGHT : AGG_LOG_DARK
+      podColorMap.current.set(pod, palette[podColorMap.current.size % palette.length])
     }
     return podColorMap.current.get(pod)!
   }
@@ -990,7 +1037,7 @@ export function WorkloadMetricsPanel({ namespace, name, kind }: { namespace: str
 
           {wlData.throttle && wlData.throttle.length > 0 && (
             <MetricChart title="CPU Throttling — % of time pods are being throttled (>25% needs attention)" series={wlData.throttle} unit="%" height={90}
-              refLines={[{ value: 25, label: '25% warn', color: '#f59e0b' }]} />
+              refLines={[{ value: 25, label: '25% warn', color: refColor.warn }]} />
           )}
 
           {kindLower === 'deployment' && (wlData.replicas_desired || wlData.replicas || wlData.replicas_avl) && (

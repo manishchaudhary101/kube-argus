@@ -15,10 +15,13 @@ type RestartTimelineData = {
 
 const TIME_RANGES = ['1h', '6h', '12h', '24h'] as const
 
+const isLight = () => document.documentElement.getAttribute('data-theme') === 'notion'
+
 export function reasonColor(reason: string): string {
-  if (reason === 'OOMKilled') return '#f87171'
-  if (reason === 'Unhealthy') return '#f59e0b'
-  return '#9ca3af'
+  const light = isLight()
+  if (reason === 'OOMKilled') return light ? '#be123c' : '#f87171'
+  if (reason === 'Unhealthy') return light ? '#b45309' : '#f59e0b'
+  return light ? '#52525b' : '#9ca3af'
 }
 
 export function RestartTimeline({ namespace, pod, workload, kind }: {
@@ -94,24 +97,24 @@ export function RestartTimeline({ namespace, pod, workload, kind }: {
         <>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1">
             <span className="flex items-center gap-1 text-[8px] font-mono text-gray-500">
-              <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#f87171' }} /> OOMKilled
+              <span className="inline-block w-2 h-2 rounded-full" style={{ background: reasonColor('OOMKilled') }} /> OOMKilled
             </span>
             <span className="flex items-center gap-1 text-[8px] font-mono text-gray-500">
-              <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#f59e0b' }} /> Unhealthy
+              <span className="inline-block w-2 h-2 rounded-full" style={{ background: reasonColor('Unhealthy') }} /> Unhealthy
             </span>
             <span className="flex items-center gap-1 text-[8px] font-mono text-gray-500">
-              <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#9ca3af' }} /> Other
+              <span className="inline-block w-2 h-2 rounded-full" style={{ background: reasonColor('Other') }} /> Other
             </span>
           </div>
           <ResponsiveContainer width="100%" height={Math.max(80, containers.length * 30 + 40)}>
             <ScatterChart margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis dataKey="ts" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatTime}
-                tick={{ fontSize: 9, fill: '#4b5563' }} tickLine={false} axisLine={false} />
+                tick={{ fontSize: 9, fill: 'var(--chart-axis)' }} tickLine={false} axisLine={false} />
               <YAxis dataKey="containerIdx" type="number" domain={[-0.5, containers.length - 0.5]}
                 tickFormatter={(idx: number) => containers[idx] || ''}
                 ticks={containers.map((_, i) => i)}
-                tick={{ fontSize: 9, fill: '#4b5563' }} tickLine={false} axisLine={false} width={80} />
+                tick={{ fontSize: 9, fill: 'var(--chart-axis)' }} tickLine={false} axisLine={false} width={80} />
               <Tooltip
                 content={({ payload }) => {
                   if (!payload?.length) return null

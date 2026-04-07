@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -665,20 +664,52 @@ func apiMetricsWorkload(w http.ResponseWriter, r *http.Request) {
 
 	cache.mu.RLock()
 	if cache.pods != nil {
-		re := regexp.MustCompile("^" + podMatcher + "$")
-		for i := range cache.pods.Items {
-			p := &cache.pods.Items[i]
-			if p.Namespace != ns || !re.MatchString(p.Name) { continue }
-			if p.Status.Phase != corev1.PodRunning && p.Status.Phase != corev1.PodPending { continue }
-			res.Replicas++
-			for _, c := range p.Spec.Containers {
-				if c.Resources.Requests != nil {
-					if v, ok := c.Resources.Requests[corev1.ResourceCPU]; ok { res.CpuReqM += float64(v.MilliValue()) }
-					if v, ok := c.Resources.Requests[corev1.ResourceMemory]; ok { res.MemReqMi += float64(v.Value()) / (1024 * 1024) }
+		var selector map[string]string
+		switch kindLower {
+		case "deployment":
+			if cache.deployments != nil {
+				for _, d := range cache.deployments.Items {
+					if d.Name == name && d.Namespace == ns && d.Spec.Selector != nil {
+						selector = d.Spec.Selector.MatchLabels; break
+					}
 				}
-				if c.Resources.Limits != nil {
-					if v, ok := c.Resources.Limits[corev1.ResourceCPU]; ok { res.CpuLimM += float64(v.MilliValue()) }
-					if v, ok := c.Resources.Limits[corev1.ResourceMemory]; ok { res.MemLimMi += float64(v.Value()) / (1024 * 1024) }
+			}
+		case "statefulset":
+			if cache.statefulsets != nil {
+				for _, s := range cache.statefulsets.Items {
+					if s.Name == name && s.Namespace == ns && s.Spec.Selector != nil {
+						selector = s.Spec.Selector.MatchLabels; break
+					}
+				}
+			}
+		case "daemonset":
+			if cache.daemonsets != nil {
+				for _, d := range cache.daemonsets.Items {
+					if d.Name == name && d.Namespace == ns && d.Spec.Selector != nil {
+						selector = d.Spec.Selector.MatchLabels; break
+					}
+				}
+			}
+		}
+
+		if len(selector) > 0 {
+			for i := range cache.pods.Items {
+				p := &cache.pods.Items[i]
+				if p.Namespace != ns { continue }
+				if p.Status.Phase != corev1.PodRunning && p.Status.Phase != corev1.PodPending { continue }
+				match := true
+				for k, v := range selector { if p.Labels[k] != v { match = false; break } }
+				if !match { continue }
+				res.Replicas++
+				for _, c := range p.Spec.Containers {
+					if c.Resources.Requests != nil {
+						if v, ok := c.Resources.Requests[corev1.ResourceCPU]; ok { res.CpuReqM += float64(v.MilliValue()) }
+						if v, ok := c.Resources.Requests[corev1.ResourceMemory]; ok { res.MemReqMi += float64(v.Value()) / (1024 * 1024) }
+					}
+					if c.Resources.Limits != nil {
+						if v, ok := c.Resources.Limits[corev1.ResourceCPU]; ok { res.CpuLimM += float64(v.MilliValue()) }
+						if v, ok := c.Resources.Limits[corev1.ResourceMemory]; ok { res.MemLimMi += float64(v.Value()) / (1024 * 1024) }
+					}
 				}
 			}
 		}

@@ -7,6 +7,16 @@ export type RefLine = { value: number; label: string; color: string }
 
 export const CHART_COLORS = ['#06b6d4', '#f59e0b', '#22c55e', '#a78bfa', '#f87171', '#38bdf8', '#facc15', '#4ade80', '#c084fc', '#fb923c']
 
+const isLightTheme = () => document.documentElement.getAttribute('data-theme') === 'notion'
+export const refColor = {
+  get req()      { return isLightTheme() ? '#b45309' : '#facc15' },
+  get lim()      { return isLightTheme() ? '#be123c' : '#f87171' },
+  get warn()     { return isLightTheme() ? '#92400e' : '#f59e0b' },
+  get capacity() { return isLightTheme() ? '#be123c' : '#ef4444' },
+  get limits()   { return isLightTheme() ? '#7c3aed' : '#a78bfa' },
+  get requests() { return isLightTheme() ? '#b45309' : '#f59e0b' },
+}
+
 export function seriesLastVal(series?: MetricSeries[]): number {
   if (!series || series.length === 0) return 0
   const vals = series[0].values
@@ -82,11 +92,11 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-          <XAxis dataKey="ts" tickFormatter={formatTime} tick={{ fontSize: 9, fill: '#4b5563' }} tickLine={false} axisLine={false} minTickGap={40} />
-          <YAxis tickFormatter={formatVal} tick={{ fontSize: 9, fill: '#4b5563' }} tickLine={false} axisLine={false} width={52} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+          <XAxis dataKey="ts" tickFormatter={formatTime} tick={{ fontSize: 9, fill: 'var(--chart-axis)' }} tickLine={false} axisLine={false} minTickGap={40} />
+          <YAxis tickFormatter={formatVal} tick={{ fontSize: 9, fill: 'var(--chart-axis)' }} tickLine={false} axisLine={false} width={52} />
           <Tooltip
-            contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, fontSize: 10, fontFamily: 'monospace' }}
+            contentStyle={{ background: 'var(--chart-tooltip-bg)', border: '1px solid var(--chart-tooltip-border)', borderRadius: 8, fontSize: 10, fontFamily: 'monospace' }}
             labelFormatter={(ts) => new Date(Number(ts)).toLocaleTimeString()}
             formatter={(value) => [formatVal(Number(value))]}
           />

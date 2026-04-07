@@ -3,7 +3,7 @@ import type { Evt, PodDescribe } from '../../types'
 import { useFetch, post } from '../../hooks/useFetch'
 import { useAuth } from '../../context/AuthContext'
 import { Spinner, StatusDot, ContainerStateBadge } from '../ui/Atoms'
-import { MetricChart, useMetrics, METRIC_RANGES, YamlModal } from './WorkloadDetailView'
+import { MetricChart, useMetrics, METRIC_RANGES, YamlModal, refColor } from './WorkloadDetailView'
 import { RestartTimeline } from '../ui/RestartTimeline'
 import type { MetricsData, RefLine } from './WorkloadDetailView'
 import { JITRequestModal } from '../modals/JITRequestModal'
@@ -195,8 +195,8 @@ export function PodMetricsPanel({ namespace, pod }: { namespace: string; pod: st
       totalReq += r.cpuReqM || 0
       totalLim += r.cpuLimM || 0
     }
-    if (totalReq > 0) lines.push({ value: totalReq, label: `req ${totalReq}m`, color: '#facc15' })
-    if (totalLim > 0) lines.push({ value: totalLim, label: `lim ${totalLim}m`, color: '#f87171' })
+    if (totalReq > 0) lines.push({ value: totalReq, label: `req ${totalReq}m`, color: refColor.req })
+    if (totalLim > 0) lines.push({ value: totalLim, label: `lim ${totalLim}m`, color: refColor.lim })
     return lines
   }, [podData?.resources])
 
@@ -208,8 +208,8 @@ export function PodMetricsPanel({ namespace, pod }: { namespace: string; pod: st
       totalReq += r.memReqMi || 0
       totalLim += r.memLimMi || 0
     }
-    if (totalReq > 0) lines.push({ value: totalReq, label: `req ${totalReq > 1024 ? (totalReq/1024).toFixed(1)+'Gi' : Math.round(totalReq)+'Mi'}`, color: '#facc15' })
-    if (totalLim > 0) lines.push({ value: totalLim, label: `lim ${totalLim > 1024 ? (totalLim/1024).toFixed(1)+'Gi' : Math.round(totalLim)+'Mi'}`, color: '#f87171' })
+    if (totalReq > 0) lines.push({ value: totalReq, label: `req ${totalReq > 1024 ? (totalReq/1024).toFixed(1)+'Gi' : Math.round(totalReq)+'Mi'}`, color: refColor.req })
+    if (totalLim > 0) lines.push({ value: totalLim, label: `lim ${totalLim > 1024 ? (totalLim/1024).toFixed(1)+'Gi' : Math.round(totalLim)+'Mi'}`, color: refColor.lim })
     return lines
   }, [podData?.resources])
 
@@ -286,7 +286,7 @@ export function PodMetricsPanel({ namespace, pod }: { namespace: string; pod: st
             )}
             {podData.throttle && podData.throttle.length > 0 && (
               <MetricChart title="CPU Throttling — % of time this pod is being throttled" series={podData.throttle} unit="%" height={90}
-                refLines={[{ value: 25, label: '25% warn', color: '#f59e0b' }]} />
+                refLines={[{ value: 25, label: '25% warn', color: refColor.warn }]} />
             )}
             <div className="grid grid-cols-2 gap-3">
               {podData.net_rx && <MetricChart title="Network In — bytes received per second" series={podData.net_rx} unit="bytes/s" height={90} />}
@@ -443,7 +443,7 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
     <div className="flex min-h-0 flex-1 flex-col">
       {showShell && <PodShell ns={ns} name={name} onClose={() => setShowShell(false)} />}
       {showYaml && <YamlModal kind="Pod" ns={ns} name={name} onClose={() => setShowYaml(false)} />}
-      {showJITModal && <JITRequestModal ns={ns} pod={name} ownerKind={desc?.ownerKind} ownerName={desc?.ownerName} onClose={() => setShowJITModal(false)} onSubmitted={() => { setShowJITModal(false); setJitPending(true) }} />}
+      {showJITModal && <JITRequestModal ns={ns} pod={name} ownerKind={desc?.ownerKind} ownerName={desc?.ownerName} accessType="exec" onClose={() => setShowJITModal(false)} onSubmitted={() => { setShowJITModal(false); setJitPending(true) }} />}
       {toast && <div className={`border-b px-4 py-2 text-xs font-medium ${toast.includes('approved') ? 'border-green-900/40 bg-green-950/30 text-neon-green' : toast.includes('denied') ? 'border-red-900/40 bg-red-950/30 text-neon-red' : toast.includes('expired') ? 'border-amber-900/40 bg-amber-950/30 text-neon-amber' : 'border-hull-700 bg-hull-800 text-gray-300'}`}>{toast}</div>}
       <div className="flex items-center gap-2 border-b border-hull-700 bg-hull-900 px-4 py-2">
         <button onClick={onBack} className="rounded bg-hull-700 px-2 py-1 text-xs text-gray-400 hover:text-white">←</button>
@@ -474,7 +474,7 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
         ) : jitPending ? (
           <span className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400">Pending Approval...</span>
         ) : (
-          <button onClick={() => setShowJITModal(true)} className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-900/20">Request Access</button>
+          <button onClick={() => setShowJITModal(true)} className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-900/20">Request Shell Access</button>
         )}
         </div>
       </div>
@@ -685,11 +685,19 @@ export function PodShell({ ns, name, container, onClose }: { ns: string; name: s
 
       if (disposed || !termRef.current) return
 
+      const isNotion = document.documentElement.getAttribute('data-theme') === 'notion'
       term = new Terminal({
         cursorBlink: true,
         fontSize: 12,
         fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
-        theme: {
+        theme: isNotion ? {
+          background: '#f8fafc',
+          foreground: '#18181b',
+          cursor: '#2563eb',
+          selectionBackground: '#dbeafe',
+          black: '#18181b', red: '#be123c', green: '#059669', yellow: '#b45309',
+          blue: '#2563eb', magenta: '#7c3aed', cyan: '#0369a1', white: '#f8fafc',
+        } : {
           background: '#0a0e14',
           foreground: '#c5c8c6',
           cursor: '#06d6e0',

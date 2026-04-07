@@ -808,23 +808,39 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", 405)
 		return
 	}
-	if !requireAdmin(w, r) { return }
 
 	switch action {
 	case "restart":
+		kind := r.URL.Query().Get("kind")
+		if kind == "" { kind = "Deployment" }
+		if !requireAdminOrJIT(w, r, ns, kind, name) { return }
+
 		ts := time.Now().UTC().Format(time.RFC3339)
 		patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`, ts)
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			_, e := clientset.AppsV1().Deployments(ns).Patch(c, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-			return e
+			switch kind {
+			case "StatefulSet":
+				_, e := clientset.AppsV1().StatefulSets(ns).Patch(c, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				return e
+			case "DaemonSet":
+				_, e := clientset.AppsV1().DaemonSets(ns).Patch(c, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				return e
+			default:
+				_, e := clientset.AppsV1().Deployments(ns).Patch(c, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				return e
+			}
 		})
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
 		go cache.refresh()
+		if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {
+			auditRecord(sd.Email, sd.Role, "workload.restart", fmt.Sprintf("%s %s/%s", kind, ns, name), "", clientIP(r))
+		}
 		j(w, map[string]string{"ok": "restarting"})
 	case "scale":
+		if !requireAdmin(w, r) { return }
 		replicaStr := r.URL.Query().Get("replicas")
 		var replicas int32
 		if _, err := fmt.Sscanf(replicaStr, "%d", &replicas); err != nil || replicas < 0 || replicas > 100 {

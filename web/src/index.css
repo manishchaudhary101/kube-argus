@@ -4,8 +4,128 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Theme Variables ───────────────────────────────────────────────── */
+
+:root {
+  /* Hull palette (structural backgrounds / borders) */
+  --hull-950: 6 10 19;
+  --hull-900: 10 14 23;
+  --hull-800: 17 24 39;
+  --hull-700: 26 34 53;
+  --hull-600: 36 48 73;
+
+  /* Neon accents */
+  --neon-green: 0 255 136;
+  --neon-amber: 255 184 0;
+  --neon-red: 255 51 85;
+  --neon-blue: 59 130 246;
+  --neon-cyan: 6 214 224;
+
+  /* Gray text scale */
+  --gray-300: 209 213 219;
+  --gray-400: 156 163 175;
+  --gray-500: 107 114 128;
+  --gray-600: 75 85 99;
+  --gray-700: 55 65 81;
+
+  /* Primary foreground (maps to Tailwind 'white') */
+  --color-white: 255 255 255;
+
+  /* Body */
+  --body-bg: #060a13;
+  --body-color: #e2e8f0;
+  --scrollbar-thumb: #243049;
+
+  /* Glow text-shadows */
+  --glow-green: rgba(0,255,136,0.5);
+  --glow-red: rgba(255,51,85,0.5);
+  --glow-amber: rgba(255,184,0,0.5);
+  --glow-cyan: rgba(6,214,224,0.4);
+
+  /* Glass / stat-card / ring-glow */
+  --glass-bg: linear-gradient(135deg, rgba(10,14,23,0.8) 0%, rgba(17,24,39,0.6) 100%);
+  --glass-border: rgba(36,48,73,0.6);
+  --stat-card-bg: linear-gradient(145deg, rgba(10,14,23,0.9) 0%, rgba(17,24,39,0.7) 100%);
+  --stat-card-border: rgba(36,48,73,0.5);
+  --stat-card-hover-border: rgba(6,214,224,0.2);
+  --stat-card-hover-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  --ring-glow-gradient: linear-gradient(135deg, rgba(6,214,224,0.15), transparent, rgba(0,255,136,0.1));
+
+  /* Charts */
+  --chart-grid: #1e293b;
+  --chart-axis: #4b5563;
+  --chart-tooltip-bg: #0f172a;
+  --chart-tooltip-border: #1e293b;
+
+  /* Flash animation */
+  --flash-color: rgba(6,214,224,0.18);
+  --pulse-glow-color: rgba(6,214,224,0.15);
+
+  color-scheme: dark;
+}
+
+/* ─── Light Theme ──────────────────────────────────────────────────── */
+
+[data-theme="notion"] {
+  /* Hull: cool slate surfaces for a clean, modern feel */
+  --hull-950: 248 250 252;   /* slate-50  — page-level bg */
+  --hull-900: 255 255 255;   /* pure white — card surfaces */
+  --hull-800: 226 232 240;   /* slate-200 — hover / active */
+  --hull-700: 203 213 225;   /* slate-300 — borders */
+  --hull-600: 148 163 184;   /* slate-400 — strong borders */
+
+  /* Fresh modern palette: vibrant but WCAG AA compliant on #fff */
+  --neon-cyan:  37 99 235;    /* blue-600    — 5.17:1 primary accent */
+  --neon-green: 5 150 105;    /* emerald-600 — 4.58:1 healthy/success */
+  --neon-amber: 180 83 9;     /* amber-700   — 5.63:1 warning/attention */
+  --neon-red:   225 29 72;    /* rose-600    — 4.71:1 error/danger */
+  --neon-blue:  124 58 237;   /* violet-600  — 7.19:1 action/CTA */
+
+  /* Neutral zinc gray scale — neither warm brown nor cold blue */
+  --gray-300: 24 24 27;       /* zinc-900 */
+  --gray-400: 63 63 70;       /* zinc-700 */
+  --gray-500: 82 82 91;       /* zinc-600 */
+  --gray-600: 100 100 109;    /* ~zinc-550 — 5.6:1 */
+  --gray-700: 115 115 122;    /* zinc-500  — 4.7:1 */
+
+  --color-white: 24 24 27;    /* zinc-900 */
+
+  --body-bg: #f8fafc;         /* slate-50 — clean cool white */
+  --body-color: #18181b;      /* zinc-900 */
+  --scrollbar-thumb: #cbd5e1; /* slate-300 */
+
+  /* Glows: soft tints of new accent colors */
+  --glow-green: rgba(5,150,105,0.25);
+  --glow-red: rgba(225,29,72,0.25);
+  --glow-amber: rgba(180,83,9,0.2);
+  --glow-cyan: rgba(37,99,235,0.2);
+
+  --glass-bg: rgba(255,255,255,0.88);
+  --glass-border: rgba(0,0,0,0.08);
+
+  --stat-card-bg: #ffffff;
+  --stat-card-border: rgba(0,0,0,0.06);
+  --stat-card-hover-border: rgba(37,99,235,0.35);
+  --stat-card-hover-shadow: 0 4px 24px rgba(37,99,235,0.10);
+
+  --ring-glow-gradient: linear-gradient(135deg, rgba(37,99,235,0.08), transparent, rgba(5,150,105,0.05));
+
+  --chart-grid: rgba(0,0,0,0.06);
+  --chart-axis: #52525b;      /* zinc-600 */
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: rgba(0,0,0,0.08);
+
+  --flash-color: rgba(37,99,235,0.08);
+  --pulse-glow-color: rgba(37,99,235,0.06);
+
+  color-scheme: light;
+}
+
+/* ─── Base ──────────────────────────────────────────────────────────── */
+
 html { font-family: 'Inter', system-ui, sans-serif; }
-body { margin: 0; background: #060a13; color: #e2e8f0; -webkit-font-smoothing: antialiased; overflow: hidden; }
+body { margin: 0; background: var(--body-bg); color: var(--body-color); -webkit-font-smoothing: antialiased; overflow: hidden; }
+[data-theme="notion"] body { -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; }
 html, body, #root { height: 100dvh; height: 100vh; }
 
 .pt-safe { padding-top: 0.75rem; }
@@ -16,19 +136,23 @@ html, body, #root { height: 100dvh; height: 100vh; }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #243049; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ─── Glow utilities ────────────────────────────────────────────────── */
+
 @layer utilities {
-  .glow-green { text-shadow: 0 0 8px rgba(0,255,136,0.5); }
-  .glow-red   { text-shadow: 0 0 8px rgba(255,51,85,0.5); }
-  .glow-amber { text-shadow: 0 0 8px rgba(255,184,0,0.5); }
-  .glow-cyan  { text-shadow: 0 0 10px rgba(6,214,224,0.4); }
+  .glow-green { text-shadow: 0 0 8px var(--glow-green); }
+  .glow-red   { text-shadow: 0 0 8px var(--glow-red); }
+  .glow-amber { text-shadow: 0 0 8px var(--glow-amber); }
+  .glow-cyan  { text-shadow: 0 0 10px var(--glow-cyan); }
 }
 
+/* ─── Animations ────────────────────────────────────────────────────── */
+
 @keyframes k9s-flash {
-  0%   { background-color: rgba(6,214,224,0.18); }
+  0%   { background-color: var(--flash-color); }
   100% { background-color: transparent; }
 }
 .k9s-changed { animation: k9s-flash 1.5s ease-out forwards; }
@@ -37,8 +161,8 @@ html, body, #root { height: 100dvh; height: 100vh; }
 .anim-in { animation: fade-in 0.35s ease-out forwards; }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(6,214,224,0.0); }
-  50% { box-shadow: 0 0 12px 2px rgba(6,214,224,0.15); }
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 12px 2px var(--pulse-glow-color); }
 }
 .pulse-border { animation: pulse-glow 3s ease-in-out infinite; }
 
@@ -47,21 +171,27 @@ html, body, #root { height: 100dvh; height: 100vh; }
   100% { background-position: 200% 0; }
 }
 
+/* ─── Component classes ─────────────────────────────────────────────── */
+
 .glass {
-  background: linear-gradient(135deg, rgba(10,14,23,0.8) 0%, rgba(17,24,39,0.6) 100%);
+  background: var(--glass-bg);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(36,48,73,0.6);
+  border: 1px solid var(--glass-border);
 }
 
 .stat-card {
-  background: linear-gradient(145deg, rgba(10,14,23,0.9) 0%, rgba(17,24,39,0.7) 100%);
-  border: 1px solid rgba(36,48,73,0.5);
+  background: var(--stat-card-bg);
+  border: 1px solid var(--stat-card-border);
   border-radius: 12px;
   transition: all 0.2s ease;
 }
+[data-theme="notion"] .stat-card {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(37,99,235,0.04);
+  border-color: rgba(0,0,0,0.06);
+}
 .stat-card:hover {
-  border-color: rgba(6,214,224,0.2);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  border-color: var(--stat-card-hover-border);
+  box-shadow: var(--stat-card-hover-shadow);
 }
 
 .ring-glow {
@@ -73,9 +203,142 @@ html, body, #root { height: 100dvh; height: 100vh; }
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(6,214,224,0.15), transparent, rgba(0,255,136,0.1));
+  background: var(--ring-glow-gradient);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIGHT THEME — comprehensive overrides for Notion mode
+   ══════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Strategy: use [class*="text-sky-400"] instead of .text-sky-400
+ * so that opacity modifiers (text-sky-400/80) are also caught.
+ *
+ * text-gray-200 (#e5e7eb) is INVISIBLE on #f2f1ee body (1.09:1 ratio).
+ * All dark-appropriate text shades need remapping for ≥4.5:1 contrast.
+ */
+
+/* ── Text: gray shades outside the 300-700 variable band ──────────── */
+[data-theme="notion"] [class*="text-gray-200"] { color: #3f3f46 !important; }  /* zinc-700 */
+[data-theme="notion"] [class*="text-gray-800"] { color: #52525b !important; }  /* zinc-600 */
+
+/* ── Text: accent colors — fresh modern hues, ≥4.5:1 on #ffffff ──── */
+[data-theme="notion"] [class*="text-red-3"]    { color: #be123c !important; }  /* rose-700 */
+[data-theme="notion"] [class*="text-red-4"]    { color: #be123c !important; }
+[data-theme="notion"] [class*="text-red-5"]    { color: #9f1239 !important; }  /* rose-800 */
+[data-theme="notion"] [class*="text-yellow-4"] { color: #854d0e !important; }  /* yellow-800 */
+[data-theme="notion"] [class*="text-green-3"]  { color: #059669 !important; }  /* emerald-600 */
+[data-theme="notion"] [class*="text-green-4"]  { color: #047857 !important; }  /* emerald-700 */
+[data-theme="notion"] [class*="text-emerald-3"]{ color: #059669 !important; }  /* emerald-600 */
+[data-theme="notion"] [class*="text-emerald-4"]{ color: #047857 !important; }  /* emerald-700 */
+[data-theme="notion"] [class*="text-emerald-5"]{ color: #065f46 !important; }  /* emerald-800 */
+[data-theme="notion"] [class*="text-teal-4"]   { color: #0d9488 !important; }  /* teal-600 */
+[data-theme="notion"] [class*="text-blue-4"]   { color: #2563eb !important; }  /* blue-600 */
+[data-theme="notion"] [class*="text-purple-3"] { color: #7c3aed !important; }  /* violet-600 */
+[data-theme="notion"] [class*="text-purple-4"] { color: #6d28d9 !important; }  /* violet-700 */
+[data-theme="notion"] [class*="text-amber-3"]  { color: #b45309 !important; }  /* amber-700 */
+[data-theme="notion"] [class*="text-amber-4"]  { color: #92400e !important; }  /* amber-800 */
+[data-theme="notion"] [class*="text-amber-5"]  { color: #78350f !important; }  /* amber-900 */
+[data-theme="notion"] [class*="text-cyan-3"]   { color: #1d4ed8 !important; }  /* blue-700 (cyan→blue) */
+[data-theme="notion"] [class*="text-cyan-6"]   { color: #1e40af !important; }  /* blue-800 */
+[data-theme="notion"] [class*="text-indigo-3"] { color: #5b21b6 !important; }  /* violet-800 (indigo→violet) */
+[data-theme="notion"] [class*="text-indigo-4"] { color: #6d28d9 !important; }  /* violet-700 */
+[data-theme="notion"] [class*="text-sky-3"]    { color: #1d4ed8 !important; }  /* blue-700 (sky→blue) */
+[data-theme="notion"] [class*="text-sky-4"]    { color: #1e40af !important; }  /* blue-800 */
+[data-theme="notion"] [class*="text-slate-3"]  { color: #334155 !important; }  /* slate-700 */
+[data-theme="notion"] [class*="text-orange-4"] { color: #b45309 !important; }  /* amber-700 */
+
+/* ── Backgrounds: hue-matched tints (50/100-level per accent family) ── */
+[data-theme="notion"] [class*="bg-red-950"]     { background-color: #fff1f2 !important; }  /* rose-50 */
+[data-theme="notion"] [class*="bg-red-900"]     { background-color: #ffe4e6 !important; }  /* rose-100 */
+[data-theme="notion"] [class*="bg-green-950"]   { background-color: #ecfdf5 !important; }  /* emerald-50 */
+[data-theme="notion"] [class*="bg-green-900"]   { background-color: #d1fae5 !important; }  /* emerald-100 */
+[data-theme="notion"] [class*="bg-emerald-950"] { background-color: #d1fae5 !important; }  /* emerald-100 */
+[data-theme="notion"] [class*="bg-blue-950"]    { background-color: #dbeafe !important; }  /* blue-100 */
+[data-theme="notion"] [class*="bg-blue-900"]    { background-color: #bfdbfe !important; }  /* blue-200 */
+[data-theme="notion"] [class*="bg-amber-950"]   { background-color: #fffbeb !important; }  /* amber-50 */
+[data-theme="notion"] [class*="bg-amber-900"]   { background-color: #fef3c7 !important; }  /* amber-100 */
+[data-theme="notion"] [class*="bg-amber-500"]   { background-color: #f59e0b !important; }  /* keep solid amber */
+[data-theme="notion"] [class*="bg-cyan-950"]    { background-color: #dbeafe !important; }  /* blue-100 (cyan→blue) */
+[data-theme="notion"] [class*="bg-cyan-900"]    { background-color: #bfdbfe !important; }  /* blue-200 */
+[data-theme="notion"] [class*="bg-orange-950"]  { background-color: #fff7ed !important; }  /* orange-50 */
+[data-theme="notion"] [class*="bg-orange-900"]  { background-color: #ffedd5 !important; }  /* orange-100 */
+[data-theme="notion"] [class*="bg-purple-950"]  { background-color: #f5f3ff !important; }  /* violet-50 */
+[data-theme="notion"] [class*="bg-yellow-950"]  { background-color: #fefce8 !important; }  /* yellow-50 */
+[data-theme="notion"] [class*="bg-sky-950"]     { background-color: #e0f2fe !important; }  /* sky-100 */
+[data-theme="notion"] [class*="bg-indigo-950"]  { background-color: #f5f3ff !important; }  /* violet-50 (indigo→violet) */
+[data-theme="notion"] [class*="bg-slate-900"]   { background-color: #f1f5f9 !important; }  /* slate-100 */
+[data-theme="notion"] [class*="bg-gray-950"]    { background-color: #f4f4f5 !important; }  /* zinc-100 */
+[data-theme="notion"] [class*="bg-gray-800"]    { background-color: #e4e4e7 !important; }  /* zinc-200 */
+
+/* ── Borders: hue-matched 200/300-level to frame tinted backgrounds ── */
+[data-theme="notion"] [class*="border-red-900"]     { border-color: #fda4af !important; }  /* rose-300 */
+[data-theme="notion"] [class*="border-green-900"]   { border-color: #6ee7b7 !important; }  /* emerald-300 */
+[data-theme="notion"] [class*="border-green-800"]   { border-color: #6ee7b7 !important; }
+[data-theme="notion"] [class*="border-blue-900"]    { border-color: #93c5fd !important; }  /* blue-300 */
+[data-theme="notion"] [class*="border-amber-900"]   { border-color: #fcd34d !important; }  /* amber-300 */
+[data-theme="notion"] [class*="border-amber-800"]   { border-color: #fcd34d !important; }
+[data-theme="notion"] [class*="border-cyan-900"]    { border-color: #93c5fd !important; }  /* blue-300 (cyan→blue) */
+[data-theme="notion"] [class*="border-cyan-800"]    { border-color: #93c5fd !important; }
+[data-theme="notion"] [class*="border-orange-900"]  { border-color: #fdba74 !important; }  /* orange-300 */
+[data-theme="notion"] [class*="border-purple-800"]  { border-color: #c4b5fd !important; }  /* violet-300 */
+[data-theme="notion"] [class*="border-purple-900"]  { border-color: #c4b5fd !important; }
+[data-theme="notion"] [class*="border-purple-500"]  { border-color: #a78bfa !important; }  /* violet-400 */
+[data-theme="notion"] [class*="border-sky-900"]     { border-color: #93c5fd !important; }  /* blue-300 */
+[data-theme="notion"] [class*="border-indigo-900"]  { border-color: #c4b5fd !important; }  /* violet-300 (indigo→violet) */
+[data-theme="notion"] [class*="border-indigo-800"]  { border-color: #c4b5fd !important; }
+[data-theme="notion"] [class*="border-emerald-900"] { border-color: #6ee7b7 !important; }  /* emerald-300 */
+[data-theme="notion"] [class*="border-slate-700"]   { border-color: #94a3b8 !important; }  /* slate-400 */
+[data-theme="notion"] [class*="border-gray-800"]    { border-color: #d4d4d8 !important; }  /* zinc-300 */
+
+/* ── Hover backgrounds ───────────────────────────────────────────── */
+[data-theme="notion"] [class*="hover\:bg-red-900"]:hover    { background-color: #ffe4e6 !important; }  /* rose-100 */
+[data-theme="notion"] [class*="hover\:bg-green-900"]:hover  { background-color: #d1fae5 !important; }  /* emerald-100 */
+[data-theme="notion"] [class*="hover\:bg-cyan-900"]:hover   { background-color: #bfdbfe !important; }  /* blue-200 */
+[data-theme="notion"] [class*="hover\:bg-blue-900"]:hover   { background-color: #bfdbfe !important; }  /* blue-200 */
+[data-theme="notion"] [class*="hover\:bg-amber-900"]:hover  { background-color: #fef3c7 !important; }  /* amber-100 */
+[data-theme="notion"] [class*="hover\:bg-purple-950"]:hover { background-color: #ede9fe !important; }  /* violet-100 */
+
+/* ── Gradient stops: hue-matched tints ────────────────────────────── */
+[data-theme="notion"] [class*="from-amber-950"]  { --tw-gradient-from: #fffbeb !important; }  /* amber-50 */
+[data-theme="notion"] [class*="to-amber-950"]    { --tw-gradient-to:   #fefce8 !important; }  /* yellow-50 */
+[data-theme="notion"] [class*="from-red-950"]    { --tw-gradient-from: #fff1f2 !important; }  /* rose-50 */
+[data-theme="notion"] [class*="from-green-950"]  { --tw-gradient-from: #ecfdf5 !important; }  /* emerald-50 */
+[data-theme="notion"] [class*="from-cyan-950"]   { --tw-gradient-from: #dbeafe !important; }  /* blue-100 */
+[data-theme="notion"] [class*="from-blue-950"]   { --tw-gradient-from: #dbeafe !important; }  /* blue-100 */
+
+/* ── Progress bars: vivid fills + visible tracks ─────────────────── */
+[data-theme="notion"] .rounded-full.overflow-hidden {
+  background-color: rgb(226 232 240) !important;  /* slate-200 */
+}
+[data-theme="notion"] .rounded-full[class*="from-neon-cyan"] {
+  --neon-cyan: 59 130 246;    /* blue-500 — vivid bar fill */
+}
+[data-theme="notion"] .rounded-full[class*="from-neon-green"] {
+  --neon-green: 16 185 129;   /* emerald-500 — vivid bar fill */
+}
+[data-theme="notion"] .rounded-full[class*="from-neon-cyan"][class*="to-neon-green"] {
+  --neon-cyan: 59 130 246;
+  --neon-green: 16 185 129;
+}
+
+/* ── Neon text: strip opacity modifiers so dark-on-light stays legible ── */
+[data-theme="notion"] [class*="text-neon-cyan/"]  { color: rgb(var(--neon-cyan))  !important; }
+[data-theme="notion"] [class*="text-neon-amber/"] { color: rgb(var(--neon-amber)) !important; }
+[data-theme="notion"] [class*="text-neon-green/"] { color: rgb(var(--neon-green)) !important; }
+[data-theme="notion"] [class*="text-neon-red/"]   { color: rgb(var(--neon-red))   !important; }
+[data-theme="notion"] [class*="text-neon-blue/"]  { color: rgb(var(--neon-blue))  !important; }
+
+/* ── Boost low-opacity decorative elements for light surfaces ──────── */
+[data-theme="notion"] .opacity-40 { opacity: 0.55 !important; }
+[data-theme="notion"] .opacity-60 { opacity: 0.75 !important; }
+[data-theme="notion"] [class*="disabled:opacity-3"]:disabled { opacity: 0.45 !important; }
+[data-theme="notion"] [class*="disabled:opacity-4"]:disabled { opacity: 0.55 !important; }
+
+/* ── Neon glow shadows → colored soft elevation ──────────────────── */
+[data-theme="notion"] [class*="shadow-\[0"] { box-shadow: 0 1px 8px rgba(0,0,0,0.08) !important; }
+[data-theme="notion"] [class*="shadow-\[inset"] { box-shadow: inset 0 1px 3px rgba(0,0,0,0.06) !important; }

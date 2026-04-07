@@ -4,7 +4,7 @@ import { useFetch, post } from '../../hooks/useFetch'
 import { useAuth } from '../../context/AuthContext'
 import { Btn, Spinner } from '../ui/Atoms'
 import { K9sBar } from '../ui/K9sBar'
-import { MetricChart, METRIC_RANGES, seriesLastVal, fmtBytes } from '../ui/MetricChart'
+import { MetricChart, METRIC_RANGES, seriesLastVal, fmtBytes, refColor } from '../ui/MetricChart'
 import { useMetrics } from '../../hooks/useMetrics'
 import { DrainWizardModal } from '../modals/DrainWizardModal'
 import { DrainBgBanner, useDrainBg } from '../../hooks/useDrainBg'
@@ -149,15 +149,15 @@ function NodeMetricsPanel({ nodeName }: { nodeName: string }) {
         <div className="grid grid-cols-2 gap-3">
           {(data.rr_cpu_used || data.cpu_used) && <MetricChart title="CPU — pod usage (cores)" series={data.rr_cpu_used || data.cpu_used} unit="cores"
             refLines={[
-              ...(data.cpu_capacity ? [{ value: seriesLastVal(data.cpu_capacity), label: 'capacity', color: '#ef4444' }] : []),
-              ...((data.rr_cpu_requests || data.cpu_requests) ? [{ value: seriesLastVal(data.rr_cpu_requests || data.cpu_requests), label: 'requests', color: '#f59e0b' }] : []),
-              ...((data.rr_cpu_limits || data.cpu_limits) ? [{ value: seriesLastVal(data.rr_cpu_limits || data.cpu_limits), label: 'limits', color: '#a78bfa' }] : []),
+              ...(data.cpu_capacity ? [{ value: seriesLastVal(data.cpu_capacity), label: 'capacity', color: refColor.capacity }] : []),
+              ...((data.rr_cpu_requests || data.cpu_requests) ? [{ value: seriesLastVal(data.rr_cpu_requests || data.cpu_requests), label: 'requests', color: refColor.requests }] : []),
+              ...((data.rr_cpu_limits || data.cpu_limits) ? [{ value: seriesLastVal(data.rr_cpu_limits || data.cpu_limits), label: 'limits', color: refColor.limits }] : []),
             ]} />}
           {(data.rr_mem_used || data.mem_used) && <MetricChart title="Memory — pod working set" series={data.rr_mem_used || data.mem_used} unit="bytes"
             refLines={[
-              ...(data.mem_capacity ? [{ value: seriesLastVal(data.mem_capacity), label: `capacity ${fmtBytes(seriesLastVal(data.mem_capacity))}`, color: '#ef4444' }] : []),
-              ...((data.rr_mem_requests || data.mem_requests) ? [{ value: seriesLastVal(data.rr_mem_requests || data.mem_requests), label: `requests ${fmtBytes(seriesLastVal(data.rr_mem_requests || data.mem_requests))}`, color: '#f59e0b' }] : []),
-              ...((data.rr_mem_limits || data.mem_limits) ? [{ value: seriesLastVal(data.rr_mem_limits || data.mem_limits), label: `limits ${fmtBytes(seriesLastVal(data.rr_mem_limits || data.mem_limits))}`, color: '#a78bfa' }] : []),
+              ...(data.mem_capacity ? [{ value: seriesLastVal(data.mem_capacity), label: `capacity ${fmtBytes(seriesLastVal(data.mem_capacity))}`, color: refColor.capacity }] : []),
+              ...((data.rr_mem_requests || data.mem_requests) ? [{ value: seriesLastVal(data.rr_mem_requests || data.mem_requests), label: `requests ${fmtBytes(seriesLastVal(data.rr_mem_requests || data.mem_requests))}`, color: refColor.requests }] : []),
+              ...((data.rr_mem_limits || data.mem_limits) ? [{ value: seriesLastVal(data.rr_mem_limits || data.mem_limits), label: `limits ${fmtBytes(seriesLastVal(data.rr_mem_limits || data.mem_limits))}`, color: refColor.limits }] : []),
             ]} />}
         </div>
         {(data.rr_mem_rss || data.mem_rss || data.rr_mem_cache || data.mem_cache) && (

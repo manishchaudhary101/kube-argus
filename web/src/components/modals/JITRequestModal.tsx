@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export function JITRequestModal({ ns, pod, ownerKind, ownerName, onClose, onSubmitted }: { ns: string; pod: string; ownerKind?: string; ownerName?: string; onClose: () => void; onSubmitted: () => void }) {
+export function JITRequestModal({ ns, pod, ownerKind, ownerName, accessType, onClose, onSubmitted }: { ns: string; pod: string; ownerKind?: string; ownerName?: string; accessType?: 'exec' | 'restart' | 'cron-trigger'; onClose: () => void; onSubmitted: () => void }) {
   const [reason, setReason] = useState('')
   const [duration, setDuration] = useState('1h')
   const [custom, setCustom] = useState(false)
@@ -39,7 +39,7 @@ export function JITRequestModal({ ns, pod, ownerKind, ownerName, onClose, onSubm
       <div className="w-full max-w-md rounded-2xl border border-hull-700/50 bg-hull-900 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-hull-700/40 px-5 py-4">
           <div>
-            <h2 className="text-sm font-bold text-white">{ownerKind === 'CronJob' ? 'Request CronTrigger Access' : 'Request Pod Shell/Exec Access'}</h2>
+            <h2 className="text-sm font-bold text-white">{accessType === 'restart' ? 'Request Restart Access' : ownerKind === 'CronJob' ? 'Request CronTrigger Access' : 'Request Pod Shell/Exec Access'}</h2>
             <p className="text-[10px] text-gray-500 mt-0.5">JIT access request — requires admin approval</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1 text-gray-500 hover:text-white transition-colors" aria-label="Close">
@@ -59,7 +59,7 @@ export function JITRequestModal({ ns, pod, ownerKind, ownerName, onClose, onSubm
             </div>
           </div>
           {ownerKind && ownerName && (
-            <p className="text-[10px] text-gray-500">Access will apply to all pods owned by this {ownerKind.toLowerCase()}</p>
+            <p className="text-[10px] text-gray-500">{accessType === 'restart' ? `Grants permission to restart this ${ownerKind.toLowerCase()}` : `Access will apply to all pods owned by this ${ownerKind.toLowerCase()}`}</p>
           )}
 
           <div>
@@ -91,7 +91,7 @@ export function JITRequestModal({ ns, pod, ownerKind, ownerName, onClose, onSubm
 
           <div>
             <label className="block text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">Reason</label>
-            <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3} placeholder={ownerKind === 'CronJob' ? 'Why do you need to trigger this CronJob?' : 'Why do you need shell access?'}
+            <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3} placeholder={accessType === 'restart' ? 'Why do you need to restart this workload?' : ownerKind === 'CronJob' ? 'Why do you need to trigger this CronJob?' : 'Why do you need shell access?'}
               className="w-full rounded-lg bg-hull-800 border border-hull-700 px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-neon-cyan/40 resize-none" />
           </div>
 

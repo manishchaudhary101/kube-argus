@@ -2,6 +2,43 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.2.4] — 2026-04-07
+
+### ⭐ New Features
+
+#### Workload Restart with JIT Access
+Restart is no longer limited to Deployments — **StatefulSets** and **DaemonSets** can now be restarted too. Viewers can request restart access through the existing JIT approval flow.
+
+- **Admin** — clicks "Restart" directly on any Deployment, StatefulSet, or DaemonSet
+- **Viewer** — clicks "Request Restart" → JIT modal → admin approves → restart button appears
+- **Audit trail** — every restart is recorded with actor, role, workload kind, namespace, and name
+- **Scale remains admin-only** — no change to scaling behavior
+
+#### Light Theme Redesign
+Complete overhaul of the light ("Notion") theme with a fresh, modern color palette designed natively for light surfaces.
+
+| Role | Old | New |
+|------|-----|-----|
+| Primary | Indigo-600 (deep purple) | **Blue-600** (bright blue) |
+| Success | Green-700 (dark forest) | **Emerald-600** (jewel green) |
+| Warning | Orange-700 (burnt orange) | **Amber-700** (golden amber) |
+| Error | Red-700 (brick red) | **Rose-600** (vibrant rose) |
+| Action | Blue-600 | **Violet-600** (rich purple) |
+
+- Cool slate backgrounds replace warm cream tones
+- Neutral zinc grays replace warm stone grays
+- All derivative colors updated: glows, borders, hovers, gradients, progress bars, chart reference lines, terminal theme, aggregated log colors, restart timeline
+
+### 🐛 Fixes
+
+- **Auth crash (502)** — `authLogin` and `authCallback` now return a 500 error with a clear message when OIDC is not configured, instead of panicking with a nil pointer dereference
+- **Duplicate secrets load** — removed redundant `loadSecretsFromAWS()` call inside `initAuth()` that logged a confusing `count: 0`
+- **Contextual JIT buttons** — "Request Access" buttons now use specific labels: "Request Shell Access" (pods), "Request Trigger Access" (CronJobs), "Request Restart" (workloads)
+- **CronJob modal page shift** — JIT modal no longer pushes page content down when opened (moved outside `space-y-3` container)
+- **Vite security** — upgraded from `^8.0.0` to `8.0.5` (fixes CVE in affected versions 8.0.0–8.0.4)
+
+---
+
 ## [v1.2.3] — 2026-04-06
 
 ### ⭐ New Features

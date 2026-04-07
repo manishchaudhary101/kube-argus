@@ -61,18 +61,8 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
   }
 
   return (
+    <>
     <div className="p-4 space-y-3">
-      {showJITModal && (
-        <JITRequestModal
-          ns={ns}
-          pod=""
-          ownerKind="CronJob"
-          ownerName={name}
-          onClose={() => setShowJITModal(false)}
-          onSubmitted={() => setShowJITModal(false)}
-        />
-      )}
-
       <div className="flex items-center gap-2">
         <button onClick={onBack} className="text-neon-cyan text-xs hover:underline">← Back</button>
         <Pill color="border bg-sky-950/30 text-sky-300 border-sky-900/30">CRONJOB</Pill>
@@ -98,7 +88,7 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
               onClick={() => setShowJITModal(true)}
               className="rounded-md border border-amber-900/40 bg-amber-950/30 px-2.5 py-1 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-900/20"
             >
-              Request Access
+              Request Trigger Access
             </button>
           )}
         </div>
@@ -166,5 +156,17 @@ export function CronJobDetailView({ ns, name, onBack, onPod }: { ns: string; nam
         </div>
       )}
     </div>
+    {showJITModal && (
+      <JITRequestModal
+        ns={ns}
+        pod=""
+        ownerKind="CronJob"
+        ownerName={name}
+        accessType="cron-trigger"
+        onClose={() => setShowJITModal(false)}
+        onSubmitted={() => setShowJITModal(false)}
+      />
+    )}
+    </>
   )
 }
