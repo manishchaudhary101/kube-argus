@@ -30,7 +30,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.4
-    created: "2026-04-07T09:21:49.364727557Z"
+    created: "2026-04-07T10:13:23.755364973Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: 293e96a2e00786760fb02605884b478d336cd76f22033dbb6feb4cd477b10af2
@@ -79,10 +79,11 @@ entries:
         - kind: fixed
           description: "JIT modal title now context-aware for CronTrigger vs Pod Shell"
         - kind: fixed
-          description: "JIT restore log moved to DEBUG level"  artifacthub.io/links: |
+          description: "JIT restore log moved to DEBUG level"
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
         - name: GitHub
           url: https://github.com/manishchaudhary101/kube-argus
-      artifacthub.io/license: Apache-2.0
       artifacthub.io/screenshots: |
         - title: Cluster Overview — Real-time node and pod status
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png
@@ -94,10 +95,10 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.3
-    created: "2026-04-07T09:21:49.364122756Z"
+    created: "2026-04-07T10:13:23.75475598Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
-    digest: 2fef6b9bb739a22b4de46752987418c90e75b527e06501b33110635c370d0974
+    digest: c5602f94631843f18e8292b8f3dec21fb3ea3858e46acb04dd949833da8ca9df
     home: https://github.com/manishchaudhary101/kube-argus
     icon: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/logo.svg
     keywords:
@@ -147,7 +148,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.2
-    created: "2026-04-07T09:21:49.363452993Z"
+    created: "2026-04-07T10:13:23.754087435Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: 8eae692653d1e510187cda4d7fbecced66eb14e6dc5c557a9ea820e0dafa603f
@@ -198,7 +199,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.1
-    created: "2026-04-07T09:21:49.362868874Z"
+    created: "2026-04-07T10:13:23.752660883Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: a15d2ed0e8ae43acaf9a2de3382c86c76f846e9f8919094d78115fd446db5527
@@ -251,7 +252,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.0
-    created: "2026-04-07T09:21:49.362190994Z"
+    created: "2026-04-07T10:13:23.75203613Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: d89054ea7a2fd00428d0cff5cae73298639402c85a9129fc910bb10fc0be57b6
@@ -275,4 +276,4 @@ entries:
     urls:
     - https://manishchaudhary101.github.io/kube-argus/kube-argus-1.2.0.tgz
     version: 1.2.0
-generated: "2026-04-07T09:21:49.360389585Z"
+generated: "2026-04-07T10:13:23.751277448Z"
