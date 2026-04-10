@@ -121,6 +121,15 @@
   color-scheme: light;
 }
 
+/* ─── Theme transition ─────────────────────────────────────────────── */
+
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, fill 0.3s ease, stroke 0.3s ease !important;
+}
+
 /* ─── Base ──────────────────────────────────────────────────────────── */
 
 html { font-family: 'Inter', system-ui, sans-serif; }
@@ -342,3 +351,32 @@ html, body, #root { height: 100dvh; height: 100vh; }
 /* ── Neon glow shadows → colored soft elevation ──────────────────── */
 [data-theme="notion"] [class*="shadow-\[0"] { box-shadow: 0 1px 8px rgba(0,0,0,0.08) !important; }
 [data-theme="notion"] [class*="shadow-\[inset"] { box-shadow: inset 0 1px 3px rgba(0,0,0,0.06) !important; }
+
+/* ── Log viewer line highlights (theme-adaptive) ─────────────────── */
+.log-line-error { background-color: rgba(255,51,85,0.06); }
+.log-line-warn  { background-color: rgba(255,184,0,0.06); }
+.log-line-match { background-color: rgba(6,214,224,0.08); }
+.log-line-match mark { background-color: rgba(6,214,224,0.3); color: rgb(6,214,224); border-radius: 2px; padding: 0 2px; }
+
+[data-theme="notion"] .log-line-error { background-color: rgba(225,29,72,0.08); }
+[data-theme="notion"] .log-line-warn  { background-color: rgba(180,83,9,0.08); }
+[data-theme="notion"] .log-line-match { background-color: rgba(37,99,235,0.07); }
+[data-theme="notion"] .log-line-match mark { background-color: rgba(37,99,235,0.18); color: rgb(37,99,235); }
+
+/* ── Modal / dropdown shadows: soften heavy black shadows ────────── */
+[data-theme="notion"] [class*="shadow-black/"] {
+  --tw-shadow-color: rgba(0,0,0,0.08) !important;
+  --tw-shadow: 0 10px 40px rgba(0,0,0,0.10) !important;
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow) !important;
+}
+
+/* ── Modal overlays: lighter scrim for light surfaces ────────────── */
+[data-theme="notion"] [class*="bg-black/5"]  { background-color: rgba(0,0,0,0.25) !important; }
+[data-theme="notion"] [class*="bg-black/6"]  { background-color: rgba(0,0,0,0.30) !important; }
+[data-theme="notion"] [class*="bg-black/7"]  { background-color: rgba(0,0,0,0.35) !important; }
+
+/* ── Glow text-shadows: suppress on light backgrounds ────────────── */
+[data-theme="notion"] .glow-cyan,
+[data-theme="notion"] .glow-green,
+[data-theme="notion"] .glow-red,
+[data-theme="notion"] .glow-amber { text-shadow: none !important; }

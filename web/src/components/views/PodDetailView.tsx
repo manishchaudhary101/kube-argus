@@ -327,6 +327,8 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
   const [jitPending, setJitPending] = useState(false)
   const [jitExpiresIn, setJitExpiresIn] = useState('')
   const [logContainer, setLogContainer] = useState('')
+  const [logTail, setLogTail] = useState(300)
+  const [logSearch, setLogSearch] = useState('')
   const [prevLogContainer, setPrevLogContainer] = useState<string | null>(null)
   const [prevLog, setPrevLog] = useState<string | null>(null)
   const [prevLogLoading, setPrevLogLoading] = useState(false)
@@ -335,7 +337,7 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
     setLogs([])
     setLogStatus('connecting')
     const containerParam = logContainer ? `&container=${logContainer}` : ''
-    const es = new EventSource(`/api/pods/${ns}/${name}/logs?tail=300&follow=true${containerParam}`)
+    const es = new EventSource(`/api/pods/${ns}/${name}/logs?tail=${logTail}&follow=true${containerParam}`)
     es.onmessage = (e) => {
       setLogs(prev => {
         const next = [...prev, e.data]
@@ -348,7 +350,7 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
       es.close()
     }
     return () => es.close()
-  }, [ns, name, logContainer])
+  }, [ns, name, logContainer, logTail])
 
   useEffect(() => {
     if (autoScroll && tab === 'logs' && logEndRef.current) {
@@ -408,7 +410,7 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
       }).catch(() => {})
     }
     check()
-    const id = setInterval(check, 5000)
+    const id = setInterval(check, 15000)
     return () => clearInterval(id)
   }, [isAdmin, ns, desc?.ownerKind, desc?.ownerName])
 
@@ -615,15 +617,40 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
           </div>
         )}
         {tab === 'info' && !desc && <Spinner />}
-        {tab === 'logs' && (
+        {tab === 'logs' && (() => {
+          const errorRe = /\b(ERROR|FATAL|PANIC|Exception)\b/i
+          const warnRe = /\b(WARN|WARNING)\b/i
+          const searchLower = logSearch.toLowerCase()
+          const filtered = logSearch ? logs.filter(l => l.toLowerCase().includes(searchLower)) : logs
+          const highlightLine = (line: string) => {
+            if (!logSearch) return line
+            const idx = line.toLowerCase().indexOf(searchLower)
+            if (idx === -1) return line
+            const before = line.slice(0, idx)
+            const match = line.slice(idx, idx + logSearch.length)
+            const after = line.slice(idx + logSearch.length)
+            return <>{before}<mark>{match}</mark>{after}</>
+          }
+          return (
           <div className="relative">
             <div className="flex items-center justify-between mb-2 px-1 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <span className={`h-1.5 w-1.5 rounded-full ${logStatus === 'streaming' ? 'bg-neon-green animate-pulse' : logStatus === 'connecting' ? 'bg-neon-amber animate-pulse' : logStatus === 'ended' ? 'bg-gray-600' : 'bg-neon-red'}`} />
                 <span className="text-[10px] text-gray-600 uppercase tracking-wider">{logStatus === 'streaming' ? 'Live' : logStatus === 'connecting' ? 'Connecting…' : logStatus === 'ended' ? 'Stream ended' : 'Error'}</span>
-                <span className="text-[10px] text-gray-700">{logs.length} lines</span>
+                <span className="text-[10px] text-gray-700">{logSearch ? `${filtered.length}/${logs.length}` : logs.length} lines</span>
               </div>
               <div className="flex items-center gap-2">
+                <div className="relative">
+                  <input value={logSearch} onChange={e => setLogSearch(e.target.value)} placeholder="Search logs…"
+                    className="w-36 sm:w-48 rounded-lg border border-hull-600 bg-hull-800 pl-6 pr-2 py-0.5 text-[10px] text-gray-300 placeholder-gray-700 outline-none focus:border-neon-cyan/40" />
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-600">⌕</span>
+                  {logSearch && <button onClick={() => setLogSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 hover:text-gray-300">✕</button>}
+                </div>
+                <select value={logTail} onChange={e => setLogTail(Number(e.target.value))} className="rounded-lg border border-hull-600 bg-hull-800 px-2 py-0.5 text-[10px] text-gray-300 outline-none">
+                  <option value={100}>100 lines</option>
+                  <option value={300}>300 lines</option>
+                  <option value={1000}>1k lines</option>
+                </select>
                 {desc && ((desc.initContainers?.length ?? 0) > 0 || desc.containers.length > 1) && (
                   <select value={logContainer} onChange={e => setLogContainer(e.target.value)} className="rounded-lg border border-hull-600 bg-hull-800 px-2 py-0.5 text-[10px] text-gray-300 outline-none">
                     <option value="">All containers</option>
@@ -641,11 +668,21 @@ export function PodDetailView({ ns, name, onBack, onWorkload }: { ns: string; na
               </div>
             </div>
             <div ref={logContainerRef} onScroll={handleLogScroll} className="max-h-[60vh] overflow-y-auto rounded-lg bg-hull-950 border border-hull-700/30 p-2 scrollbar-hide">
-              <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-gray-400">{logs.length > 0 ? logs.join('\n') : (logStatus === 'connecting' ? 'Connecting to log stream…' : 'No logs available')}</pre>
+              {filtered.length > 0 ? (
+                <div className="font-mono text-[11px] leading-relaxed">
+                  {filtered.map((line, i) => {
+                    const levelClass = errorRe.test(line) ? 'text-neon-red/90 log-line-error' : warnRe.test(line) ? 'text-neon-amber/90 log-line-warn' : 'text-gray-400'
+                    return <div key={i} className={`whitespace-pre-wrap ${levelClass}${logSearch ? ' log-line-match' : ''}`}>{highlightLine(line)}</div>
+                  })}
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-gray-400">{logStatus === 'connecting' ? 'Connecting to log stream…' : logSearch ? 'No matching lines' : 'No logs available'}</pre>
+              )}
               <div ref={logEndRef} />
             </div>
           </div>
-        )}
+          )
+        })()}
         {tab === 'events' && (
           <div className="space-y-1.5">
             {events?.length === 0 && <p className="text-xs text-gray-600">No events</p>}

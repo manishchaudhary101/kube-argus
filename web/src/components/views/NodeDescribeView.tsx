@@ -3,7 +3,6 @@ import type { NodeDescData } from '../../types'
 import { useFetch, post } from '../../hooks/useFetch'
 import { useAuth } from '../../context/AuthContext'
 import { Btn, Spinner } from '../ui/Atoms'
-import { K9sBar } from '../ui/K9sBar'
 import { MetricChart, METRIC_RANGES, seriesLastVal, fmtBytes, refColor } from '../ui/MetricChart'
 import { useMetrics } from '../../hooks/useMetrics'
 import { DrainWizardModal } from '../modals/DrainWizardModal'
@@ -231,39 +230,68 @@ export function NodeDescribeView({ name, onBack, onPod }: { name: string; onBack
           </div>
         </div>
 
-        {/* Resource usage */}
-        <div className="rounded border border-hull-700 bg-hull-900">
-          <div className="border-b border-hull-700 bg-hull-800 px-2 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">Resources</div>
-          <div className="p-3 space-y-2">
-            <div className="font-mono text-[11px]">
-              <div className="flex items-center gap-3">
-                <span className="text-gray-500 w-10">CPU</span>
-                <div className="flex-1"><K9sBar pct={data.cpuPercent} /></div>
-                <span className={`tabular-nums ${data.cpuPercent > 80 ? 'text-neon-red' : data.cpuPercent > 50 ? 'text-neon-amber' : 'text-gray-400'}`}>{data.cpuPercent}%</span>
-                <span className="text-gray-600">{data.usedCpuM}m / {data.allocCpuM}m</span>
+        {/* Resources — two unified cards */}
+        {(() => {
+          const reqCpuPct = data.allocCpuM > 0 ? Math.round(data.requestsCpuM * 100 / data.allocCpuM) : 0
+          const reqMemPct = data.allocMemMi > 0 ? Math.round(data.requestsMemMi * 100 / data.allocMemMi) : 0
+          const limCpuPct = data.allocCpuM > 0 ? Math.round(data.limitsCpuM * 100 / data.allocCpuM) : 0
+          const limMemPct = data.allocMemMi > 0 ? Math.round(data.limitsMemMi * 100 / data.allocMemMi) : 0
+          const pctColor = (pct: number) => pct > 100 ? 'text-neon-red' : pct > 80 ? 'text-neon-amber' : 'text-neon-green'
+          const tagBg = (pct: number) => pct > 100 ? 'bg-red-950/40 text-neon-red border-red-900/30' : pct > 80 ? 'bg-amber-950/40 text-neon-amber border-amber-900/30' : 'bg-hull-800 text-gray-400 border-hull-600'
+
+          const ResourceCard = ({ label, usedVal, usedPct, allocVal, capVal, reqVal, reqPct, limVal, limPct }: {
+            label: string; usedVal: string; usedPct: number; allocVal: string; capVal: string; reqVal: string; reqPct: number; limVal: string; limPct: number
+          }) => (
+            <div className="rounded border border-hull-700 bg-hull-900 overflow-hidden">
+              <div className="border-b border-hull-700 bg-hull-800 px-2.5 py-1.5 flex items-center justify-between">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neon-cyan">{label}</span>
+                <span className="text-[10px] text-gray-600 font-mono">Capacity {capVal} · Allocatable {allocVal}</span>
               </div>
-              <div className="flex items-center gap-3 mt-1">
-                <span className="text-gray-500 w-10">MEM</span>
-                <div className="flex-1"><K9sBar pct={data.memPercent} /></div>
-                <span className={`tabular-nums ${data.memPercent > 80 ? 'text-neon-red' : data.memPercent > 50 ? 'text-neon-amber' : 'text-gray-400'}`}>{data.memPercent}%</span>
-                <span className="text-gray-600">{data.usedMemMi}Mi / {data.allocMemMi}Mi</span>
+              <div className="p-2.5 space-y-2.5 font-mono text-[10px]">
+                {/* Usage bar */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-gray-500">Usage</span>
+                    <span className="text-gray-300">{usedVal} <span className={pctColor(usedPct)}>({usedPct}%)</span></span>
+                  </div>
+                  <div className="h-2 rounded-full bg-hull-700 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${usedPct > 80 ? 'bg-neon-red' : usedPct > 50 ? 'bg-neon-amber' : 'bg-neon-green'}`} style={{ width: `${Math.min(usedPct, 100)}%` }} />
+                  </div>
+                </div>
+                {/* Requests + Limits as tags */}
+                <div className="flex gap-2">
+                  <div className={`flex-1 rounded-lg border px-2.5 py-1.5 ${tagBg(reqPct)}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500 text-[9px] uppercase">Requests</span>
+                      <span className={pctColor(reqPct)}>{reqPct}%</span>
+                    </div>
+                    <p className="text-[11px] mt-0.5">{reqVal}</p>
+                  </div>
+                  <div className={`flex-1 rounded-lg border px-2.5 py-1.5 ${tagBg(limPct)}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500 text-[9px] uppercase">Limits</span>
+                      <span className={pctColor(limPct)}>{limPct}%</span>
+                    </div>
+                    <p className="text-[11px] mt-0.5">{limVal}</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 font-mono text-[10px] mt-2 border-t border-hull-700 pt-2">
-              <div>
-                <p className="text-gray-600 uppercase">Capacity</p>
-                <p className="text-gray-400">CPU: {data.capacity.cpu}</p>
-                <p className="text-gray-400">Mem: {data.capacity.memory}</p>
-                <p className="text-gray-400">Pods: {data.capacity.pods}</p>
-              </div>
-              <div>
-                <p className="text-gray-600 uppercase">Allocatable</p>
-                <p className="text-gray-400">CPU: {data.allocatable.cpu}</p>
-                <p className="text-gray-400">Mem: {data.allocatable.memory}</p>
-                <p className="text-gray-400">Pods: {data.allocatable.pods}</p>
-              </div>
+          )
+
+          return (
+            <div className="grid grid-cols-2 gap-3">
+              <ResourceCard label="CPU" usedVal={`${data.usedCpuM}m`} usedPct={data.cpuPercent} allocVal={`${data.allocCpuM}m`} capVal={data.capacity.cpu} reqVal={`${data.requestsCpuM}m`} reqPct={reqCpuPct} limVal={`${data.limitsCpuM}m`} limPct={limCpuPct} />
+              <ResourceCard label="Memory" usedVal={`${data.usedMemMi}Mi`} usedPct={data.memPercent} allocVal={`${data.allocMemMi}Mi`} capVal={data.capacity.memory} reqVal={`${data.requestsMemMi}Mi`} reqPct={reqMemPct} limVal={`${data.limitsMemMi}Mi`} limPct={limMemPct} />
             </div>
-          </div>
+          )
+        })()}
+        {/* Pods capacity */}
+        <div className="flex items-center gap-2 font-mono text-[10px] text-gray-500 -mt-1 px-1">
+          <span>Pods: {data.pods.length} / {data.capacity.pods}</span>
+          {((data.allocCpuM > 0 && data.limitsCpuM > data.allocCpuM) || (data.allocMemMi > 0 && data.limitsMemMi > data.allocMemMi)) && (
+            <span className="text-neon-amber ml-auto">Overcommitted — limits exceed allocatable</span>
+          )}
         </div>
 
         {/* Metrics graphs */}

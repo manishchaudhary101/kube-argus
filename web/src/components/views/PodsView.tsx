@@ -63,6 +63,8 @@ function MiniSparkline({ points, color, used, limit, unit }: { points: number[];
   )
 }
 
+const RENDER_LIMIT = 200
+
 export function PodsView({ namespace, onPod }: { namespace: string; onPod: (ns: string, name: string) => void }) {
   const q = namespace ? `?namespace=${namespace}` : ''
   const { data, err, loading } = useFetch<Pod[]>(`/api/pods${q}`, 8000)
@@ -73,6 +75,7 @@ export function PodsView({ namespace, onPod }: { namespace: string; onPod: (ns: 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
+  const [showAll, setShowAll] = useState(false)
   type PodSortCol = 'name' | 'ns' | 'status' | 'restarts' | 'age' | 'cpu' | 'mem'
   const [sortCol, setSortCol] = useState<PodSortCol>('name')
   const [sortAsc, setSortAsc] = useState(true)
@@ -194,7 +197,7 @@ export function PodsView({ namespace, onPod }: { namespace: string; onPod: (ns: 
               </tr>
             </thead>
             <tbody>
-              {sorted.map(p => (
+              {(showAll ? sorted : sorted.slice(0, RENDER_LIMIT)).map(p => (
                 <tr key={`${p.namespace}-${p.name}`} onClick={() => onPod(p.namespace, p.name)}
                   className="border-t border-hull-800 cursor-pointer transition-colors hover:bg-hull-800/60 active:bg-hull-700">
                   <td className="pl-2 py-2"><span className={`inline-block h-2 w-2 rounded-full ${p.status === 'Running' ? 'bg-neon-green' : p.status === 'Pending' || p.status === 'ContainerCreating' ? 'bg-neon-amber' : p.status === 'Succeeded' || p.status === 'Completed' ? 'bg-gray-600' : 'bg-neon-red'}`} /></td>
@@ -212,6 +215,11 @@ export function PodsView({ namespace, onPod }: { namespace: string; onPod: (ns: 
               ))}
             </tbody>
           </table>
+          {!showAll && sorted.length > RENDER_LIMIT && (
+            <button onClick={() => setShowAll(true)} className="w-full py-2 text-[10px] text-neon-cyan hover:bg-hull-800/40 transition-colors">
+              Show all {sorted.length} pods ({sorted.length - RENDER_LIMIT} hidden)
+            </button>
+          )}
         </div>
         )
       })()}
@@ -219,7 +227,7 @@ export function PodsView({ namespace, onPod }: { namespace: string; onPod: (ns: 
       {/* Cards view */}
       {view === 'cards' && (
         <div className="space-y-2">
-          {sorted.map((p, i) => (
+          {(showAll ? sorted : sorted.slice(0, RENDER_LIMIT)).map((p, i) => (
             <button key={`${p.namespace}-${p.name}`} onClick={() => onPod(p.namespace, p.name)} className="w-full stat-card px-3 py-2.5 text-left anim-in" style={{ animationDelay: `${i * 25}ms` }}>
               <div className="flex items-center gap-2.5">
                 <StatusDot ok={p.status === 'Running'} />
@@ -266,6 +274,11 @@ export function PodsView({ namespace, onPod }: { namespace: string; onPod: (ns: 
               )}
             </button>
           ))}
+          {!showAll && sorted.length > RENDER_LIMIT && (
+            <button onClick={() => setShowAll(true)} className="w-full stat-card py-2 text-[10px] text-neon-cyan hover:bg-hull-800/40 transition-colors text-center">
+              Show all {sorted.length} pods ({sorted.length - RENDER_LIMIT} hidden)
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, memo } from 'react'
 import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts'
 
 type RestartEvent = {
@@ -24,7 +24,7 @@ export function reasonColor(reason: string): string {
   return light ? '#52525b' : '#9ca3af'
 }
 
-export function RestartTimeline({ namespace, pod, workload, kind }: {
+export const RestartTimeline = memo(function RestartTimeline({ namespace, pod, workload, kind }: {
   namespace: string
   pod?: string
   workload?: string
@@ -140,4 +140,4 @@ export function RestartTimeline({ namespace, pod, workload, kind }: {
       )}
     </div>
   )
-}
+})

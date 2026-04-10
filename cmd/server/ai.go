@@ -86,11 +86,11 @@ func aiRateDone() {
 
 func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 	if !aiEnabled || llmGatewayURL == "" {
-		http.Error(w, `{"error":"AI not available — LLM Gateway not configured"}`, 503)
+		je(w, `{"error":"AI not available — LLM Gateway not configured"}`, 503)
 		return
 	}
 	if !aiRateOK() {
-		http.Error(w, `{"error":"AI rate limit exceeded — try again in a minute"}`, 429)
+		je(w, `{"error":"AI rate limit exceeded — try again in a minute"}`, 429)
 		return
 	}
 	defer aiRateDone()
@@ -112,7 +112,7 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 
 	req, err := http.NewRequest("POST", llmGatewayURL, bytes.NewReader(reqBody))
 	if err != nil {
-		http.Error(w, `{"error":"failed to build LLM request"}`, 500)
+		je(w, `{"error":"failed to build LLM request"}`, 500)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -124,7 +124,7 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 	resp, err := client.Do(req)
 	if err != nil {
 		slog.Error("ai: llm gateway error", "error", err)
-		http.Error(w, fmt.Sprintf(`{"error":"LLM Gateway error: %s"}`, err.Error()), 502)
+		je(w, fmt.Sprintf("LLM Gateway error: %s", err.Error()), 502)
 		return
 	}
 	defer resp.Body.Close()
@@ -132,7 +132,7 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		slog.Error("ai: llm gateway returned non-200", "status", resp.StatusCode, "body", string(bodyBytes), "url", llmGatewayURL)
-		http.Error(w, fmt.Sprintf(`{"error":"LLM Gateway returned %d"}`, resp.StatusCode), 502)
+		je(w, fmt.Sprintf("LLM Gateway returned %d", resp.StatusCode), 502)
 		return
 	}
 
@@ -141,7 +141,7 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 	w.Header().Set("Connection", "keep-alive")
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming not supported", 500)
+		je(w, "streaming not supported", 500)
 		return
 	}
 
@@ -174,18 +174,18 @@ func streamLLM(w http.ResponseWriter, systemPrompt, userPrompt string) {
 
 
 func apiAIDiagnose(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" { http.Error(w, "POST only", 405); return }
+	if r.Method != "POST" { je(w, "POST only", 405); return }
 	var body struct {
 		Namespace string `json:"namespace"`
 		Pod       string `json:"pod"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Pod == "" {
-		http.Error(w, `{"error":"namespace and pod are required"}`, 400); return
+		je(w, `{"error":"namespace and pod are required"}`, 400); return
 	}
 
 	podCtx := buildPodDiagnosticContext(body.Namespace, body.Pod)
 	if podCtx == "" {
-		http.Error(w, `{"error":"pod not found"}`, 404); return
+		je(w, `{"error":"pod not found"}`, 404); return
 	}
 
 	systemPrompt := `You are a terse Kubernetes troubleshooter embedded in an ops dashboard. Space is precious.
@@ -212,7 +212,7 @@ Rules:
 func apiAISpotAnalysis(w http.ResponseWriter, r *http.Request) {
 	spotCtx := buildSpotAdvisorContext()
 	if spotCtx == "" {
-		http.Error(w, `{"error":"no spot data available"}`, 404); return
+		je(w, `{"error":"no spot data available"}`, 404); return
 	}
 
 	systemPrompt := `You are a terse AWS Spot-instance advisor in an ops dashboard. Space is precious.

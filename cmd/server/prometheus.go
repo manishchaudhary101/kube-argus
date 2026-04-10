@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,10 +34,35 @@ func initPrometheus() {
 	slog.Info("prometheus configured", "endpoint", promBaseURL+"/api/v1/query_range")
 }
 
+// ─── Prometheus Query Cache (30s TTL) ────────────────────────────────
+
+var promCache struct {
+	mu      sync.RWMutex
+	entries map[string]promCacheEntry
+}
+
+type promCacheEntry struct {
+	data []byte
+	ts   time.Time
+}
+
+const promCacheTTL = 30 * time.Second
+
+func init() { promCache.entries = make(map[string]promCacheEntry) }
+
 func promQuery(query, start, end, step string) ([]byte, error) {
 	if promBaseURL == "" {
 		return nil, fmt.Errorf("PROMETHEUS_URL not configured")
 	}
+
+	cacheKey := query + "|" + start + "|" + end + "|" + step
+	promCache.mu.RLock()
+	if e, ok := promCache.entries[cacheKey]; ok && time.Since(e.ts) < promCacheTTL {
+		promCache.mu.RUnlock()
+		return e.data, nil
+	}
+	promCache.mu.RUnlock()
+
 	promUser := os.Getenv("PROMETHEUS_USER")
 	promKey := os.Getenv("PROMETHEUS_KEY")
 
@@ -71,6 +97,17 @@ func promQuery(query, start, end, step string) ([]byte, error) {
 		if truncLen > 200 { truncLen = 200 }
 		return nil, fmt.Errorf("prometheus returned %d: %s", resp.StatusCode, string(body[:truncLen]))
 	}
+
+	promCache.mu.Lock()
+	promCache.entries[cacheKey] = promCacheEntry{data: body, ts: time.Now()}
+	// Evict stale entries periodically.
+	if len(promCache.entries) > 200 {
+		for k, e := range promCache.entries {
+			if time.Since(e.ts) > promCacheTTL { delete(promCache.entries, k) }
+		}
+	}
+	promCache.mu.Unlock()
+
 	return body, nil
 }
 
@@ -128,7 +165,7 @@ func apiWorkloadSizing(w http.ResponseWriter, r *http.Request) {
 	wlName := r.URL.Query().Get("name")
 	kind := r.URL.Query().Get("kind")
 	if nsName == "" || wlName == "" {
-		http.Error(w, "need namespace and name", 400)
+		je(w, "need namespace and name", 400)
 		return
 	}
 
@@ -185,7 +222,7 @@ func apiWorkloadSizing(w http.ResponseWriter, r *http.Request) {
 	cache.mu.RUnlock()
 
 	if podRegex == "" {
-		http.Error(w, "workload not found", 404)
+		je(w, "workload not found", 404)
 		return
 	}
 
@@ -352,7 +389,7 @@ func apiMetricsNode(w http.ResponseWriter, r *http.Request) {
 	node := r.URL.Query().Get("node")
 	rangeStr := r.URL.Query().Get("range")
 	if node == "" {
-		http.Error(w, `{"error":"node parameter required"}`, 400)
+		je(w, `{"error":"node parameter required"}`, 400)
 		return
 	}
 	if rangeStr == "" {
@@ -442,7 +479,7 @@ func apiMetricsPod(w http.ResponseWriter, r *http.Request) {
 	pod := r.URL.Query().Get("pod")
 	rangeStr := r.URL.Query().Get("range")
 	if ns == "" || pod == "" {
-		http.Error(w, `{"error":"namespace and pod parameters required"}`, 400)
+		je(w, `{"error":"namespace and pod parameters required"}`, 400)
 		return
 	}
 	if rangeStr == "" {
@@ -551,7 +588,7 @@ func apiMetricsWorkload(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("kind")
 	rangeStr := r.URL.Query().Get("range")
 	if ns == "" || name == "" {
-		http.Error(w, `{"error":"namespace and name parameters required"}`, 400)
+		je(w, `{"error":"namespace and name parameters required"}`, 400)
 		return
 	}
 	if kind == "" {

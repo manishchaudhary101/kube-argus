@@ -17,8 +17,16 @@ export const AUDIT_ACTION_STYLE: Record<string, { bg: string; text: string }> = 
   login: { bg: 'bg-neon-green/10 border-neon-green/20', text: 'text-neon-green' },
   logout: { bg: 'bg-gray-700/30 border-gray-600/30', text: 'text-gray-400' },
   'pod.delete': { bg: 'bg-neon-red/10 border-neon-red/20', text: 'text-neon-red' },
-  'workload.scale': { bg: 'bg-neon-amber/10 border-neon-amber/20', text: 'text-neon-amber' },
   'pod.exec': { bg: 'bg-neon-cyan/10 border-neon-cyan/20', text: 'text-neon-cyan' },
+  'workload.restart': { bg: 'bg-blue-500/10 border-blue-500/20', text: 'text-blue-400' },
+  'workload.scale': { bg: 'bg-neon-amber/10 border-neon-amber/20', text: 'text-neon-amber' },
+  'resource.edit': { bg: 'bg-purple-500/10 border-purple-500/20', text: 'text-purple-400' },
+  'cronjob.trigger': { bg: 'bg-sky-500/10 border-sky-500/20', text: 'text-sky-400' },
+  'jit.request': { bg: 'bg-amber-500/10 border-amber-500/20', text: 'text-amber-400' },
+  'jit.approve': { bg: 'bg-neon-green/10 border-neon-green/20', text: 'text-neon-green' },
+  'jit.deny': { bg: 'bg-neon-red/10 border-neon-red/20', text: 'text-neon-red' },
+  'jit.revoke': { bg: 'bg-neon-red/10 border-neon-red/20', text: 'text-neon-red' },
+  'jit.expired': { bg: 'bg-gray-700/30 border-gray-600/30', text: 'text-gray-400' },
 }
 
 export function AuditTrailModal({ onClose }: { onClose: () => void }) {
@@ -38,7 +46,8 @@ export function AuditTrailModal({ onClose }: { onClose: () => void }) {
 
   const filtered = filter === 'all' ? events
     : filter === 'logins' ? events.filter(e => e.action === 'login' || e.action === 'logout')
-    : events.filter(e => e.action !== 'login' && e.action !== 'logout')
+    : filter === 'jit' ? events.filter(e => e.action.startsWith('jit.'))
+    : events.filter(e => e.action !== 'login' && e.action !== 'logout' && !e.action.startsWith('jit.'))
 
   const timeAgo = (iso: string) => {
     const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
@@ -62,10 +71,10 @@ export function AuditTrailModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="flex items-center gap-2 px-5 py-2 border-b border-hull-700/20">
-          {(['all', 'logins', 'actions'] as const).map(f => (
+          {(['all', 'logins', 'jit', 'actions'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`rounded-lg px-3 py-1 text-[10px] font-medium transition-all ${filter === f ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30' : 'text-gray-500 hover:text-gray-300 border border-transparent'}`}>
-              {f === 'all' ? 'All' : f === 'logins' ? 'Logins' : 'Admin Actions'}
+              {f === 'all' ? 'All' : f === 'logins' ? 'Logins' : f === 'jit' ? 'Access Requests' : 'Actions'}
             </button>
           ))}
           <span className="ml-auto text-[9px] text-gray-600">{filtered.length} events</span>
@@ -93,12 +102,12 @@ export function AuditTrailModal({ onClose }: { onClose: () => void }) {
                   return (
                     <tr key={i} className="border-b border-hull-800/50 hover:bg-hull-800/30 transition-colors">
                       <td className="px-5 py-2 text-gray-500 whitespace-nowrap" title={new Date(e.time).toLocaleString()}>{timeAgo(e.time)}</td>
-                      <td className="px-2 py-2 text-gray-300 font-medium truncate max-w-[140px]">{e.actor}</td>
+                      <td className="px-2 py-2 text-gray-300 font-medium truncate max-w-[140px]" title={e.actor}>{e.actor}</td>
                       <td className="px-2 py-2">
                         <span className={`inline-block rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${style.bg} ${style.text}`}>{e.action}</span>
                       </td>
-                      <td className="px-2 py-2 text-gray-400 font-mono text-[10px] truncate max-w-[180px]">{e.resource || '—'}</td>
-                      <td className="px-2 py-2 text-gray-500 truncate max-w-[120px]">{e.detail || '—'}</td>
+                      <td className="px-2 py-2 text-gray-400 font-mono text-[10px] truncate max-w-[180px]" title={e.resource}>{e.resource || '—'}</td>
+                      <td className="px-2 py-2 text-gray-500 truncate max-w-[120px]" title={e.detail}>{e.detail || '—'}</td>
                       <td className="px-2 py-2 text-gray-600 font-mono text-[10px]">{e.ip}</td>
                     </tr>
                   )

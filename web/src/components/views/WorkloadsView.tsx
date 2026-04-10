@@ -63,14 +63,18 @@ export function WorkloadsView({ namespace, initialKind, onWorkload }: { namespac
       }).catch(() => {})
     }
     poll()
-    const id = setInterval(poll, 5000)
+    const id = setInterval(poll, 15000)
     return () => { cancelled = true; clearInterval(id) }
   }, [isAdmin, jitKey])
 
   const restart = async (ns: string, name: string, kind: string) => {
     const key = `restart:${ns}/${name}`
     setBusy(key)
-    try { await post(`/api/workloads/${ns}/${name}/restart?kind=${kind}`); setToast(`${name} restarting`); refetch() }
+    try {
+      await post(`/api/workloads/${ns}/${name}/restart?kind=${kind}`)
+      setToast(`${name} restarting`)
+      refetch()
+    }
     catch (e: any) { setToast(`Error: ${e.message}`) }
     finally { setBusy(null); setTimeout(() => setToast(null), 3000) }
   }
@@ -171,7 +175,7 @@ export function WorkloadsView({ namespace, initialKind, onWorkload }: { namespac
               </div>
             )}
             {['Deployment', 'StatefulSet', 'DaemonSet'].includes(w.kind) && (
-              <div className="mt-2 flex gap-2" onClick={e => e.stopPropagation()}>
+              <div className="mt-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
                 {(isAdmin || jitGrants.has(jitKey(w.namespace, w.kind, w.name))) && (
                   <Btn small variant="primary" onClick={() => restart(w.namespace, w.name, w.kind)} disabled={busy === `restart:${w.namespace}/${w.name}`}>
                     {busy === `restart:${w.namespace}/${w.name}` ? 'Restarting…' : '↻ Restart'}

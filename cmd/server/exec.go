@@ -46,7 +46,7 @@ func apiExec(w http.ResponseWriter, r *http.Request) {
 	if !requireAdminOrJIT(w, r, ns, ownerKind, ownerName) { return }
 	container := r.URL.Query().Get("container")
 	if ns == "" || name == "" {
-		http.Error(w, "namespace and pod required", 400)
+		je(w, "namespace and pod required", 400)
 		return
 	}
 	if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {

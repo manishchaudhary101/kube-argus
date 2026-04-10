@@ -92,7 +92,7 @@ func apiIngresses(w http.ResponseWriter, r *http.Request) {
 func apiIngressDescribe(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/ingresses/"), "/"), "/")
 	if len(parts) < 2 {
-		http.Error(w, "use /api/ingresses/{namespace}/{name}", 400)
+		je(w, "use /api/ingresses/{namespace}/{name}", 400)
 		return
 	}
 	ns, name := parts[0], parts[1]
@@ -101,7 +101,7 @@ func apiIngressDescribe(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	ing, err := clientset.NetworkingV1().Ingresses(ns).Get(c, name, metav1.GetOptions{})
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		jk8s(w, err)
 		return
 	}
 
@@ -258,7 +258,7 @@ func apiServices(w http.ResponseWriter, r *http.Request) {
 func apiServiceDetail(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/services/"), "/"), "/")
 	if len(parts) < 2 {
-		http.Error(w, "use /api/services/{namespace}/{name}", 400)
+		je(w, "use /api/services/{namespace}/{name}", 400)
 		return
 	}
 	ns, name := parts[0], parts[1]
@@ -267,7 +267,7 @@ func apiServiceDetail(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	svc, err := clientset.CoreV1().Services(ns).Get(c, name, metav1.GetOptions{})
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		jk8s(w, err)
 		return
 	}
 

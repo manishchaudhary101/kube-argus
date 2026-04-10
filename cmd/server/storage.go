@@ -2,20 +2,18 @@ package main
 
 import (
 	"net/http"
-	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ─── Storage (PVs, PVCs, StorageClasses) ────────────────────────────
 
 func apiStorage(w http.ResponseWriter, r *http.Request) {
-	c, cancel := ctx()
-	defer cancel()
 	nsFilter := r.URL.Query().Get("namespace")
+
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
 
 	type pvcWorkload struct {
 		Kind string `json:"kind"`
@@ -50,22 +48,9 @@ func apiStorage(w http.ResponseWriter, r *http.Request) {
 		IsDefault     bool   `json:"isDefault"`
 	}
 
-	var wg sync.WaitGroup
-	var pvcList *corev1.PersistentVolumeClaimList
-	var pvList *corev1.PersistentVolumeList
-	var scList *storagev1.StorageClassList
-	var podList *corev1.PodList
-
-	wg.Add(4)
-	go func() { defer wg.Done(); pvcList, _ = clientset.CoreV1().PersistentVolumeClaims("").List(c, metav1.ListOptions{}) }()
-	go func() { defer wg.Done(); pvList, _ = clientset.CoreV1().PersistentVolumes().List(c, metav1.ListOptions{}) }()
-	go func() { defer wg.Done(); scList, _ = clientset.StorageV1().StorageClasses().List(c, metav1.ListOptions{}) }()
-	go func() { defer wg.Done(); podList, _ = clientset.CoreV1().Pods("").List(c, metav1.ListOptions{}) }()
-	wg.Wait()
-
 	pvcToWorkload := map[string]*pvcWorkload{}
-	if podList != nil {
-		for _, p := range podList.Items {
+	if cache.pods != nil {
+		for _, p := range cache.pods.Items {
 			if p.Status.Phase != corev1.PodRunning && p.Status.Phase != corev1.PodPending { continue }
 			ownerKind, ownerName := "", ""
 			for _, ref := range p.OwnerReferences {
@@ -89,8 +74,8 @@ func apiStorage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pvcs := []pvcEntry{}
-	if pvcList != nil {
-		for _, pvc := range pvcList.Items {
+	if cache.pvcs != nil {
+		for _, pvc := range cache.pvcs.Items {
 			if nsFilter != "" && pvc.Namespace != nsFilter { continue }
 			sc := ""
 			if pvc.Spec.StorageClassName != nil { sc = *pvc.Spec.StorageClassName }
@@ -113,8 +98,8 @@ func apiStorage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pvs := []pvEntry{}
-	if pvList != nil {
-		for _, pv := range pvList.Items {
+	if cache.pvs != nil {
+		for _, pv := range cache.pvs.Items {
 			claim := ""
 			if pv.Spec.ClaimRef != nil { claim = pv.Spec.ClaimRef.Namespace + "/" + pv.Spec.ClaimRef.Name }
 			cap := ""
@@ -135,8 +120,8 @@ func apiStorage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scs := []scEntry{}
-	if scList != nil {
-		for _, sc := range scList.Items {
+	if cache.storageClasses != nil {
+		for _, sc := range cache.storageClasses.Items {
 			rp := "Delete"
 			if sc.ReclaimPolicy != nil { rp = string(*sc.ReclaimPolicy) }
 			bm := "Immediate"

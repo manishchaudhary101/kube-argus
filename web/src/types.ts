@@ -55,6 +55,7 @@ export type NodeDescData = {
   pods: { name: string; namespace: string; status: string; ready: string; age: string }[]
   events?: NodeEvent[]
   usedCpuM: number; usedMemMi: number; allocCpuM: number; allocMemMi: number; cpuPercent: number; memPercent: number
+  requestsCpuM: number; requestsMemMi: number; limitsCpuM: number; limitsMemMi: number
 }
 
 export type ServicePort = { name: string; port: number; targetPort: string; nodePort: number; protocol: string }

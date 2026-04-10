@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 import { Spinner } from '../ui/Atoms'
 import { RestartTimeline } from '../ui/RestartTimeline'
 import { JITRequestModal } from '../modals/JITRequestModal'
+import { highlightYaml } from '../modals/YamlModal'
 
 type DriftEntry = { kind: string; name: string; modifiedAgo: string; driftedCount: number; totalPods: number }
 
@@ -15,10 +16,13 @@ export type MetricSeries = { name: string; values: [number, number][] }
 export type MetricsData = Record<string, MetricSeries[]>
 export type RefLine = { value: number; label: string; color: string }
 
-export const CHART_COLORS = ['#06b6d4', '#f59e0b', '#22c55e', '#a78bfa', '#f87171', '#38bdf8', '#facc15', '#4ade80', '#c084fc', '#fb923c']
 export const METRIC_RANGES = ['1h', '3h', '6h', '12h', '24h'] as const
 
 const isLightTheme = () => document.documentElement.getAttribute('data-theme') === 'notion'
+
+const DARK_CHART_COLORS  = ['#06b6d4', '#f59e0b', '#22c55e', '#a78bfa', '#f87171', '#38bdf8', '#facc15', '#4ade80', '#c084fc', '#fb923c']
+const LIGHT_CHART_COLORS = ['#0891b2', '#b45309', '#059669', '#7c3aed', '#dc2626', '#0284c7', '#a16207', '#16a34a', '#9333ea', '#c2410c']
+export function chartColors() { return isLightTheme() ? LIGHT_CHART_COLORS : DARK_CHART_COLORS }
 export const refColor = {
   get req()      { return isLightTheme() ? '#b45309' : '#facc15' },
   get lim()      { return isLightTheme() ? '#be123c' : '#f87171' },
@@ -118,7 +122,7 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1">
           {seriesNames.slice(0, 8).map((name, i) => (
             <span key={name} className="flex items-center gap-1 text-[8px] font-mono text-gray-500">
-              <span className="inline-block w-2.5 h-0.5 rounded" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+              <span className="inline-block w-2.5 h-0.5 rounded" style={{ background: chartColors()[i % chartColors().length] }} />
               {name}
             </span>
           ))}
@@ -130,8 +134,8 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
           <defs>
             {seriesNames.slice(0, 10).map((name, i) => (
               <linearGradient key={name} id={`grad-${stableGradId}-${i}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0} />
+                <stop offset="0%" stopColor={chartColors()[i % chartColors().length]} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={chartColors()[i % chartColors().length]} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
@@ -144,7 +148,7 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
             formatter={(value) => [formatVal(Number(value))]}
           />
           {seriesNames.slice(0, 10).map((name, i) => (
-            <Area key={name} type="monotone" dataKey={name} stroke={CHART_COLORS[i % CHART_COLORS.length]} fill={`url(#grad-${stableGradId}-${i})`}
+            <Area key={name} type="monotone" dataKey={name} stroke={chartColors()[i % chartColors().length]} fill={`url(#grad-${stableGradId}-${i})`}
               strokeWidth={1.5} dot={false} isAnimationActive={false}
               name={isSingleSeries ? title : name} />
           ))}
@@ -159,16 +163,6 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
 }
 
 // ─── YAML Modal ──────────────────────────────────────────────────────
-
-function highlightYaml(text: string): string {
-  return text.replace(/^(\s*)([\w.\-/]+)(:)/gm, '$1<span class="text-neon-cyan">$2</span><span class="text-gray-500">$3</span>')
-    .replace(/: (true|false)/g, ': <span class="text-purple-400">$1</span>')
-    .replace(/: (\d+[\d.]*)/g, ': <span class="text-amber-400">$1</span>')
-    .replace(/: "([^"]*)"/g, ': <span class="text-green-400">"$1"</span>')
-    .replace(/: '([^']*)'/g, ': <span class="text-green-400">\'$1\'</span>')
-    .replace(/^(\s*- )/gm, '<span class="text-gray-500">$1</span>')
-    .replace(/#.*/g, '<span class="text-gray-600">$&</span>')
-}
 
 export function YamlModal({ kind, ns, name, onClose }: { kind: string; ns: string; name: string; onClose: () => void }) {
   const { role } = useAuth()
@@ -310,7 +304,6 @@ export function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: stri
   const [showJITModal, setShowJITModal] = useState(false)
   const [jitGranted, setJitGranted] = useState(false)
   const [jitPending, setJitPending] = useState(false)
-
   const restartable = ['Deployment', 'StatefulSet', 'DaemonSet'].includes(kind)
   const canRestart = isAdmin || jitGranted
 
@@ -330,13 +323,17 @@ export function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: stri
       }).catch(() => {})
     }
     poll()
-    const id = setInterval(poll, 5000)
+    const id = setInterval(poll, 15000)
     return () => { cancelled = true; clearInterval(id) }
   }, [isAdmin, restartable, ns, kind, name])
 
   const doRestart = async () => {
     setBusy('restart')
-    try { await post(`/api/workloads/${ns}/${name}/restart?kind=${kind}`); setToast(`${name} restarting`); refetch() }
+    try {
+      await post(`/api/workloads/${ns}/${name}/restart?kind=${kind}`)
+      setToast(`${name} restarting`)
+      refetch()
+    }
     catch (e: any) { setToast(`Error: ${e.message}`) }
     finally { setBusy(null); setTimeout(() => setToast(null), 3000) }
   }
@@ -427,7 +424,6 @@ export function WorkloadDetailView({ ns, name, kind, onBack, onPod }: { ns: stri
       </div>
       {showYaml && <YamlModal kind={kind} ns={ns} name={name} onClose={() => setShowYaml(false)} />}
       {showJITModal && <JITRequestModal ns={ns} pod="" ownerKind={kind} ownerName={name} accessType="restart" onClose={() => setShowJITModal(false)} onSubmitted={() => { setShowJITModal(false); setJitPending(true) }} />}
-
       <div className="flex gap-1 px-3 py-2 overflow-x-auto scrollbar-hide border-b border-hull-800/50">
         {sections.map(s => (
           <button key={s.id} onClick={() => setActiveSection(s.id)} className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-medium border transition-colors ${activeSection === s.id ? 'bg-hull-700 text-white border-hull-600' : 'text-gray-500 border-hull-800 hover:text-gray-300'}`}>{s.label}</button>

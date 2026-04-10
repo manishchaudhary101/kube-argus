@@ -37,41 +37,39 @@ func apiWorkloads(w http.ResponseWriter, r *http.Request) {
 		Partition      *int32 `json:"partition,omitempty"`
 	}
 	type wl struct {
-		Kind      string      `json:"kind"`
-		Name      string      `json:"name"`
-		NS        string      `json:"namespace"`
-		Ready     int32       `json:"ready"`
-		Desired   int32       `json:"desired"`
-		Age       string      `json:"age"`
-		Images    string      `json:"images"`
-		PDB       *pdbStatus  `json:"pdb,omitempty"`
-		Strategy  *wlStrategy `json:"strategy,omitempty"`
-		CpuReqM   int64       `json:"cpuReqM"`
-		CpuLimM   int64       `json:"cpuLimM"`
-		CpuUsedM  int64       `json:"cpuUsedM"`
-		MemReqMi  int64       `json:"memReqMi"`
-		MemLimMi  int64       `json:"memLimMi"`
-		MemUsedMi int64       `json:"memUsedMi"`
+		Kind      string            `json:"kind"`
+		Name      string            `json:"name"`
+		NS        string            `json:"namespace"`
+		Ready     int32             `json:"ready"`
+		Desired   int32             `json:"desired"`
+		Age       string            `json:"age"`
+		Images    string            `json:"images"`
+		PDB       *pdbStatus        `json:"pdb,omitempty"`
+		Strategy  *wlStrategy       `json:"strategy,omitempty"`
+		CpuReqM   int64             `json:"cpuReqM"`
+		CpuLimM   int64             `json:"cpuLimM"`
+		CpuUsedM  int64             `json:"cpuUsedM"`
+		MemReqMi  int64             `json:"memReqMi"`
+		MemLimMi  int64             `json:"memLimMi"`
+		MemUsedMi int64             `json:"memUsedMi"`
 	}
 
-	podMetricsMap := map[string][2]int64{}
-	if cache.podMetrics != nil {
-		for _, m := range cache.podMetrics.Items {
-			var cpu, mem int64
-			for _, ct := range m.Containers {
-				cpu += ct.Usage.Cpu().MilliValue()
-				mem += ct.Usage.Memory().Value() / (1024 * 1024)
-			}
-			podMetricsMap[m.Namespace+"/"+m.Name] = [2]int64{cpu, mem}
+	podMetricsMap := cache.podMetricsMap
+
+	// Pre-group active pods by namespace so sumPodUsage only scans the
+	// relevant namespace instead of all pods (O(pods) once vs O(pods × workloads)).
+	podsByNS := map[string][]corev1.Pod{}
+	if cache.pods != nil {
+		for _, p := range cache.pods.Items {
+			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed { continue }
+			podsByNS[p.Namespace] = append(podsByNS[p.Namespace], p)
 		}
 	}
 
 	sumPodUsage := func(namespace string, selector map[string]string) (int64, int64) {
-		if cache.pods == nil || len(selector) == 0 { return 0, 0 }
+		if len(selector) == 0 { return 0, 0 }
 		var cpuTotal, memTotal int64
-		for _, p := range cache.pods.Items {
-			if p.Namespace != namespace { continue }
-			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed { continue }
+		for _, p := range podsByNS[namespace] {
 			match := true
 			for k, v := range selector { if p.Labels[k] != v { match = false; break } }
 			if !match { continue }
@@ -230,7 +228,7 @@ func buildContainerInfo(ct corev1.Container, isInit bool) map[string]interface{}
 func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/workloads/"), "/"), "/")
 	if len(parts) != 3 {
-		http.Error(w, "use /api/workloads/{ns}/{name}/{describe|restart|scale}", 400)
+		je(w, "use /api/workloads/{ns}/{name}/{describe|restart|scale}", 400)
 		return
 	}
 	ns, name, action := parts[0], parts[1], parts[2]
@@ -244,7 +242,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 		switch kind {
 		case "Deployment":
 			d, err := clientset.AppsV1().Deployments(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			replicas := int32(1)
 			if d.Spec.Replicas != nil { replicas = *d.Spec.Replicas }
 			result["replicas"] = replicas
@@ -310,7 +308,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["replicaSets"] = replicaSets
 		case "StatefulSet":
 			s, err := clientset.AppsV1().StatefulSets(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			replicas := int32(1)
 			if s.Spec.Replicas != nil { replicas = *s.Spec.Replicas }
 			result["replicas"] = replicas
@@ -335,7 +333,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["containers"] = containers
 		case "DaemonSet":
 			d, err := clientset.AppsV1().DaemonSets(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			result["desiredNumberScheduled"] = d.Status.DesiredNumberScheduled
 			result["currentNumberScheduled"] = d.Status.CurrentNumberScheduled
 			result["numberReady"] = d.Status.NumberReady
@@ -359,7 +357,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["containers"] = containers
 		case "CronJob":
 			cj, err := clientset.BatchV1().CronJobs(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			result["schedule"] = cj.Spec.Schedule
 			result["suspend"] = cj.Spec.Suspend != nil && *cj.Spec.Suspend
 			result["activeJobs"] = len(cj.Status.Active)
@@ -380,7 +378,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["ownerName"] = name
 		case "Job":
 			jb, err := clientset.BatchV1().Jobs(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			result["completions"] = jb.Status.Succeeded
 			result["active"] = jb.Status.Active
 			result["failed"] = jb.Status.Failed
@@ -403,7 +401,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			result["containers"] = containers
 		case "ReplicaSet":
 			rs, err := clientset.AppsV1().ReplicaSets(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			replicas := int32(0)
 			if rs.Spec.Replicas != nil { replicas = *rs.Spec.Replicas }
 			result["replicas"] = replicas
@@ -428,15 +426,16 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			}
 			result["conditions"] = conds
 		default:
-			http.Error(w, "unsupported kind", 400); return
+			je(w, "unsupported kind", 400); return
 		}
 
-		// Fetch related events
-		events, _ := clientset.CoreV1().Events(ns).List(c, metav1.ListOptions{})
+		// Fetch related events using field selector to avoid listing all namespace events
+		events, _ := clientset.CoreV1().Events(ns).List(c, metav1.ListOptions{
+			FieldSelector: "involvedObject.name=" + name,
+		})
 		evts := []map[string]string{}
 		if events != nil {
 			for _, e := range events.Items {
-				if e.InvolvedObject.Name != name { continue }
 				ts := e.LastTimestamp.Time
 				if ts.IsZero() { ts = e.CreationTimestamp.Time }
 				evts = append(evts, map[string]string{"type": e.Type, "reason": e.Reason, "message": e.Message, "age": shortDur(time.Since(ts))})
@@ -674,7 +673,8 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-			for _, ct := range podSpec.Containers {
+			allContainers := append(podSpec.Containers, podSpec.InitContainers...)
+			for _, ct := range allContainers {
 				for _, ef := range ct.EnvFrom {
 					if ef.ConfigMapRef != nil && !seen["cm:"+ef.ConfigMapRef.Name] {
 						cfgs = append(cfgs, cfgRef{Kind: "ConfigMap", Name: ef.ConfigMapRef.Name, Source: "envFrom"})
@@ -683,6 +683,17 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 					if ef.SecretRef != nil && !seen["sec:"+ef.SecretRef.Name] {
 						cfgs = append(cfgs, cfgRef{Kind: "Secret", Name: ef.SecretRef.Name, Source: "envFrom"})
 						seen["sec:"+ef.SecretRef.Name] = true
+					}
+				}
+				for _, ev := range ct.Env {
+					if ev.ValueFrom == nil { continue }
+					if ev.ValueFrom.ConfigMapKeyRef != nil && !seen["cm:"+ev.ValueFrom.ConfigMapKeyRef.Name] {
+						cfgs = append(cfgs, cfgRef{Kind: "ConfigMap", Name: ev.ValueFrom.ConfigMapKeyRef.Name, Source: "env"})
+						seen["cm:"+ev.ValueFrom.ConfigMapKeyRef.Name] = true
+					}
+					if ev.ValueFrom.SecretKeyRef != nil && !seen["sec:"+ev.ValueFrom.SecretKeyRef.Name] {
+						cfgs = append(cfgs, cfgRef{Kind: "Secret", Name: ev.ValueFrom.SecretKeyRef.Name, Source: "env"})
+						seen["sec:"+ev.ValueFrom.SecretKeyRef.Name] = true
 					}
 				}
 			}
@@ -732,18 +743,18 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 		switch kind {
 		case "Deployment":
 			d, err := clientset.AppsV1().Deployments(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			labelSel = d.Spec.Selector.MatchLabels
 		case "StatefulSet":
 			s, err := clientset.AppsV1().StatefulSets(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			labelSel = s.Spec.Selector.MatchLabels
 		case "DaemonSet":
 			d, err := clientset.AppsV1().DaemonSets(ns).Get(c, name, metav1.GetOptions{})
-			if err != nil { http.Error(w, err.Error(), 500); return }
+			if err != nil { jk8s(w, err); return }
 			labelSel = d.Spec.Selector.MatchLabels
 		default:
-			http.Error(w, "agglogs only supports Deployment, StatefulSet, DaemonSet", 400)
+			je(w, "agglogs only supports Deployment, StatefulSet, DaemonSet", 400)
 			return
 		}
 
@@ -754,15 +765,15 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 		podList, err := clientset.CoreV1().Pods(ns).List(c, metav1.ListOptions{
 			LabelSelector: strings.Join(selParts, ","),
 		})
-		if err != nil { http.Error(w, err.Error(), 500); return }
-		if len(podList.Items) == 0 { http.Error(w, "no pods found", 404); return }
+		if err != nil { jk8s(w, err); return }
+		if len(podList.Items) == 0 { je(w, "no pods found", 404); return }
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("X-Accel-Buffering", "no")
 		flusher, ok := w.(http.Flusher)
-		if !ok { http.Error(w, "streaming not supported", 500); return }
+		if !ok { je(w, "streaming not supported", 500); return }
 
 		type logLine struct {
 			Pod  string `json:"pod"`
@@ -805,7 +816,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != "POST" {
-		http.Error(w, "POST only", 405)
+		je(w, "POST only", 405)
 		return
 	}
 
@@ -831,7 +842,7 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		go cache.refresh()
@@ -844,13 +855,13 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 		replicaStr := r.URL.Query().Get("replicas")
 		var replicas int32
 		if _, err := fmt.Sscanf(replicaStr, "%d", &replicas); err != nil || replicas < 0 || replicas > 100 {
-			http.Error(w, "replicas must be 0-100", 400)
+			je(w, "replicas must be 0-100", 400)
 			return
 		}
 		patch := fmt.Sprintf(`{"spec":{"replicas":%d}}`, replicas)
 		_, err := clientset.AppsV1().Deployments(ns).Patch(c, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		go cache.refresh()
@@ -859,6 +870,6 @@ func apiWorkloadAction(w http.ResponseWriter, r *http.Request) {
 		}
 		j(w, map[string]interface{}{"ok": "scaled", "replicas": replicas})
 	default:
-		http.Error(w, "use restart or scale", 400)
+		je(w, "use restart or scale", 400)
 	}
 }

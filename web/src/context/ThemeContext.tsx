@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 
 export type Theme = 'dark' | 'notion'
 
@@ -18,12 +18,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   })
 
   useEffect(() => {
+    document.documentElement.classList.add('theme-switching')
     document.documentElement.setAttribute('data-theme', theme)
     try { localStorage.setItem('ka-theme', theme) } catch {}
+    const id = setTimeout(() => document.documentElement.classList.remove('theme-switching'), 400)
+    return () => clearTimeout(id)
   }, [theme])
 
-  const setTheme = (t: Theme) => setThemeState(t)
-  const toggle = () => setThemeState(prev => (prev === 'dark' ? 'notion' : 'dark'))
+  const setTheme = useCallback((t: Theme) => setThemeState(t), [])
+  const toggle = useCallback(() => setThemeState(prev => (prev === 'dark' ? 'notion' : 'dark')), [])
+  const value = useMemo(() => ({ theme, setTheme, toggle }), [theme, setTheme, toggle])
 
-  return <ThemeCtx.Provider value={{ theme, setTheme, toggle }}>{children}</ThemeCtx.Provider>
+  return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>
 }

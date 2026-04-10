@@ -2,6 +2,57 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.2.5] — 2026-04-10
+
+### ⭐ New Features
+
+#### Slack Notifications for JIT Access Requests
+Get notified in Slack when someone requests JIT access, with interactive **Approve** and **Deny** buttons directly in the message.
+
+- **Incoming Webhook** — sends Block Kit messages with requester, resource, duration, reason, and cluster name
+- **Interactive buttons** — admins approve or deny from Slack; the original message updates to show the result
+- **Signing secret verification** — Slack request signatures validated via HMAC-SHA256 to prevent spoofing
+- **Dashboard Settings** — configure webhook URL and signing secret from the UI (Settings modal in admin menu), or via `SLACK_WEBHOOK_URL` / `SLACK_SIGNING_SECRET` env vars
+- **ConfigMap persistence** — settings stored in `kube-argus-settings` ConfigMap, surviving pod restarts
+
+#### Node Allocated Resources
+Node detail view now shows **pod requests and limits** as a percentage of allocatable capacity, matching `kubectl describe node` output.
+
+- Two side-by-side resource cards (CPU and Memory) showing usage bar, requests, and limits
+- Color-coded overcommit warnings (amber >80%, red >100%)
+- Calculation matches kubectl — uses `max(init, regular)` per pod per resource
+
+#### Pod Log Viewer Enhancements
+- **Search/filter** within log output with match highlighting
+- **Configurable tail size** — 100, 300, or 1,000 lines
+- **Error highlighting** — lines containing ERROR, WARN, or FATAL are color-coded with theme-aware backgrounds
+
+### ⚡ Performance
+
+- **Code splitting** — all views lazy-loaded via `React.lazy()` with manual chunk splitting for react-dom and recharts
+- **SWR client cache** — 30-second stale-while-revalidate cache eliminates loading flicker on view revisits
+- **Prometheus query cache** — 30-second TTL in-memory cache with automatic eviction above 200 entries
+- **Pre-computed lookup maps** — pod-to-deployment resolution is now O(1) via maps built once per cache refresh
+- **Memoized components** — MetricChart and RestartTimeline wrapped with `React.memo()`
+
+### 🔧 Improvements
+
+- **Online Users** — expanded from 5-minute to 24-hour window with Online / Away / Offline status groups
+- **Audit trail** — immediate persistence (was 60-second batch), "Access Requests" filter tab, configurable retention via `AUDIT_RETENTION_DAYS`
+- **Light theme** — darker saturated chart colors, smooth 300ms theme transitions, softened shadows
+- **Helm chart** — image tag now defaults to `Chart.appVersion` instead of `latest`, pullPolicy changed to `IfNotPresent`
+- **JIT refactoring** — extracted `jitApprove()`/`jitDeny()` for reuse by both HTTP API and Slack handler, consistent resource strings in audit records
+
+### 🐛 Fixes
+
+- **JSON error responses** — all API endpoints now return `{"error":"..."}` instead of plain text, fixing `Unexpected token` parse errors on the frontend
+- **404 for missing resources** — terminated nodes, deleted pods, and removed workloads now return 404 instead of 500
+- **False login events** — audit trail no longer records "session resume" as a login when users return after inactivity
+- **Settings modal** — Save button works on first setup (not just when changing existing values)
+- **Cache noise** — `kube-root-ca.crt` ConfigMaps and `helm.sh/` Secrets filtered from config metadata
+
+---
+
 ## [v1.2.4] — 2026-04-07
 
 ### ⭐ New Features

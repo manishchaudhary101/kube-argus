@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,7 +20,7 @@ import (
 func apiNodes(w http.ResponseWriter, r *http.Request) {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
-	if cache.nodes == nil { http.Error(w, "cache not ready", 503); return }
+	if cache.nodes == nil { je(w, "cache not ready", 503); return }
 
 	type nd struct {
 		Name         string `json:"name"`
@@ -107,7 +108,7 @@ func apiNodes(w http.ResponseWriter, r *http.Request) {
 func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/nodes/"), "/"), "/")
 	if len(parts) < 2 {
-		http.Error(w, "use /api/nodes/{name}/{describe|cordon|uncordon|drain}", 400)
+		je(w, "use /api/nodes/{name}/{describe|cordon|uncordon|drain}", 400)
 		return
 	}
 	name, action := parts[0], parts[1]
@@ -115,9 +116,42 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 	if action == "describe" {
 		c, cancel := ctx()
 		defer cancel()
-		node, err := clientset.CoreV1().Nodes().Get(c, name, metav1.GetOptions{})
-		if err != nil {
-			http.Error(w, err.Error(), 500)
+
+		var node *corev1.Node
+		var podList *corev1.PodList
+		var evtList *corev1.EventList
+		var nodeErr error
+		usedCPU, usedMem := int64(0), int64(0)
+
+		var dwg sync.WaitGroup
+		dwg.Add(4)
+		go func() {
+			defer dwg.Done()
+			node, nodeErr = clientset.CoreV1().Nodes().Get(c, name, metav1.GetOptions{})
+		}()
+		go func() {
+			defer dwg.Done()
+			podList, _ = clientset.CoreV1().Pods("").List(c, metav1.ListOptions{FieldSelector: "spec.nodeName=" + name})
+		}()
+		go func() {
+			defer dwg.Done()
+			if metricsCl != nil {
+				if nm, err := metricsCl.MetricsV1beta1().NodeMetricses().Get(c, name, metav1.GetOptions{}); err == nil {
+					usedCPU = nm.Usage.Cpu().MilliValue()
+					usedMem = nm.Usage.Memory().Value() / (1024 * 1024)
+				}
+			}
+		}()
+		go func() {
+			defer dwg.Done()
+			evtList, _ = clientset.CoreV1().Events("").List(c, metav1.ListOptions{
+				FieldSelector: "involvedObject.name=" + name + ",involvedObject.kind=Node",
+			})
+		}()
+		dwg.Wait()
+
+		if nodeErr != nil {
+			jk8s(w, nodeErr)
 			return
 		}
 
@@ -211,8 +245,6 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		// pods on this node
-		podList, _ := clientset.CoreV1().Pods("").List(c, metav1.ListOptions{FieldSelector: "spec.nodeName=" + name})
 		type podSummary struct {
 			Name   string `json:"name"`
 			NS     string `json:"namespace"`
@@ -239,13 +271,48 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		usedCPU, usedMem := int64(0), int64(0)
-		if metricsCl != nil {
-			if nm, err := metricsCl.MetricsV1beta1().NodeMetricses().Get(c, name, metav1.GetOptions{}); err == nil {
-				usedCPU = nm.Usage.Cpu().MilliValue()
-				usedMem = nm.Usage.Memory().Value() / (1024 * 1024)
+		// Aggregate pod requests and limits (matches kubectl describe node logic).
+		// For each pod: sum regular containers, then take max(init, regular) per resource.
+		var reqCPU, limCPU int64
+		var reqMemBytes, limMemBytes int64
+		if podList != nil {
+			for _, p := range podList.Items {
+				if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+					continue
+				}
+				// Sum regular containers
+				var pReqCPU, pLimCPU int64
+				var pReqMem, pLimMem int64
+				for _, ct := range p.Spec.Containers {
+					pReqCPU += ct.Resources.Requests.Cpu().MilliValue()
+					pReqMem += ct.Resources.Requests.Memory().Value()
+					pLimCPU += ct.Resources.Limits.Cpu().MilliValue()
+					pLimMem += ct.Resources.Limits.Memory().Value()
+				}
+				// Init containers: take max(init, regular) per resource
+				for _, ct := range p.Spec.InitContainers {
+					if v := ct.Resources.Requests.Cpu().MilliValue(); v > pReqCPU {
+						pReqCPU = v
+					}
+					if v := ct.Resources.Requests.Memory().Value(); v > pReqMem {
+						pReqMem = v
+					}
+					if v := ct.Resources.Limits.Cpu().MilliValue(); v > pLimCPU {
+						pLimCPU = v
+					}
+					if v := ct.Resources.Limits.Memory().Value(); v > pLimMem {
+						pLimMem = v
+					}
+				}
+				reqCPU += pReqCPU
+				reqMemBytes += pReqMem
+				limCPU += pLimCPU
+				limMemBytes += pLimMem
 			}
 		}
+		reqMem := reqMemBytes / (1024 * 1024)
+		limMem := limMemBytes / (1024 * 1024)
+
 		allocCPU := node.Status.Allocatable.Cpu().MilliValue()
 		allocMem := node.Status.Allocatable.Memory().Value() / (1024 * 1024)
 		cpuPct, memPct := 0, 0
@@ -265,9 +332,6 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 			Count   int32  `json:"count"`
 		}
 		nodeEvents := make([]nodeEvent, 0)
-		evtList, _ := clientset.CoreV1().Events("").List(c, metav1.ListOptions{
-			FieldSelector: "involvedObject.name=" + name + ",involvedObject.kind=Node",
-		})
 		if evtList != nil {
 			for _, e := range evtList.Items {
 				ts := e.LastTimestamp.Time
@@ -311,6 +375,10 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 			"allocMemMi":  allocMem,
 			"cpuPercent":  cpuPct,
 			"memPercent":  memPct,
+			"requestsCpuM":  reqCPU,
+			"requestsMemMi": reqMem,
+			"limitsCpuM":    limCPU,
+			"limitsMemMi":   limMem,
 		})
 		return
 	}
@@ -330,21 +398,11 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if allocCPU == 0 {
-			http.Error(w, "node not found", 404)
+			je(w, "node not found", 404)
 			return
 		}
 
-		pmMap := map[string][2]int64{}
-		if cache.podMetrics != nil {
-			for _, m := range cache.podMetrics.Items {
-				var cpu, mem int64
-				for _, ct := range m.Containers {
-					cpu += ct.Usage.Cpu().MilliValue()
-					mem += ct.Usage.Memory().Value() / (1024 * 1024)
-				}
-				pmMap[m.Namespace+"/"+m.Name] = [2]int64{cpu, mem}
-			}
-		}
+		pmMap := cache.podMetricsMap
 
 		type puPod struct {
 			Name      string `json:"name"`
@@ -414,7 +472,7 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 		c, cancel := ctx()
 		defer cancel()
 		pods, err := clientset.CoreV1().Pods("").List(c, metav1.ListOptions{FieldSelector: "spec.nodeName=" + name})
-		if err != nil { http.Error(w, err.Error(), 500); return }
+		if err != nil { jk8s(w, err); return }
 
 		cache.mu.RLock()
 		pdbList := cache.pdbs
@@ -506,7 +564,7 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 
 	isStreamDrain := action == "drain" && r.URL.Query().Get("stream") == "true"
 	if r.Method != "POST" && !isStreamDrain {
-		http.Error(w, "POST only", 405)
+		je(w, "POST only", 405)
 		return
 	}
 	if !requireAdmin(w, r) { return }
@@ -517,7 +575,7 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 	case "cordon":
 		err := patchUnschedulable(c, name, true)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		go cache.refresh()
@@ -525,7 +583,7 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 	case "uncordon":
 		err := patchUnschedulable(c, name, false)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		go cache.refresh()
@@ -535,12 +593,12 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 		_ = patchUnschedulable(c, name, true)
 		pods, err := clientset.CoreV1().Pods("").List(c, metav1.ListOptions{FieldSelector: "spec.nodeName=" + name})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		if stream {
 			flusher, ok := w.(http.Flusher)
-			if !ok { http.Error(w, "streaming not supported", 500); return }
+			if !ok { je(w, "streaming not supported", 500); return }
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Connection", "keep-alive")
@@ -579,7 +637,7 @@ func apiNodeAction(w http.ResponseWriter, r *http.Request) {
 			j(w, map[string]interface{}{"ok": "drained", "evicted": evicted})
 		}
 	default:
-		http.Error(w, "unknown action", 400)
+		je(w, "unknown action", 400)
 	}
 }
 

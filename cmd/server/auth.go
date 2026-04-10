@@ -95,7 +95,7 @@ func loadSecretsFromAWS() {
 		return
 	}
 
-	envKeys := []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "SESSION_SECRET", "OIDC_ADMIN_GROUP", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ADMIN_EMAILS", "DEFAULT_ROLE", "CLUSTER_NAME", "LLM_GATEWAY_URL", "LLM_GATEWAY_KEY", "LLM_GATEWAY_MODEL", "PROMETHEUS_URL", "PROMETHEUS_USER", "PROMETHEUS_KEY"}
+	envKeys := []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "SESSION_SECRET", "OIDC_ADMIN_GROUP", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ADMIN_EMAILS", "DEFAULT_ROLE", "CLUSTER_NAME", "LLM_GATEWAY_URL", "LLM_GATEWAY_KEY", "LLM_GATEWAY_MODEL", "PROMETHEUS_URL", "PROMETHEUS_USER", "PROMETHEUS_KEY", "SLACK_WEBHOOK_URL", "SLACK_SIGNING_SECRET"}
 	loaded := 0
 	for _, k := range envKeys {
 		if v, ok := secrets[k]; ok && v != "" && os.Getenv(k) == "" {
@@ -284,7 +284,7 @@ func callbackURL(r *http.Request) string {
 
 func authLogin(w http.ResponseWriter, r *http.Request) {
 	if oauthConfig == nil {
-		http.Error(w, "authentication not configured — set OIDC_ISSUER, OIDC_CLIENT_ID, and OIDC_CLIENT_SECRET", 500)
+		je(w, "authentication not configured — set OIDC_ISSUER, OIDC_CLIENT_ID, and OIDC_CLIENT_SECRET", 500)
 		return
 	}
 	oauthConfig.RedirectURL = callbackURL(r)
@@ -295,7 +295,7 @@ func authLogin(w http.ResponseWriter, r *http.Request) {
 
 func authCallback(w http.ResponseWriter, r *http.Request) {
 	if oauthConfig == nil {
-		http.Error(w, "authentication not configured", 500)
+		je(w, "authentication not configured", 500)
 		return
 	}
 	// IdP-initiated flow (e.g. clicking an app tile in the IdP portal): no code/state params.
@@ -315,19 +315,19 @@ func authCallback(w http.ResponseWriter, r *http.Request) {
 	oauthConfig.RedirectURL = callbackURL(r)
 	token, err := oauthConfig.Exchange(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
-		http.Error(w, "token exchange failed: "+err.Error(), 500)
+		je(w, "token exchange failed: "+err.Error(), 500)
 		return
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		http.Error(w, "no id_token in response", 500)
+		je(w, "no id_token in response", 500)
 		return
 	}
 
 	idToken, err := oidcVerifier.Verify(r.Context(), rawIDToken)
 	if err != nil {
-		http.Error(w, "token verify failed: "+err.Error(), 500)
+		je(w, "token verify failed: "+err.Error(), 500)
 		return
 	}
 
@@ -336,7 +336,7 @@ func authCallback(w http.ResponseWriter, r *http.Request) {
 		Groups []string `json:"groups"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
-		http.Error(w, "claims parse failed: "+err.Error(), 500)
+		je(w, "claims parse failed: "+err.Error(), 500)
 		return
 	}
 
@@ -421,7 +421,7 @@ func authMiddleware(next http.Handler) http.Handler {
 		}
 
 		path := r.URL.Path
-		if path == "/health" || strings.HasPrefix(path, "/auth/") {
+		if path == "/health" || strings.HasPrefix(path, "/auth/") || strings.HasPrefix(path, "/api/slack/") {
 			next.ServeHTTP(w, r)
 			return
 		}

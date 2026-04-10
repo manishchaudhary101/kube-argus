@@ -22,19 +22,9 @@ func apiPods(w http.ResponseWriter, r *http.Request) {
 	ns := r.URL.Query().Get("namespace")
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
-	if cache.pods == nil { http.Error(w, "cache not ready", 503); return }
+	if cache.pods == nil { je(w, "cache not ready", 503); return }
 
-	podMetricsMap := map[string][2]int64{}
-	if cache.podMetrics != nil {
-		for _, m := range cache.podMetrics.Items {
-			var cpu, mem int64
-			for _, ct := range m.Containers {
-				cpu += ct.Usage.Cpu().MilliValue()
-				mem += ct.Usage.Memory().Value() / (1024 * 1024)
-			}
-			podMetricsMap[m.Namespace+"/"+m.Name] = [2]int64{cpu, mem}
-		}
-	}
+	podMetricsMap := cache.podMetricsMap
 
 	type ctState struct {
 		Name   string `json:"name"`
@@ -130,15 +120,9 @@ func apiPods(w http.ResponseWriter, r *http.Request) {
 				ownerKind = ref.Kind
 				ownerName = ref.Name
 				if ownerKind == "ReplicaSet" {
-					for _, rs := range cache.replicasets.Items {
-						if rs.Name == ownerName && rs.Namespace == p.Namespace {
-							for _, rsRef := range rs.OwnerReferences {
-								if rsRef.Controller != nil && *rsRef.Controller {
-									ownerKind = rsRef.Kind
-									ownerName = rsRef.Name
-								}
-							}
-						}
+					if owner, ok := cache.rsOwners[p.Namespace+"/"+ownerName]; ok {
+						ownerKind = owner.Kind
+						ownerName = owner.Name
 					}
 				}
 				break
@@ -164,7 +148,7 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/pods/"), "/")
 	parts := strings.SplitN(path, "/", 3)
 	if len(parts) < 3 {
-		http.Error(w, "use /api/pods/{ns}/{name}/logs or /events", 400)
+		je(w, "use /api/pods/{ns}/{name}/logs or /events", 400)
 		return
 	}
 	ns, name, action := parts[0], parts[1], parts[2]
@@ -185,7 +169,7 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 		}
 		stream, err := clientset.CoreV1().Pods(ns).GetLogs(name, opts).Stream(context.Background())
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		defer stream.Close()
@@ -196,7 +180,7 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Accel-Buffering", "no")
 			flusher, ok := w.(http.Flusher)
 			if !ok {
-				http.Error(w, "streaming not supported", 500)
+				je(w, "streaming not supported", 500)
 				return
 			}
 			scanner := bufio.NewScanner(stream)
@@ -214,7 +198,7 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 			FieldSelector: "involvedObject.name=" + name,
 		})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		type ev struct {
@@ -236,7 +220,7 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 	case "previous-logs":
 		container := r.URL.Query().Get("container")
 		if container == "" {
-			http.Error(w, "container param required", 400)
+			je(w, "container param required", 400)
 			return
 		}
 		tail := int64(200)
@@ -244,7 +228,7 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 		opts := &corev1.PodLogOptions{TailLines: &tail, Previous: prev, Container: container}
 		stream, err := clientset.CoreV1().Pods(ns).GetLogs(name, opts).Stream(context.Background())
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		defer stream.Close()
@@ -254,7 +238,7 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 	case "describe":
 		pod, err := clientset.CoreV1().Pods(ns).Get(c, name, metav1.GetOptions{})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		type probeInfo struct {
@@ -445,13 +429,13 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 		})
 	case "delete":
 		if r.Method != "POST" {
-			http.Error(w, "POST only", 405)
+			je(w, "POST only", 405)
 			return
 		}
 		if !requireAdmin(w, r) { return }
 		err := clientset.CoreV1().Pods(ns).Delete(c, name, metav1.DeleteOptions{})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		go cache.refresh()
@@ -460,7 +444,7 @@ func apiPodDetail(w http.ResponseWriter, r *http.Request) {
 		}
 		j(w, map[string]string{"ok": "deleted"})
 	default:
-		http.Error(w, "use /logs, /events, /describe, or /delete", 400)
+		je(w, "use /logs, /events, /describe, or /delete", 400)
 	}
 }
 
@@ -486,11 +470,11 @@ func apiRestartTimeline(w http.ResponseWriter, r *http.Request) {
 	rangeStr := r.URL.Query().Get("range")
 
 	if ns == "" {
-		http.Error(w, `{"error":"namespace parameter required"}`, 400)
+		je(w, `{"error":"namespace parameter required"}`, 400)
 		return
 	}
 	if pod == "" && (workload == "" || kind == "") {
-		http.Error(w, `{"error":"pod or workload+kind parameters required"}`, 400)
+		je(w, `{"error":"pod or workload+kind parameters required"}`, 400)
 		return
 	}
 
@@ -503,7 +487,7 @@ func apiRestartTimeline(w http.ResponseWriter, r *http.Request) {
 	cache.mu.RLock()
 	if cache.pods == nil {
 		cache.mu.RUnlock()
-		http.Error(w, `{"error":"cache not ready"}`, 503)
+		je(w, `{"error":"cache not ready"}`, 503)
 		return
 	}
 	cache.mu.RUnlock()

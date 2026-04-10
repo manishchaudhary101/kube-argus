@@ -80,7 +80,7 @@ func apiCronJobHistory(w http.ResponseWriter, r *http.Request) {
 	name := trimmed
 	ns := r.URL.Query().Get("namespace")
 	if name == "" || ns == "" {
-		http.Error(w, "need name and namespace", 400)
+		je(w, "need name and namespace", 400)
 		return
 	}
 	cache.mu.RLock()
@@ -97,7 +97,7 @@ func apiCronJobHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if cronJob == nil {
-		http.Error(w, "cronjob not found", 404)
+		je(w, "cronjob not found", 404)
 		return
 	}
 
@@ -1133,7 +1133,7 @@ func apiHPA(w http.ResponseWriter, r *http.Request) {
 func apiHPADetail(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/hpa/"), "/"), "/")
 	if len(parts) < 2 {
-		http.Error(w, "use /api/hpa/{namespace}/{name}", 400)
+		je(w, "use /api/hpa/{namespace}/{name}", 400)
 		return
 	}
 	ns, name := parts[0], parts[1]
@@ -1142,7 +1142,7 @@ func apiHPADetail(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	h, err := clientset.AutoscalingV2().HorizontalPodAutoscalers(ns).Get(c, name, metav1.GetOptions{})
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		jk8s(w, err)
 		return
 	}
 

@@ -17,34 +17,44 @@ import (
 func apiConfigDrift(w http.ResponseWriter, r *http.Request) {
 	nsFilter := r.URL.Query().Get("namespace")
 	cache.mu.RLock()
-	defer cache.mu.RUnlock()
+	drift := cache.configDrift
+	cache.mu.RUnlock()
 
+	if drift == nil {
+		j(w, []interface{}{})
+		return
+	}
+	if nsFilter == "" {
+		j(w, drift)
+		return
+	}
+	filtered := make([]interface{}, 0)
+	for _, d := range drift {
+		if entry, ok := d.(map[string]interface{}); ok {
+			if entry["namespace"] == nsFilter {
+				filtered = append(filtered, d)
+			}
+		}
+	}
+	j(w, filtered)
+}
+
+type cfgKey struct {
+	kind, ns, name string
+}
+
+func computeConfigDrift(pods *corev1.PodList, cfgMeta, secMeta []configMeta) []interface{} {
 	type driftPod struct {
 		Name       string `json:"name"`
 		Namespace  string `json:"namespace"`
 		StartedAgo string `json:"startedAgo"`
 		Workload   string `json:"workload"`
 	}
-	type driftEntry struct {
-		Kind         string    `json:"kind"`
-		Name         string    `json:"name"`
-		Namespace    string    `json:"namespace"`
-		LastModified string    `json:"lastModified"`
-		ModifiedAgo  string    `json:"modifiedAgo"`
-		DriftedPods  []driftPod `json:"driftedPods"`
-		TotalPods    int       `json:"totalPods"`
-		DriftedCount int       `json:"driftedCount"`
-	}
 
-	type cfgKey struct {
-		kind, ns, name string
-	}
 	refPods := map[cfgKey][]corev1.Pod{}
-
-	if cache.pods != nil {
-		for _, p := range cache.pods.Items {
+	if pods != nil {
+		for _, p := range pods.Items {
 			if p.Status.Phase != corev1.PodRunning { continue }
-			if nsFilter != "" && p.Namespace != nsFilter { continue }
 			seen := map[cfgKey]bool{}
 			for _, vol := range p.Spec.Volumes {
 				if vol.ConfigMap != nil {
@@ -114,11 +124,9 @@ func apiConfigDrift(w http.ResponseWriter, r *http.Request) {
 		return ""
 	}
 
-	var out []driftEntry
-
+	var out []interface{}
 	checkDrift := func(kind string, metas []configMeta) {
 		for _, m := range metas {
-			if nsFilter != "" && m.Namespace != nsFilter { continue }
 			k := cfgKey{kind, m.Namespace, m.Name}
 			pods := refPods[k]
 			if len(pods) == 0 { continue }
@@ -135,32 +143,32 @@ func apiConfigDrift(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if len(drifted) > 0 {
-				out = append(out, driftEntry{
-					Kind:         kind,
-					Name:         m.Name,
-					Namespace:    m.Namespace,
-					LastModified: m.LastModified.Format(time.RFC3339),
-					ModifiedAgo:  shortDur(time.Since(m.LastModified)),
-					DriftedPods:  drifted,
-					TotalPods:    len(pods),
-					DriftedCount: len(drifted),
+				out = append(out, map[string]interface{}{
+					"kind":         kind,
+					"name":         m.Name,
+					"namespace":    m.Namespace,
+					"lastModified": m.LastModified.Format(time.RFC3339),
+					"modifiedAgo":  shortDur(time.Since(m.LastModified)),
+					"driftedPods":  drifted,
+					"totalPods":    len(pods),
+					"driftedCount": len(drifted),
 				})
 			}
 		}
 	}
 
-	checkDrift("ConfigMap", cache.configMeta)
-	checkDrift("Secret", cache.secretMeta)
+	checkDrift("ConfigMap", cfgMeta)
+	checkDrift("Secret", secMeta)
 
-	if out == nil { out = []driftEntry{} }
-	j(w, out)
+	if out == nil { out = []interface{}{} }
+	return out
 }
 
 // ─── ConfigMaps & Secrets ──────────────────────────────────────────────
 
 func apiConfigs(w http.ResponseWriter, r *http.Request) {
 	ns := r.URL.Query().Get("namespace")
-	kind := r.URL.Query().Get("kind") // "configmap" or "secret"
+	kind := r.URL.Query().Get("kind")
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
 
@@ -218,7 +226,7 @@ func apiConfigs(w http.ResponseWriter, r *http.Request) {
 func apiConfigData(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/configs/"), "/")
 	if len(parts) != 2 {
-		http.Error(w, "usage: /api/configs/{namespace}/{name}?kind=configmap|secret", 400)
+		je(w, "usage: /api/configs/{namespace}/{name}?kind=configmap|secret", 400)
 		return
 	}
 	ns, name := parts[0], parts[1]
@@ -246,7 +254,7 @@ func apiConfigData(w http.ResponseWriter, r *http.Request) {
 	if kind == "secret" {
 		sec, err := clientset.CoreV1().Secrets(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		keys := make([]string, 0, len(sec.Data)+len(sec.StringData))
@@ -269,7 +277,7 @@ func apiConfigData(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cm, err := clientset.CoreV1().ConfigMaps(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			jk8s(w, err)
 			return
 		}
 		keys := make([]string, 0, len(cm.Data)+len(cm.BinaryData))

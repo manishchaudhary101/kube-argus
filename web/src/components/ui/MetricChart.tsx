@@ -1,13 +1,15 @@
-import { useMemo } from 'react'
+import { useMemo, memo } from 'react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts'
 
 export type MetricSeries = { name: string; values: [number, number][] }
 export type MetricsData = Record<string, MetricSeries[]>
 export type RefLine = { value: number; label: string; color: string }
 
-export const CHART_COLORS = ['#06b6d4', '#f59e0b', '#22c55e', '#a78bfa', '#f87171', '#38bdf8', '#facc15', '#4ade80', '#c084fc', '#fb923c']
-
 const isLightTheme = () => document.documentElement.getAttribute('data-theme') === 'notion'
+
+const DARK_CHART_COLORS  = ['#06b6d4', '#f59e0b', '#22c55e', '#a78bfa', '#f87171', '#38bdf8', '#facc15', '#4ade80', '#c084fc', '#fb923c']
+const LIGHT_CHART_COLORS = ['#0891b2', '#b45309', '#059669', '#7c3aed', '#dc2626', '#0284c7', '#a16207', '#16a34a', '#9333ea', '#c2410c']
+export function chartColors() { return isLightTheme() ? LIGHT_CHART_COLORS : DARK_CHART_COLORS }
 export const refColor = {
   get req()      { return isLightTheme() ? '#b45309' : '#facc15' },
   get lim()      { return isLightTheme() ? '#be123c' : '#f87171' },
@@ -30,7 +32,7 @@ export function fmtBytes(v: number): string {
   return `${(v / 1024).toFixed(0)} KiB`
 }
 
-export function MetricChart({ title, series, unit, height = 120, refLines }: { title: string; series: MetricSeries[]; unit: string; height?: number; refLines?: RefLine[] }) {
+export const MetricChart = memo(function MetricChart({ title, series, unit, height = 120, refLines }: { title: string; series: MetricSeries[]; unit: string; height?: number; refLines?: RefLine[] }) {
   const chartData = useMemo(() => {
     if (!series || series.length === 0) return []
     const allTimestamps = new Set<number>()
@@ -75,7 +77,7 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1">
           {seriesNames.slice(0, 8).map((name, i) => (
             <span key={name} className="flex items-center gap-1 text-[8px] font-mono text-gray-500">
-              <span className="inline-block w-2.5 h-0.5 rounded" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+              <span className="inline-block w-2.5 h-0.5 rounded" style={{ background: chartColors()[i % chartColors().length] }} />
               {name}
             </span>
           ))}
@@ -87,8 +89,8 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
           <defs>
             {seriesNames.slice(0, 10).map((name, i) => (
               <linearGradient key={name} id={`grad-${stableGradId}-${i}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0} />
+                <stop offset="0%" stopColor={chartColors()[i % chartColors().length]} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={chartColors()[i % chartColors().length]} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
@@ -101,7 +103,7 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
             formatter={(value) => [formatVal(Number(value))]}
           />
           {seriesNames.slice(0, 10).map((name, i) => (
-            <Area key={name} type="monotone" dataKey={name} stroke={CHART_COLORS[i % CHART_COLORS.length]} fill={`url(#grad-${stableGradId}-${i})`}
+            <Area key={name} type="monotone" dataKey={name} stroke={chartColors()[i % chartColors().length]} fill={`url(#grad-${stableGradId}-${i})`}
               strokeWidth={1.5} dot={false} isAnimationActive={false}
               name={isSingleSeries ? title : name} />
           ))}
@@ -113,6 +115,6 @@ export function MetricChart({ title, series, unit, height = 120, refLines }: { t
       </ResponsiveContainer>
     </div>
   )
-}
+})
 
 export const METRIC_RANGES = ['1h', '3h', '6h', '12h', '24h'] as const

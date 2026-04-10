@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,11 +15,18 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metricsapi "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
 // ─── Background Cache ────────────────────────────────────────────────
+
+// rsOwner holds the resolved owner of a ReplicaSet (typically a Deployment).
+type rsOwner struct {
+	Kind string
+	Name string
+}
 
 type clusterCache struct {
 	mu             sync.RWMutex
@@ -40,7 +48,15 @@ type clusterCache struct {
 	podMetrics     *metricsapi.PodMetricsList
 	pdbs           *policyv1.PodDisruptionBudgetList
 	replicasets    *appsv1.ReplicaSetList
+	pvcs           *corev1.PersistentVolumeClaimList
+	pvs            *corev1.PersistentVolumeList
+	storageClasses *storagev1.StorageClassList
+	configDrift    []interface{}
 	lastRefresh    time.Time
+
+	// Pre-computed lookup maps (rebuilt each refresh cycle).
+	podMetricsMap map[string][2]int64          // "ns/name" → [cpuMillis, memMiB]
+	rsOwners      map[string]rsOwner           // "ns/rsName" → resolved owner
 }
 
 type configMeta struct {
@@ -77,6 +93,9 @@ func (c *clusterCache) refresh() {
 	var podMetrics *metricsapi.PodMetricsList
 	var pdbs *policyv1.PodDisruptionBudgetList
 	var rsList *appsv1.ReplicaSetList
+	var pvcList *corev1.PersistentVolumeClaimList
+	var pvList *corev1.PersistentVolumeList
+	var scList *storagev1.StorageClassList
 
 	storeBatch := func() {
 		c.mu.Lock()
@@ -99,6 +118,9 @@ func (c *clusterCache) refresh() {
 		if podMetrics != nil { c.podMetrics = podMetrics }
 		if pdbs != nil { c.pdbs = pdbs }
 		if rsList != nil { c.replicasets = rsList }
+		if pvcList != nil { c.pvcs = pvcList }
+		if pvList != nil { c.pvs = pvList }
+		if scList != nil { c.storageClasses = scList }
 		c.lastRefresh = time.Now()
 	}
 
@@ -131,24 +153,28 @@ func (c *clusterCache) refresh() {
 	wg1.Wait()
 	storeBatch()
 
+	// Pre-build podMetricsMap — used by /api/pods, /api/workloads, /api/nodes.
+	pm := map[string][2]int64{}
 	if podMetrics != nil {
-		pm := map[string][2]int64{}
 		for _, m := range podMetrics.Items {
 			var cpu, mem int64
-			for _, c := range m.Containers {
-				cpu += c.Usage.Cpu().MilliValue()
-				mem += c.Usage.Memory().Value() / (1024 * 1024)
+			for _, ct := range m.Containers {
+				cpu += ct.Usage.Cpu().MilliValue()
+				mem += ct.Usage.Memory().Value() / (1024 * 1024)
 			}
 			pm[m.Namespace+"/"+m.Name] = [2]int64{cpu, mem}
 		}
 		podSparklines.record(pm)
 	}
+	c.mu.Lock()
+	c.podMetricsMap = pm
+	c.mu.Unlock()
 
 	runtime.Gosched()
 
-	// Batch 2: workloads + events
+	// Batch 2: workloads + events + ConfigMaps metadata (lightweight)
 	var wg2 sync.WaitGroup
-	wg2.Add(6)
+	wg2.Add(7)
 	go func() {
 		defer wg2.Done()
 		deps, _ = clientset.AppsV1().Deployments("").List(ctx, metav1.ListOptions{})
@@ -164,20 +190,12 @@ func (c *clusterCache) refresh() {
 	go func() { defer wg2.Done(); events, _ = clientset.CoreV1().Events("").List(ctx, metav1.ListOptions{}) }()
 	go func() { defer wg2.Done(); rsList, _ = clientset.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{}) }()
 	go func() { defer wg2.Done(); pdbs, _ = clientset.PolicyV1().PodDisruptionBudgets("").List(ctx, metav1.ListOptions{}) }()
-	wg2.Wait()
-	storeBatch()
-	runtime.Gosched()
-
-	// Batch 3: secondary resources — configs, secrets, ingresses, HPAs
-	var wg3 sync.WaitGroup
-	wg3.Add(4)
-	go func() { defer wg3.Done(); ings, _ = clientset.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{}) }()
-	go func() { defer wg3.Done(); hpas, _ = clientset.AutoscalingV2().HorizontalPodAutoscalers("").List(ctx, metav1.ListOptions{}) }()
 	go func() {
-		defer wg3.Done()
+		defer wg2.Done()
 		if result, err := clientset.CoreV1().ConfigMaps("").List(ctx, metav1.ListOptions{}); err == nil {
 			meta := make([]configMeta, 0, len(result.Items))
 			for _, cm := range result.Items {
+				if cm.Name == "kube-root-ca.crt" { continue }
 				keys := make([]string, 0, len(cm.Data)+len(cm.BinaryData))
 				for k := range cm.Data { keys = append(keys, k) }
 				for k := range cm.BinaryData { keys = append(keys, k+" (binary)") }
@@ -196,12 +214,43 @@ func (c *clusterCache) refresh() {
 			cmMeta = meta
 		}
 	}()
+	wg2.Wait()
+	storeBatch()
+
+	// Pre-build ReplicaSet → owner map so /api/pods can resolve
+	// pod → RS → Deployment in O(1) instead of O(pods × replicaSets).
+	rsMap := map[string]rsOwner{}
+	if rsList != nil {
+		for _, rs := range rsList.Items {
+			for _, ref := range rs.OwnerReferences {
+				if ref.Controller != nil && *ref.Controller {
+					rsMap[rs.Namespace+"/"+rs.Name] = rsOwner{Kind: ref.Kind, Name: ref.Name}
+					break
+				}
+			}
+		}
+	}
+	c.mu.Lock()
+	c.rsOwners = rsMap
+	c.mu.Unlock()
+
+	runtime.Gosched()
+
+	// Batch 3: secondary resources — Secrets (heavy binary), ingresses, HPAs, storage
+	var wg3 sync.WaitGroup
+	wg3.Add(6)
+	go func() { defer wg3.Done(); ings, _ = clientset.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg3.Done(); hpas, _ = clientset.AutoscalingV2().HorizontalPodAutoscalers("").List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg3.Done(); pvcList, _ = clientset.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg3.Done(); pvList, _ = clientset.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{}) }()
+	go func() { defer wg3.Done(); scList, _ = clientset.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{}) }()
 	go func() {
 		defer wg3.Done()
 		if result, err := clientset.CoreV1().Secrets("").List(ctx, metav1.ListOptions{}); err == nil {
 			meta := make([]configMeta, 0, len(result.Items))
 			for _, s := range result.Items {
 				if s.Type == corev1.SecretTypeServiceAccountToken { continue }
+				if strings.HasPrefix(string(s.Type), "helm.sh/") { continue }
 				keys := make([]string, 0, len(s.Data)+len(s.StringData))
 				for k := range s.Data { keys = append(keys, k) }
 				for k := range s.StringData { keys = append(keys, k) }
@@ -219,6 +268,13 @@ func (c *clusterCache) refresh() {
 	}()
 	wg3.Wait()
 	storeBatch()
+
+	// Compute config drift outside the lock — pods, cmMeta, secMeta are local
+	// variables that won't change, so no lock is needed for the computation.
+	drift := computeConfigDrift(pods, cmMeta, secMeta)
+	c.mu.Lock()
+	c.configDrift = drift
+	c.mu.Unlock()
 }
 
 func startCacheLoop() {

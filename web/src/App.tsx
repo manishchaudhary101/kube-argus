@@ -1,41 +1,43 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment, lazy, Suspense } from 'react'
 import type { UserInfo, SearchResult } from './types'
 import { AuthCtx } from './context/AuthContext'
 import { useTheme } from './context/ThemeContext'
 import { useFetch } from './hooks/useFetch'
 import { Spinner, UserAvatar } from './components/ui/Atoms'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { SearchModal } from './components/modals/SearchModal'
 import { AuditTrailModal } from './components/modals/AuditTrailModal'
 import { OnlineUsersModal } from './components/modals/OnlineUsersModal'
+import { SettingsModal } from './components/modals/SettingsModal'
 import { InfoPopover } from './components/modals/InfoPopover'
 import { UserMenuDropdown } from './layout/UserMenuDropdown'
 import { NamespacePicker } from './layout/NamespacePicker'
 import { TABS, parseRoute } from './routing'
 import type { TabId } from './routing'
 
-import { OverviewView } from './components/views/OverviewView'
-import { NodesView } from './components/views/NodesView'
-import { WorkloadsView } from './components/views/WorkloadsView'
-import { WorkloadDetailView } from './components/views/WorkloadDetailView'
-import { PodsView } from './components/views/PodsView'
-import { PodDetailView } from './components/views/PodDetailView'
-import { NodeDescribeView } from './components/views/NodeDescribeView'
-import { ServicesView } from './components/views/ServicesView'
-import { IngressesView } from './components/views/IngressesView'
-import { IngressDetailView } from './components/views/IngressesView'
-import { EventsView } from './components/views/EventsView'
-import { TroubledPodsView } from './components/views/TroubledPodsView'
-import { SpotInterruptionsView } from './components/views/SpotInterruptionsView'
-import { PodResilienceView } from './components/views/SpotInterruptionsView'
-import { TopologySpreadView } from './components/views/TopologySpreadView'
-import { HPAView } from './components/views/HPAView'
-import { ConfigView } from './components/views/ConfigView'
-import { PVCsView } from './components/views/PVCsView'
-import { SpotAdvisorView } from './components/views/SpotAdvisorView'
-import { CronJobDetailView } from './components/views/CronJobDetailView'
-import { ServiceDetailView } from './components/views/ServiceDetailView'
-import { HPADetailView } from './components/views/HPADetailView'
-import { JITRequestsModal } from './components/views/JITRequestsView'
+const OverviewView = lazy(() => import('./components/views/OverviewView').then(m => ({ default: m.OverviewView })))
+const NodesView = lazy(() => import('./components/views/NodesView').then(m => ({ default: m.NodesView })))
+const WorkloadsView = lazy(() => import('./components/views/WorkloadsView').then(m => ({ default: m.WorkloadsView })))
+const WorkloadDetailView = lazy(() => import('./components/views/WorkloadDetailView').then(m => ({ default: m.WorkloadDetailView })))
+const PodsView = lazy(() => import('./components/views/PodsView').then(m => ({ default: m.PodsView })))
+const PodDetailView = lazy(() => import('./components/views/PodDetailView').then(m => ({ default: m.PodDetailView })))
+const NodeDescribeView = lazy(() => import('./components/views/NodeDescribeView').then(m => ({ default: m.NodeDescribeView })))
+const ServicesView = lazy(() => import('./components/views/ServicesView').then(m => ({ default: m.ServicesView })))
+const IngressesView = lazy(() => import('./components/views/IngressesView').then(m => ({ default: m.IngressesView })))
+const IngressDetailView = lazy(() => import('./components/views/IngressesView').then(m => ({ default: m.IngressDetailView })))
+const EventsView = lazy(() => import('./components/views/EventsView').then(m => ({ default: m.EventsView })))
+const TroubledPodsView = lazy(() => import('./components/views/TroubledPodsView').then(m => ({ default: m.TroubledPodsView })))
+const SpotInterruptionsView = lazy(() => import('./components/views/SpotInterruptionsView').then(m => ({ default: m.SpotInterruptionsView })))
+const PodResilienceView = lazy(() => import('./components/views/SpotInterruptionsView').then(m => ({ default: m.PodResilienceView })))
+const TopologySpreadView = lazy(() => import('./components/views/TopologySpreadView').then(m => ({ default: m.TopologySpreadView })))
+const HPAView = lazy(() => import('./components/views/HPAView').then(m => ({ default: m.HPAView })))
+const ConfigView = lazy(() => import('./components/views/ConfigView').then(m => ({ default: m.ConfigView })))
+const PVCsView = lazy(() => import('./components/views/PVCsView').then(m => ({ default: m.PVCsView })))
+const SpotAdvisorView = lazy(() => import('./components/views/SpotAdvisorView').then(m => ({ default: m.SpotAdvisorView })))
+const CronJobDetailView = lazy(() => import('./components/views/CronJobDetailView').then(m => ({ default: m.CronJobDetailView })))
+const ServiceDetailView = lazy(() => import('./components/views/ServiceDetailView').then(m => ({ default: m.ServiceDetailView })))
+const HPADetailView = lazy(() => import('./components/views/HPADetailView').then(m => ({ default: m.HPADetailView })))
+const JITRequestsModal = lazy(() => import('./components/views/JITRequestsView').then(m => ({ default: m.JITRequestsModal })))
 
 function App() {
   const initial = parseRoute()
@@ -55,6 +57,7 @@ function App() {
   const [showAudit, setShowAudit] = useState(false)
   const [showOnlineUsers, setShowOnlineUsers] = useState(false)
   const [showJITRequests, setShowJITRequests] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [pendingJITCount, setPendingJITCount] = useState(0)
   const [troubledSub, setTroubledSub] = useState<'pods' | 'spot' | 'resilience'>('pods')
   const [troubledExpanded, setTroubledExpanded] = useState(false)
@@ -203,7 +206,7 @@ function App() {
           <h1 className="text-2xl font-extrabold tracking-wider text-white mb-1">KUBE-<span className="text-neon-cyan glow-cyan">ARGUS</span></h1>
           <p className="text-xs text-gray-500 mb-6">Kubernetes Cluster Dashboard</p>
           {authModeHint === 'google' ? (
-            <a href="/auth/login" className="inline-flex items-center gap-3 rounded-xl bg-white/[.06] border border-white/10 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-white/10 hover:border-white/20 no-underline">
+            <a href="/auth/login" className="inline-flex items-center gap-3 rounded-xl bg-hull-800 border border-hull-600 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-hull-700 hover:border-hull-600 no-underline">
               <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -260,7 +263,8 @@ function App() {
         {showSearch && <SearchModal onClose={() => setShowSearch(false)} onSelect={handleSearchSelect} />}
         {showAudit && <AuditTrailModal onClose={() => setShowAudit(false)} />}
         {showOnlineUsers && <OnlineUsersModal currentEmail={userInfo.email} onClose={() => setShowOnlineUsers(false)} />}
-        {showJITRequests && <JITRequestsModal onClose={() => setShowJITRequests(false)} />}
+        {showJITRequests && <Suspense fallback={null}><JITRequestsModal onClose={() => setShowJITRequests(false)} /></Suspense>}
+        {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 
         {!sideOpen && <div className="fixed left-0 top-0 z-30 h-full w-2 cursor-pointer" onMouseEnter={() => setSideOpen(true)} />}
 
@@ -319,7 +323,7 @@ function App() {
         </aside>
 
         {detailContent ? (
-          <div className="flex flex-1 flex-col overflow-hidden">{detailContent}</div>
+          <div className="flex flex-1 flex-col overflow-hidden"><ErrorBoundary><Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner /></div>}>{detailContent}</Suspense></ErrorBoundary></div>
         ) : (
         <div className="flex flex-1 flex-col overflow-hidden">
           <header className="shrink-0 glass border-0 border-b border-hull-700/40 px-3 py-2.5 relative z-40">
@@ -367,13 +371,14 @@ function App() {
                     </div>
                     <svg className="hidden sm:block text-gray-600" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
-                  {showUserMenu && <UserMenuDropdown email={userInfo.email} role={userInfo.role} onClose={() => setShowUserMenu(false)} onAudit={() => { setShowUserMenu(false); setShowAudit(true) }} onOnlineUsers={() => { setShowUserMenu(false); setShowOnlineUsers(true) }} onAccessRequests={() => { setShowUserMenu(false); setShowJITRequests(true) }} pendingJITCount={pendingJITCount} containerRef={userMenuRef} />}
+                  {showUserMenu && <UserMenuDropdown email={userInfo.email} role={userInfo.role} onClose={() => setShowUserMenu(false)} onAudit={() => { setShowUserMenu(false); setShowAudit(true) }} onOnlineUsers={() => { setShowUserMenu(false); setShowOnlineUsers(true) }} onAccessRequests={() => { setShowUserMenu(false); setShowJITRequests(true) }} onSettings={() => { setShowUserMenu(false); setShowSettings(true) }} pendingJITCount={pendingJITCount} containerRef={userMenuRef} />}
                 </div>
               </div>
             </div>
           </header>
 
           <main className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+            <ErrorBoundary><Suspense fallback={<div className="flex h-32 items-center justify-center"><Spinner /></div>}>
             {tab === 'overview' && <OverviewView onNodeTap={(name) => { setNodeTarget(name) }} onTab={(t, kind) => { setTab(t as TabId); if (t === 'workloads') setWorkloadKind(kind || ''); }} />}
             {tab === 'nodes' && <NodesView onNode={(name) => setNodeTarget(name)} poolFilter={nodePool} onPoolChange={setNodePool} />}
             {tab === 'workloads' && <WorkloadsView namespace={ns} initialKind={workloadKind} onWorkload={(ns, name, kind) => setWorkloadTarget({ ns, name, kind })} />}
@@ -389,6 +394,7 @@ function App() {
           {tab === 'troubled' && troubledSub === 'spot' && <SpotInterruptionsView onNode={(name) => setNodeTarget(name)} hiddenReasons={spotHiddenReasons} onToggleReason={(r) => setSpotHiddenReasons(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])} />}
           {tab === 'troubled' && troubledSub === 'resilience' && <PodResilienceView />}
           {tab === 'topology' && <TopologySpreadView />}
+            </Suspense></ErrorBoundary>
           </main>
         </div>
         )}

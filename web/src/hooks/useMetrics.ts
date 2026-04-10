@@ -3,7 +3,10 @@ import { useState, useEffect } from 'react'
 export type MetricSeries = { name: string; values: [number, number][] }
 export type MetricsData = Record<string, MetricSeries[]>
 
-export const CHART_COLORS = ['#06b6d4', '#f59e0b', '#22c55e', '#a78bfa', '#f87171', '#38bdf8', '#facc15', '#4ade80', '#c084fc', '#fb923c']
+const isLightTheme = () => document.documentElement.getAttribute('data-theme') === 'notion'
+const DARK_CHART_COLORS  = ['#06b6d4', '#f59e0b', '#22c55e', '#a78bfa', '#f87171', '#38bdf8', '#facc15', '#4ade80', '#c084fc', '#fb923c']
+const LIGHT_CHART_COLORS = ['#0891b2', '#b45309', '#059669', '#7c3aed', '#dc2626', '#0284c7', '#a16207', '#16a34a', '#9333ea', '#c2410c']
+export function chartColors() { return isLightTheme() ? LIGHT_CHART_COLORS : DARK_CHART_COLORS }
 
 export function useMetrics(url: string, timeRange: string) {
   const [data, setData] = useState<MetricsData | null>(null)

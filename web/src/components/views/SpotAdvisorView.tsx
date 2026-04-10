@@ -31,7 +31,10 @@ export function CostAllocationPanel() {
     return mul * (a.monthlyCost - b.monthlyCost)
   })
   const nsTop10 = nsSorted.slice(0, 10)
-  const colors = ['#06d6e0', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16']
+  const isLight = document.documentElement.getAttribute('data-theme') === 'notion'
+  const colors = isLight
+    ? ['#0891b2', '#059669', '#b45309', '#dc2626', '#7c3aed', '#be185d', '#0d9488', '#c2410c', '#4f46e5', '#4d7c0f']
+    : ['#06d6e0', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16']
 
   const toggleNsSort = (key: 'monthlyCost' | 'namespace') => {
     if (nsSortKey === key) setNsSortAsc(!nsSortAsc)

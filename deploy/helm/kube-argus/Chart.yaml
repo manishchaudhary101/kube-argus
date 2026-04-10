@@ -2,8 +2,8 @@ apiVersion: v2
 name: kube-argus
 description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
-version: 1.2.4
-appVersion: "1.2.4"
+version: 1.2.5
+appVersion: "1.2.5"
 keywords:
   - kubernetes
   - dashboard
@@ -23,17 +23,33 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
     - kind: added
-      description: "Workload restart with JIT - StatefulSets and DaemonSets can now be restarted, viewers request access via JIT approval"
+      description: "Slack notifications for JIT access requests with interactive Approve/Deny buttons"
     - kind: added
-      description: "Light theme redesign - fresh blue/emerald/rose/violet palette with cool slate backgrounds"
+      description: "Dashboard Settings modal for configuring Slack integration (webhook URL and signing secret)"
+    - kind: added
+      description: "Node allocated resources showing pod requests/limits with overcommit warnings"
+    - kind: added
+      description: "Pod log viewer with search, configurable tail size, and error/warning line highlighting"
+    - kind: added
+      description: "Online users expanded to 24h window with Online/Away/Offline status groups"
+    - kind: added
+      description: "Audit trail Access Requests filter tab and immediate persistence"
+    - kind: changed
+      description: "Helm image tag defaults to Chart appVersion instead of latest"
+    - kind: changed
+      description: "Code splitting with React.lazy and manual chunk splitting for faster initial load"
+    - kind: changed
+      description: "Prometheus query cache (30s TTL) and pre-computed lookup maps for O(1) pod resolution"
+    - kind: changed
+      description: "SWR client-side cache eliminates loading flicker on view revisits"
     - kind: fixed
-      description: "Auth crash when OIDC not configured - returns 500 instead of nil pointer panic"
+      description: "All API errors now return JSON instead of plain text, preventing frontend parse failures"
     - kind: fixed
-      description: "Contextual JIT buttons - Request Shell Access, Request Trigger Access, Request Restart"
+      description: "Kubernetes NotFound errors return 404 instead of 500 for terminated nodes, pods, and workloads"
     - kind: fixed
-      description: "CronJob JIT modal no longer shifts page content when opened"
-    - kind: security
-      description: "Upgraded vite to 8.0.5 fixing CVE in versions 8.0.0-8.0.4"
+      description: "Audit trail no longer generates false session resume login events"
+    - kind: fixed
+      description: "Light theme chart colors and smooth theme transition animations"
   artifacthub.io/links: |
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus

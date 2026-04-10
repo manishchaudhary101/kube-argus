@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +40,69 @@ type jitRequest struct {
 var jitStore struct {
 	mu       sync.Mutex
 	requests []jitRequest
+}
+
+func jitResourceStr(r *jitRequest) string {
+	s := "Namespace " + r.Namespace
+	if r.OwnerKind != "" && r.OwnerName != "" {
+		s += ", " + r.OwnerKind + " " + r.OwnerName
+	} else if r.Pod != "" {
+		s += ", Pod " + r.Pod
+	}
+	return s
+}
+
+var errJITNotFound = fmt.Errorf("request not found")
+
+// jitApprove approves a pending JIT request. Returns an error if not found or not pending.
+func jitApprove(id, approver, ip string) error {
+	jitStore.mu.Lock()
+	req := jitFindByID(id)
+	if req == nil {
+		jitStore.mu.Unlock()
+		return errJITNotFound
+	}
+	if req.Status != "pending" {
+		jitStore.mu.Unlock()
+		return fmt.Errorf("can only approve pending requests (current: %s)", req.Status)
+	}
+	dur, err := time.ParseDuration(req.Duration)
+	if err != nil {
+		jitStore.mu.Unlock()
+		return fmt.Errorf("invalid duration")
+	}
+	exp := time.Now().Add(dur)
+	req.Status = "active"
+	req.ApprovedBy = approver
+	req.ExpiresAt = &exp
+	jitStore.mu.Unlock()
+
+	auditRecord(approver, "admin", "jit.approve", jitResourceStr(req), fmt.Sprintf("for %s, duration: %s", req.Email, req.Duration), ip)
+	slog.Info("jit: request approved", "id", id, "approved_by", approver, "duration", req.Duration)
+	go jitPersist()
+	return nil
+}
+
+// jitDeny denies a pending JIT request. Returns an error if not found or not pending.
+func jitDeny(id, approver, ip string) error {
+	jitStore.mu.Lock()
+	req := jitFindByID(id)
+	if req == nil {
+		jitStore.mu.Unlock()
+		return errJITNotFound
+	}
+	if req.Status != "pending" {
+		jitStore.mu.Unlock()
+		return fmt.Errorf("can only deny pending requests (current: %s)", req.Status)
+	}
+	req.Status = "denied"
+	req.ApprovedBy = approver
+	jitStore.mu.Unlock()
+
+	auditRecord(approver, "admin", "jit.deny", jitResourceStr(req), fmt.Sprintf("requester: %s", req.Email), ip)
+	slog.Info("jit: request denied", "id", id, "denied_by", approver)
+	go jitPersist()
+	return nil
 }
 
 const jitMaxRequests  = 500
@@ -293,13 +357,13 @@ func jitExpiryLoop() {
 				r.Status = "expired"
 				changed = true
 				slog.Info("jit: request expired", "id", r.ID, "email", r.Email, "namespace", r.Namespace)
-				auditRecord(r.Email, "viewer", "jit.expired", fmt.Sprintf("Namespace %s", r.Namespace), "auto-expired", "")
+				auditRecord(r.Email, "viewer", "jit.expired", jitResourceStr(r), "auto-expired", "")
 			}
 			if r.Status == "pending" && now.Sub(r.CreatedAt) > jitPendingTTL {
 				r.Status = "expired"
 				changed = true
 				slog.Info("jit: pending request timed out", "id", r.ID, "email", r.Email, "namespace", r.Namespace)
-				auditRecord(r.Email, "viewer", "jit.expired", fmt.Sprintf("Namespace %s", r.Namespace), "pending request timed out", "")
+				auditRecord(r.Email, "viewer", "jit.expired", jitResourceStr(r), "pending request timed out", "")
 			}
 		}
 		jitStore.mu.Unlock()
@@ -319,7 +383,7 @@ func apiJITRequests(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		apiJITList(w, r)
 	default:
-		http.Error(w, "method not allowed", 405)
+		je(w, "method not allowed", 405)
 	}
 }
 
@@ -333,11 +397,11 @@ func apiJITCreate(w http.ResponseWriter, r *http.Request) {
 		Duration  string `json:"duration"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid JSON", 400)
+		je(w, "invalid JSON", 400)
 		return
 	}
 	if body.Namespace == "" || body.Reason == "" || body.Duration == "" {
-		http.Error(w, "namespace, reason, and duration required", 400)
+		je(w, "namespace, reason, and duration required", 400)
 		return
 	}
 	if body.OwnerKind == "" && body.Pod != "" {
@@ -348,7 +412,7 @@ func apiJITCreate(w http.ResponseWriter, r *http.Request) {
 	if !validDurations[body.Duration] {
 		// Also accept any valid Go duration up to 7 days
 		if d, err := time.ParseDuration(body.Duration); err != nil || d <= 0 || d > 7*24*time.Hour {
-			http.Error(w, "duration must be a valid duration up to 7 days (e.g. 30m, 1h, 2h, 4h, 8h, 24h, 48h, 168h)", 400)
+			je(w, "duration must be a valid duration up to 7 days (e.g. 30m, 1h, 2h, 4h, 8h, 24h, 48h, 168h)", 400)
 			return
 		}
 	}
@@ -382,8 +446,15 @@ func apiJITCreate(w http.ResponseWriter, r *http.Request) {
 
 	go jitPersist()
 
-	auditRecord(email, role, "jit.request", fmt.Sprintf("Namespace %s, Pod %s", body.Namespace, body.Pod), "duration: "+body.Duration+", reason: "+body.Reason, clientIP(r))
+	resource := fmt.Sprintf("Namespace %s", body.Namespace)
+	if body.OwnerKind != "" && body.OwnerName != "" {
+		resource += fmt.Sprintf(", %s %s", body.OwnerKind, body.OwnerName)
+	} else if body.Pod != "" {
+		resource += fmt.Sprintf(", Pod %s", body.Pod)
+	}
+	auditRecord(email, role, "jit.request", resource, "duration: "+body.Duration+", reason: "+body.Reason, clientIP(r))
 	slog.Info("jit: new request", "id", req.ID, "email", email, "namespace", body.Namespace, "pod", body.Pod)
+	slackNotifyJIT(req)
 
 	j(w, req)
 }
@@ -407,6 +478,7 @@ func apiJITList(w http.ResponseWriter, r *http.Request) {
 	}
 	jitStore.mu.Unlock()
 
+	sort.Slice(result, func(i, j int) bool { return result[i].CreatedAt.After(result[j].CreatedAt) })
 	j(w, result)
 }
 
@@ -433,20 +505,20 @@ func apiJITMyGrants(w http.ResponseWriter, r *http.Request) {
 // /api/jit/{id}/approve, /api/jit/{id}/deny, /api/jit/{id}/revoke
 func apiJITAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", 405)
+		je(w, "method not allowed", 405)
 		return
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/api/jit/")
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) != 2 {
-		http.Error(w, "invalid path", 400)
+		je(w, "invalid path", 400)
 		return
 	}
 	id, action := parts[0], parts[1]
 
 	if action != "approve" && action != "deny" && action != "revoke" {
-		http.Error(w, "invalid action", 400)
+		je(w, "invalid action", 400)
 		return
 	}
 
@@ -459,60 +531,55 @@ func apiJITAction(w http.ResponseWriter, r *http.Request) {
 		adminEmail = sd.Email
 	}
 
-	jitStore.mu.Lock()
-	req := jitFindByID(id)
-	if req == nil {
-		jitStore.mu.Unlock()
-		http.Error(w, "request not found", 404)
-		return
-	}
-
 	switch action {
 	case "approve":
-		if req.Status != "pending" {
-			jitStore.mu.Unlock()
-			http.Error(w, "can only approve pending requests", 400)
+		if err := jitApprove(id, adminEmail, clientIP(r)); err != nil {
+			code := 400
+			if err == errJITNotFound { code = 404 }
+			je(w, err.Error(), code)
 			return
 		}
-		dur, err := time.ParseDuration(req.Duration)
-		if err != nil {
-			jitStore.mu.Unlock()
-			http.Error(w, "invalid duration", 400)
-			return
-		}
-		exp := time.Now().Add(dur)
-		req.Status = "active"
-		req.ApprovedBy = adminEmail
-		req.ExpiresAt = &exp
+		jitStore.mu.Lock()
+		req := jitFindByID(id)
 		jitStore.mu.Unlock()
-		auditRecord(adminEmail, "admin", "jit.approve", fmt.Sprintf("Namespace %s", req.Namespace), fmt.Sprintf("for %s, duration: %s", req.Email, req.Duration), clientIP(r))
-		slog.Info("jit: request approved", "id", id, "approved_by", adminEmail, "duration", req.Duration)
+		if req != nil {
+			slackNotifyJITResult(req, "approve", adminEmail)
+		}
 
 	case "deny":
-		if req.Status != "pending" {
-			jitStore.mu.Unlock()
-			http.Error(w, "can only deny pending requests", 400)
+		if err := jitDeny(id, adminEmail, clientIP(r)); err != nil {
+			code := 400
+			if err == errJITNotFound { code = 404 }
+			je(w, err.Error(), code)
 			return
 		}
-		req.Status = "denied"
-		req.ApprovedBy = adminEmail
+		jitStore.mu.Lock()
+		req := jitFindByID(id)
 		jitStore.mu.Unlock()
-		auditRecord(adminEmail, "admin", "jit.deny", fmt.Sprintf("Namespace %s", req.Namespace), fmt.Sprintf("requester: %s", req.Email), clientIP(r))
-		slog.Info("jit: request denied", "id", id, "denied_by", adminEmail)
+		if req != nil {
+			slackNotifyJITResult(req, "deny", adminEmail)
+		}
 
 	case "revoke":
+		jitStore.mu.Lock()
+		req := jitFindByID(id)
+		if req == nil {
+			jitStore.mu.Unlock()
+			je(w, "request not found", 404)
+			return
+		}
 		if req.Status != "active" {
 			jitStore.mu.Unlock()
-			http.Error(w, "can only revoke active requests", 400)
+			je(w, "can only revoke active requests", 400)
 			return
 		}
 		req.Status = "revoked"
 		jitStore.mu.Unlock()
-		auditRecord(adminEmail, "admin", "jit.revoke", fmt.Sprintf("Namespace %s", req.Namespace), fmt.Sprintf("requester: %s", req.Email), clientIP(r))
+		auditRecord(adminEmail, "admin", "jit.revoke", jitResourceStr(req), fmt.Sprintf("requester: %s", req.Email), clientIP(r))
 		slog.Info("jit: request revoked", "id", id, "revoked_by", adminEmail)
+		go jitPersist()
+		slackNotifyJITResult(req, "revoke", adminEmail)
 	}
-
-	go jitPersist()
 
 	j(w, map[string]string{"status": "ok"})
 }

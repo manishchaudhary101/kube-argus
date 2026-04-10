@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func corsWrap(h http.Handler) http.Handler {
@@ -54,9 +56,26 @@ func gzipWrap(h http.Handler) http.Handler {
 	})
 }
 
+// jk8s writes a JSON error, returning 404 for k8s NotFound errors, 500 otherwise.
+func jk8s(w http.ResponseWriter, err error) {
+	if k8serr.IsNotFound(err) {
+		je(w, "not found", 404)
+	} else {
+		je(w, err.Error(), 500)
+	}
+}
+
+func je(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 func j(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		je(w, "encoding failed", http.StatusInternalServerError)
+	}
 }
 
 func jGz(w http.ResponseWriter, _ *http.Request, v interface{}) {

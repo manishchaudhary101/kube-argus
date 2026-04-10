@@ -128,9 +128,10 @@ func main() {
 	}
 	go jitExpiryLoop()
 
+	initSlack()
+
 	auditInitPersistence()
 	auditRestore()
-	go auditPersistLoop()
 
 	mux := http.NewServeMux()
 
@@ -182,6 +183,8 @@ func main() {
 	mux.HandleFunc("/api/jit/requests", apiJITRequests)
 	mux.HandleFunc("/api/jit/my-grants", apiJITMyGrants)
 	mux.HandleFunc("/api/jit/", apiJITAction)
+	mux.HandleFunc("/api/slack/interact", apiSlackInteract)
+	mux.HandleFunc("/api/settings/slack", apiSlackSettings)
 	mux.HandleFunc("/api/audit", apiAudit)
 	mux.HandleFunc("/api/online-users", func(w http.ResponseWriter, r *http.Request) {
 		if !requireAdmin(w, r) {

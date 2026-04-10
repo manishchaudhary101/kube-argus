@@ -34,7 +34,9 @@ var auditTrail struct {
 	entries []auditEntry
 }
 
-const auditMaxEntries = 1000
+const auditMaxBytes = 900_000 // safety cap: ~900KB to stay under ConfigMap 1MB limit
+
+var auditRetention time.Duration
 
 // ─── Online Users ───────────────────────────────────────────────────
 
@@ -62,7 +64,7 @@ func trackUser(email, role, ip string) {
 func getOnlineUsers() []onlineUser {
 	onlineUsers.mu.Lock()
 	defer onlineUsers.mu.Unlock()
-	cutoff := time.Now().Add(-5 * time.Minute)
+	cutoff := time.Now().Add(-24 * time.Hour)
 	out := make([]onlineUser, 0)
 	for k, u := range onlineUsers.users {
 		if u.LastSeen.Before(cutoff) {
@@ -81,13 +83,24 @@ func auditRecord(actor, role, action, resource, detail, ip string) {
 		Action: action, Resource: resource, Detail: detail, IP: ip,
 	}
 	auditTrail.mu.Lock()
-	auditTrail.entries = append([]auditEntry{e}, auditTrail.entries...)
-	if len(auditTrail.entries) > auditMaxEntries {
-		auditTrail.entries = auditTrail.entries[:auditMaxEntries]
-	}
-	auditDirty = true
+	auditTrail.entries = append(auditTrail.entries, e)
+	auditTrail.entries = auditTrimExpired(auditTrail.entries)
 	auditTrail.mu.Unlock()
 	slog.Info("audit", "actor", actor, "action", action, "resource", resource, "detail", detail, "ip", ip)
+	go auditPersist()
+}
+
+// auditTrimExpired removes entries older than the retention period.
+func auditTrimExpired(entries []auditEntry) []auditEntry {
+	cutoff := time.Now().Add(-auditRetention)
+	n := 0
+	for _, e := range entries {
+		if !e.Time.Before(cutoff) {
+			entries[n] = e
+			n++
+		}
+	}
+	return entries[:n]
 }
 
 // ─── Audit ConfigMap Persistence ─────────────────────────────────────
@@ -95,7 +108,6 @@ func auditRecord(actor, role, action, resource, detail, ip string) {
 var (
 	auditCMName    string
 	auditPersistOn bool
-	auditDirty     bool
 )
 
 func auditInitPersistence() {
@@ -103,8 +115,17 @@ func auditInitPersistence() {
 	if auditCMName == "" {
 		auditCMName = "kube-argus-audit"
 	}
+
+	days := 15
+	if v := os.Getenv("AUDIT_RETENTION_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			days = n
+		}
+	}
+	auditRetention = time.Duration(days) * 24 * time.Hour
+
 	auditPersistOn = true
-	slog.Info("audit: persistence enabled", "configmap", jitCMNamespace+"/"+auditCMName)
+	slog.Info("audit: persistence enabled", "configmap", jitCMNamespace+"/"+auditCMName, "retention_days", days)
 }
 
 func auditRestore() {
@@ -134,6 +155,7 @@ func auditRestore() {
 		return
 	}
 
+	loaded = auditTrimExpired(loaded)
 	auditTrail.mu.Lock()
 	auditTrail.entries = loaded
 	auditTrail.mu.Unlock()
@@ -146,15 +168,21 @@ func auditPersist() {
 	}
 
 	auditTrail.mu.Lock()
+	auditTrail.entries = auditTrimExpired(auditTrail.entries)
 	snapshot := make([]auditEntry, len(auditTrail.entries))
 	copy(snapshot, auditTrail.entries)
-	auditDirty = false
 	auditTrail.mu.Unlock()
 
 	raw, err := json.Marshal(snapshot)
 	if err != nil {
 		slog.Error("audit: persist marshal failed", "error", err)
 		return
+	}
+
+	// Drop oldest entries until we fit under the ConfigMap size limit.
+	for len(raw) > auditMaxBytes && len(snapshot) > 0 {
+		snapshot = snapshot[:len(snapshot)-1]
+		raw, _ = json.Marshal(snapshot)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -172,11 +200,13 @@ func auditPersist() {
 		}
 		if _, err := clientset.CoreV1().ConfigMaps(jitCMNamespace).Create(ctx, newCM, metav1.CreateOptions{}); err != nil {
 			slog.Error("audit: persist create failed", "error", err)
+			auditMarkDirty()
 		}
 		return
 	}
 	if err != nil {
 		slog.Error("audit: persist get failed", "error", err)
+		auditMarkDirty()
 		return
 	}
 
@@ -186,6 +216,7 @@ func auditPersist() {
 	cm.Data["audit.json"] = string(raw)
 
 	if _, err := clientset.CoreV1().ConfigMaps(jitCMNamespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
+		auditMarkDirty()
 		if k8serr.IsConflict(err) {
 			slog.Warn("audit: persist conflict, will retry next cycle")
 			return
@@ -194,13 +225,8 @@ func auditPersist() {
 	}
 }
 
-func auditPersistLoop() {
-	for {
-		time.Sleep(60 * time.Second)
-		if auditDirty {
-			auditPersist()
-		}
-	}
+func auditMarkDirty() {
+	go auditPersist()
 }
 
 func clientIP(r *http.Request) string {
@@ -219,6 +245,7 @@ func apiAudit(w http.ResponseWriter, r *http.Request) {
 	src := make([]auditEntry, len(auditTrail.entries))
 	copy(src, auditTrail.entries)
 	auditTrail.mu.Unlock()
+	sort.Slice(src, func(i, j int) bool { return src[i].Time.After(src[j].Time) })
 	if action != "" {
 		filtered := make([]auditEntry, 0)
 		for _, e := range src {
@@ -228,7 +255,7 @@ func apiAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := 200
 	if l := r.URL.Query().Get("limit"); l != "" {
-		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= auditMaxEntries { limit = n }
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 5000 { limit = n }
 	}
 	if len(src) > limit { src = src[:limit] }
 	j(w, src)
