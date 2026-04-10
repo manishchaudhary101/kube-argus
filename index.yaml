@@ -4,6 +4,75 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: "Slack notifications for JIT access requests with interactive Approve/Deny buttons"
+        - kind: added
+          description: "Dashboard Settings modal for configuring Slack integration (webhook URL and signing secret)"
+        - kind: added
+          description: "Node allocated resources showing pod requests/limits with overcommit warnings"
+        - kind: added
+          description: "Pod log viewer with search, configurable tail size, and error/warning line highlighting"
+        - kind: added
+          description: "Online users expanded to 24h window with Online/Away/Offline status groups"
+        - kind: added
+          description: "Audit trail Access Requests filter tab and immediate persistence"
+        - kind: changed
+          description: "Helm image tag defaults to Chart appVersion instead of latest"
+        - kind: changed
+          description: "Code splitting with React.lazy and manual chunk splitting for faster initial load"
+        - kind: changed
+          description: "Prometheus query cache (30s TTL) and pre-computed lookup maps for O(1) pod resolution"
+        - kind: changed
+          description: "SWR client-side cache eliminates loading flicker on view revisits"
+        - kind: fixed
+          description: "All API errors now return JSON instead of plain text, preventing frontend parse failures"
+        - kind: fixed
+          description: "Kubernetes NotFound errors return 404 instead of 500 for terminated nodes, pods, and workloads"
+        - kind: fixed
+          description: "Audit trail no longer generates false session resume login events"
+        - kind: fixed
+          description: "Light theme chart colors and smooth theme transition animations"
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: GitHub
+          url: https://github.com/manishchaudhary101/kube-argus
+      artifacthub.io/screenshots: |
+        - title: Cluster Overview — Real-time node and pod status
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png
+        - title: Node Detail — Pod heatmap, conditions, and drain wizard
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-node-detail.png
+        - title: Pod Metrics — Prometheus CPU and memory charts
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-pod-metrics.png
+        - title: Spot Advisor — Cost optimization and instance recommendations
+          url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
+    apiVersion: v2
+    appVersion: 1.2.5
+    created: "2026-04-10T05:10:13.770537895Z"
+    description: Real-time Kubernetes dashboard with live state, cost analysis, and
+      AI-powered diagnostics
+    digest: 1e2621f7b8e4629474f36aa256ba6fd20824d41da1e240fb6a6301fa230ab2bb
+    home: https://github.com/manishchaudhary101/kube-argus
+    icon: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/logo.svg
+    keywords:
+    - kubernetes
+    - dashboard
+    - monitoring
+    - sre
+    - jit-access
+    - security
+    maintainers:
+    - email: imanishchaudhary@gmail.com
+      name: manishchaudhary101
+      url: https://github.com/manishchaudhary101
+    name: kube-argus
+    sources:
+    - https://github.com/manishchaudhary101/kube-argus
+    type: application
+    urls:
+    - https://manishchaudhary101.github.io/kube-argus/kube-argus-1.2.5.tgz
+    version: 1.2.5
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: "Workload restart with JIT - StatefulSets and DaemonSets can now be restarted, viewers request access via JIT approval"
         - kind: added
           description: "Light theme redesign - fresh blue/emerald/rose/violet palette with cool slate backgrounds"
@@ -30,7 +99,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.4
-    created: "2026-04-07T10:13:23.755364973Z"
+    created: "2026-04-10T05:10:13.76997243Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: 293e96a2e00786760fb02605884b478d336cd76f22033dbb6feb4cd477b10af2
@@ -95,7 +164,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.3
-    created: "2026-04-07T10:13:23.75475598Z"
+    created: "2026-04-10T05:10:13.769441533Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: c5602f94631843f18e8292b8f3dec21fb3ea3858e46acb04dd949833da8ca9df
@@ -148,7 +217,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.2
-    created: "2026-04-07T10:13:23.754087435Z"
+    created: "2026-04-10T05:10:13.768855207Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: 8eae692653d1e510187cda4d7fbecced66eb14e6dc5c557a9ea820e0dafa603f
@@ -199,7 +268,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.1
-    created: "2026-04-07T10:13:23.752660883Z"
+    created: "2026-04-10T05:10:13.768297777Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: a15d2ed0e8ae43acaf9a2de3382c86c76f846e9f8919094d78115fd446db5527
@@ -252,7 +321,7 @@ entries:
           url: https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png
     apiVersion: v2
     appVersion: 1.2.0
-    created: "2026-04-07T10:13:23.75203613Z"
+    created: "2026-04-10T05:10:13.767677119Z"
     description: Real-time Kubernetes dashboard with live state, cost analysis, and
       AI-powered diagnostics
     digest: d89054ea7a2fd00428d0cff5cae73298639402c85a9129fc910bb10fc0be57b6
@@ -276,4 +345,4 @@ entries:
     urls:
     - https://manishchaudhary101.github.io/kube-argus/kube-argus-1.2.0.tgz
     version: 1.2.0
-generated: "2026-04-07T10:13:23.751277448Z"
+generated: "2026-04-10T05:10:13.766908339Z"
