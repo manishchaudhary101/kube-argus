@@ -1,8 +1,6 @@
 # Kube-Argus Helm Chart
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/logo.svg" alt="Kube-Argus Logo" width="120">
-</p>
+![Kube-Argus](https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/logo.svg)
 
 The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.
 
@@ -10,32 +8,21 @@ Live cluster state, streaming pod logs, interactive shell, YAML editor, drain wi
 
 ## Screenshots
 
-<table>
-<tr>
-<td width="50%">
-<strong>Cluster Overview</strong> — Live node status, CPU/memory utilisation, top namespaces, and resource counts refreshed every 10 seconds.
-<br><br>
-<img src="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png" alt="Cluster Overview">
-</td>
-<td width="50%">
-<strong>Node Detail & Metrics</strong> — kubectl describe-style detail with Prometheus metrics, events, pod list, and admin actions (cordon, drain).
-<br><br>
-<img src="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-node-detail.png" alt="Node Detail and Metrics">
-</td>
-</tr>
-<tr>
-<td width="50%">
-<strong>Pod Metrics & Logs</strong> — Per-pod CPU/memory graphs, live log streaming, container selector, and AI-powered diagnosis.
-<br><br>
-<img src="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-pod-metrics.png" alt="Pod Metrics and Logs">
-</td>
-<td width="50%">
-<strong>Spot Advisor & Cost Analysis</strong> — Spot instance risk scoring, cluster cost breakdown, and intelligent consolidation recommendations.
-<br><br>
-<img src="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png" alt="Spot Advisor and Cost Analysis">
-</td>
-</tr>
-</table>
+**Cluster Overview** — Live node status, CPU/memory utilisation, top namespaces, and resource counts refreshed every 10 seconds.
+
+![Cluster Overview](https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png)
+
+**Node Detail & Metrics** — kubectl-describe-style detail with Prometheus metrics, events, pod list, and admin actions (cordon, drain).
+
+![Node Detail and Metrics](https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-node-detail.png)
+
+**Pod Metrics & Logs** — Per-pod CPU/memory graphs, live log streaming, container selector, and AI-powered diagnosis.
+
+![Pod Metrics and Logs](https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-pod-metrics.png)
+
+**Spot Advisor & Cost Analysis** — Spot instance risk scoring, cluster cost breakdown, and intelligent consolidation recommendations.
+
+![Spot Advisor and Cost Analysis](https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-spot-advisor.png)
 
 ## Quick Install
 

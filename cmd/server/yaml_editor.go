@@ -49,7 +49,30 @@ func apiYaml(w http.ResponseWriter, r *http.Request) {
 		case "ConfigMap":
 			obj, err = clientset.CoreV1().ConfigMaps(ns).Get(c, name, metav1.GetOptions{})
 		case "Secret":
-			obj, err = clientset.CoreV1().Secrets(ns).Get(c, name, metav1.GetOptions{})
+			var sec *corev1.Secret
+			sec, err = clientset.CoreV1().Secrets(ns).Get(c, name, metav1.GetOptions{})
+			if err == nil && sec != nil && !isAdmin(r) {
+				// Viewer is allowed to see what secrets exist (keys, type, metadata)
+				// but not the values. Replace each value with a placeholder that
+				// remains obviously redacted even after base64 decoding.
+				redacted := []byte("***REDACTED-NON-ADMIN***")
+				if len(sec.Data) > 0 {
+					masked := make(map[string][]byte, len(sec.Data))
+					for k := range sec.Data {
+						masked[k] = redacted
+					}
+					sec.Data = masked
+				}
+				if len(sec.StringData) > 0 {
+					for k := range sec.StringData {
+						sec.StringData[k] = "***REDACTED-NON-ADMIN***"
+					}
+				}
+				if sd, ok := r.Context().Value(userCtxKey).(*sessionData); ok && sd != nil {
+					auditRecord(sd.Email, sd.Role, "secret.view", fmt.Sprintf("Secret %s/%s", ns, name), "values redacted", clientIP(r))
+				}
+			}
+			obj = sec
 		case "HPA":
 			obj, err = clientset.AutoscalingV2().HorizontalPodAutoscalers(ns).Get(c, name, metav1.GetOptions{})
 		default:

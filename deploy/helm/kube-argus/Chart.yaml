@@ -2,8 +2,8 @@ apiVersion: v2
 name: kube-argus
 description: Real-time Kubernetes dashboard with live state, cost analysis, and AI-powered diagnostics
 type: application
-version: 1.2.6
-appVersion: "1.2.6"
+version: 1.2.7
+appVersion: "1.2.7"
 keywords:
   - kubernetes
   - dashboard
@@ -22,34 +22,12 @@ maintainers:
 annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
-    - kind: added
-      description: "Generic webhook notifications for JIT events with per-event filtering and HMAC-SHA256 signing"
-    - kind: added
-      description: "Audit trail consistency across pod replicas via read-merge-write ConfigMap and 10s sync"
-    - kind: added
-      description: "Real-time presence and audit deltas over WebSocket, replacing 5s polling"
-    - kind: added
-      description: "Shareable URL state across views (ns, sub-tab, kind, type query params)"
-    - kind: added
-      description: "Admin View as Viewer impersonation toggle in user menu"
+    - kind: security
+      description: "Viewers can no longer read Secret values via /api/yaml/Secret. Data and stringData fields are now redacted for non-admins; keys and metadata remain visible. Each viewer YAML fetch is audit-logged as secret.view."
+    - kind: fixed
+      description: "Helm README screenshots now render on ArtifactHub (replaced raw HTML table with plain markdown)"
     - kind: changed
-      description: "Cache rebuild now uses pointer slices for hot resources, eliminating per-rebuild value copies"
-    - kind: changed
-      description: "Prometheus query cache key step-aligned for stable hits within a step window"
-    - kind: changed
-      description: "Audit persistence debounced via dirty flag, eliminating per-record goroutine storm"
-    - kind: changed
-      description: "Optimistic feedback on workload restart, scale, CronJob trigger, and JIT approve buttons"
-    - kind: fixed
-      description: "WebSocket origin validated against dashboard host (closes CSRF-on-WS info-disclosure)"
-    - kind: fixed
-      description: "Presence WebSocket writes serialised per-connection (gorilla Conn race fix)"
-    - kind: fixed
-      description: "AI diagnose stream aborts upstream LLM call when client disconnects"
-    - kind: fixed
-      description: "Light theme readability for form inputs, modal scrims, and toasts"
-    - kind: fixed
-      description: "ErrorBoundary auto-reloads once on stale chunk-hash errors after deploys"
+      description: "Bumped moby/spdystream to v0.5.1 and postcss to >=8.5.10 (security advisories)"
   artifacthub.io/links: |
     - name: GitHub
       url: https://github.com/manishchaudhary101/kube-argus

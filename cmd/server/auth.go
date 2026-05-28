@@ -484,3 +484,14 @@ func requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	}
 	return true
 }
+
+// isAdmin returns true iff the request is from an admin user (or auth is off
+// and DEFAULT_ROLE=admin). Same semantics as requireAdmin but doesn't write a
+// 403 — use this when you want to branch on role rather than reject outright.
+func isAdmin(r *http.Request) bool {
+	if !authEnabled {
+		return defaultRole == "admin"
+	}
+	sd, ok := r.Context().Value(userCtxKey).(*sessionData)
+	return ok && sd != nil && sd.Role == "admin"
+}

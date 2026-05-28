@@ -2,6 +2,21 @@
 
 All notable changes to Kube-Argus will be documented in this file.
 
+## [v1.2.7] — 2026-05-10
+
+### 🔒 Security
+
+- **Secret values are no longer readable by viewers via the YAML endpoint.** Previously, `/api/configs/?kind=secret` correctly masked values for non-admins, but `/api/yaml/Secret/{ns}/{name}` returned the raw resource with `.data` base64-encoded — a viewer could fetch it and decode the values. Non-admin requests now have every `.data` / `.stringData` value replaced with a `***REDACTED-NON-ADMIN***` placeholder. Keys, type, labels, annotations remain visible so the resource shape is still inspectable. Each redacted fetch is recorded in the audit trail as `secret.view`.
+
+### 🐛 Fixes
+
+- **Helm README screenshots** now render on ArtifactHub. Replaced the raw HTML `<table>` block with plain markdown image syntax, which ArtifactHub's renderer doesn't strip. The annotation-driven sidebar gallery was already working; this makes the screenshots also appear inline in the README.
+
+### 🛠 Dependencies
+
+- Bumped `github.com/moby/spdystream` to `v0.5.1` (advisory).
+- Bumped `postcss` floor to `^8.5.10` (advisory); resolves to `8.5.14`.
+
 ## [v1.2.6] — 2026-05-10
 
 ### ⭐ New Features
