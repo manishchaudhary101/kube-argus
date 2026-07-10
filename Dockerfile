@@ -7,13 +7,14 @@ COPY web/ ./
 RUN npm run build
 
 # ── Stage 2: Build backend (native cross-compilation, no QEMU) ──────
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS backend
 ARG TARGETARCH
 RUN apk add --no-cache git
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/server/ ./cmd/server/
+COPY internal/ ./internal/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-s -w" -o kube-argus ./cmd/server
 
 # ── Stage 3: Final image ────────────────────────────────────────────
