@@ -23,6 +23,7 @@ jobs:
       - name: Copy landing page files
         run: |
           cp docs/index.html gh-pages/
+          cp docs/logo.svg gh-pages/ 2>/dev/null || true
           cp docs/screenshot-*.png gh-pages/ 2>/dev/null || true
 
       - name: Push to gh-pages
