@@ -395,8 +395,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## Star History
 
-## Star History
-
 <a href="https://www.star-history.com/?repos=manishchaudhary101%2Fkube-argus&type=date&legend=top-left">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=manishchaudhary101/kube-argus&type=date&theme=dark&legend=top-left&sealed_token=6kRSjeZeme5OgAa3dTS-nlG1S1pFSPwGF7gFJ7b36R6qNc0QgJr-jzSKGw3fFrK4r5Ik5jlyC_16pev0vsrNMsj1dJwEz4VDSb5KMuzZ36ws-dNugY2EzRFjAy2q7kvuqXv9D6C2xeOuupQ_7tJAmJKnDptphiJFgvtiYDpFnbrRJ_TSbu3zrJQSLGFx" />
