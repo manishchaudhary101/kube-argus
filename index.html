@@ -14,1070 +14,1361 @@
     content="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png">
   <meta property="og:url" content="https://manishchaudhary101.github.io/kube-argus/">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" type="image/svg+xml"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230c1322'/%3E%3Ctext x='32' y='26' text-anchor='middle' font-family='system-ui,sans-serif' font-weight='900' font-size='14' fill='%23ffffff' letter-spacing='1'%3EKUBE%3C/text%3E%3Ctext x='32' y='46' text-anchor='middle' font-family='system-ui,sans-serif' font-weight='900' font-size='12' fill='%2306d6e0' letter-spacing='1'%3EARGUS%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
   <style>
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #050810;
-      --surface: #0d1117;
-      --border: rgba(255, 255, 255, 0.06);
-      --cyan: #06d6e0;
-      --green: #00ff88;
-      --amber: #f59e0b;
-      --text: #e5e7eb;
-      --muted: #6b7280;
+      --bg: #0e0d0c;
+      --bg-soft: #14110f;
+      --bg-tint: #1a1714;
+      --surface: #16130f;
+      --border: rgba(245, 235, 215, 0.08);
+      --border-strong: rgba(245, 235, 215, 0.16);
+      --text: #f5ebd7;
+      --text-2: #e8dec9;
+      --text-muted: #a89c84;
+      --text-faint: #6c6356;
+      --code-bg: #1a1714;
+      --accent: #06d6e0;
+      --accent-warm: #22e8f2;
+      --accent-soft: rgba(6, 214, 224, 0.16);
+      --accent-deep: #058a92;
+      --olive: #93a05a;
+      --success: #93a05a;
+      --warning: #e8a23a;
+      --max-w: 1180px;
     }
 
+    html { scroll-behavior: smooth; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      letter-spacing: -0.005em;
       overflow-x: hidden;
     }
 
-    a {
-      color: var(--cyan);
-      text-decoration: none;
+    /* ─── Grain overlay (covers entire viewport, subtle) ─── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      background-image:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/></svg>");
+      opacity: 0.10;
+      mix-blend-mode: overlay;
     }
 
-    a:hover {
-      text-decoration: underline;
+    a { color: inherit; text-decoration: none; }
+    a:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+    code, pre, .mono {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      font-size: 13px;
     }
 
-    /* ── Keyframes ────────────────────────────── */
-    @keyframes fadeUp {
-      from {
-        opacity: 0;
-        transform: translateY(40px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+    .display {
+      font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+      font-optical-sizing: auto;
+      font-variation-settings: "SOFT" 30, "WONK" 0;
+      letter-spacing: -0.025em;
+      font-weight: 600;
     }
 
-    @keyframes scanline {
-      from {
-        top: -4px;
-      }
+    .wrap { max-width: var(--max-w); margin: 0 auto; padding: 0 28px; position: relative; }
 
-      to {
-        top: 100%;
-      }
+    /* ─── Reveal animation ────────────────────── */
+    .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.85s cubic-bezier(0.2, 0.6, 0.2, 1), transform 0.85s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    .reveal.in { opacity: 1; transform: none; }
+    .reveal-delay-1 { transition-delay: 0.08s; }
+    .reveal-delay-2 { transition-delay: 0.16s; }
+    .reveal-delay-3 { transition-delay: 0.24s; }
+    .reveal-delay-4 { transition-delay: 0.32s; }
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { opacity: 1; transform: none; transition: none; }
     }
 
-    @keyframes revealLine {
-      from {
-        width: 0;
-      }
-
-      to {
-        width: 100%;
-      }
+    /* ─── Nav ─────────────────────────────────── */
+    .nav {
+      position: sticky;
+      top: 0;
+      background: rgba(14, 13, 12, 0.78);
+      backdrop-filter: saturate(180%) blur(16px);
+      -webkit-backdrop-filter: saturate(180%) blur(16px);
+      border-bottom: 1px solid var(--border);
+      z-index: 50;
     }
-
-    @keyframes float {
-
-      0%,
-      100% {
-        transform: translateY(0)
-      }
-
-      50% {
-        transform: translateY(-12px)
-      }
-    }
-
-    @keyframes pulseRing {
-      0% {
-        transform: scale(0.8);
-        opacity: 0.6
-      }
-
-      50% {
-        transform: scale(1.4);
-        opacity: 0
-      }
-
-      100% {
-        transform: scale(0.8);
-        opacity: 0
-      }
-    }
-
-    @keyframes borderTravel {
-      0% {
-        background-position: 0% 0%
-      }
-
-      100% {
-        background-position: 200% 0%
-      }
-    }
-
-    @keyframes textShimmer {
-      0% {
-        background-position: -100% center
-      }
-
-      100% {
-        background-position: 200% center
-      }
-    }
-
-    @keyframes blink {
-
-      0%,
-      100% {
-        opacity: 1
-      }
-
-      50% {
-        opacity: 0
-      }
-    }
-
-    @keyframes gridFade {
-      0% {
-        opacity: 0.03
-      }
-
-      50% {
-        opacity: 0.06
-      }
-
-      100% {
-        opacity: 0.03
-      }
-    }
-
-    /* ── Hero ─────────────────────────────────── */
-    .hero {
-      min-height: 100vh;
+    .nav-inner {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 2rem 1.5rem;
+      justify-content: space-between;
+      padding: 16px 28px;
+      max-width: var(--max-w);
+      margin: 0 auto;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 17px;
+      color: var(--text);
+    }
+    .nav-logo:hover { text-decoration: none; }
+    .nav-logo .mark {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      display: block;
+      box-shadow: 0 0 0 1px var(--border);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-cta {
+      background: var(--text);
+      color: var(--bg) !important;
+      padding: 8px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .nav-cta:hover { text-decoration: none; background: white; }
+    @media (max-width: 760px) { .nav-links .desktop-only { display: none; } }
+
+    /* ─── Hero ───────────────────────────────── */
+    .hero {
       position: relative;
+      padding: 92px 0 56px;
       overflow: hidden;
     }
-
-    #particles {
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-    }
-
-    .hero-grid {
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      background-image:
-        linear-gradient(rgba(6, 214, 224, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(6, 214, 224, 0.03) 1px, transparent 1px);
-      background-size: 60px 60px;
-      animation: gridFade 8s ease-in-out infinite;
-    }
-
-    .hero-scan {
-      position: absolute;
-      left: 0;
-      width: 100%;
-      height: 4px;
-      z-index: 1;
-      background: linear-gradient(90deg, transparent, rgba(6, 214, 224, 0.4), transparent);
-      animation: scanline 6s linear infinite;
-      pointer-events: none;
-    }
-
     .hero-content {
+      max-width: 920px;
       position: relative;
       z-index: 2;
     }
-
-    /* logo */
-    .logo {
-      position: relative;
-      margin-bottom: 1.5rem;
-      animation: fadeUp 0.8s ease-out both;
-    }
-
-    .logo svg {
-      width: 72px;
-      height: 72px;
-      animation: float 5s ease-in-out infinite;
-      filter: drop-shadow(0 0 25px rgba(6, 214, 224, 0.35));
-    }
-
-    .logo-ring {
+    /* Atmospheric gradient orbs in corners */
+    .hero-orb {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 110px;
-      height: 110px;
-      margin: -55px 0 0 -55px;
-      border: 1px solid rgba(6, 214, 224, 0.2);
       border-radius: 50%;
-      animation: pulseRing 3s ease-in-out infinite;
+      filter: blur(80px);
+      opacity: 0.35;
+      pointer-events: none;
+      z-index: 0;
     }
-
-    .logo-ring:nth-child(3) {
-      animation-delay: 1s;
-      width: 140px;
-      height: 140px;
-      margin: -70px 0 0 -70px;
+    .hero-orb-1 {
+      top: -120px; left: -160px;
+      width: 520px; height: 520px;
+      background: radial-gradient(circle, rgba(6, 130, 145, 0.65), transparent 65%);
     }
-
-    /* title */
-    .title-wrap {
+    .hero-orb-2 {
+      top: 40%; right: -180px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(147, 160, 90, 0.55), transparent 65%);
+    }
+    .hero-orb-3 {
+      bottom: -100px; left: 35%;
+      width: 480px; height: 480px;
+      background: radial-gradient(circle, rgba(6, 214, 224, 0.42), transparent 65%);
+    }
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: rgba(245, 235, 215, 0.04);
+      padding: 7px 14px 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      margin-bottom: 36px;
+    }
+    .pulse-dot {
+      width: 7px; height: 7px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent);
       position: relative;
-      animation: fadeUp 0.8s ease-out 0.15s both;
-      display: inline-block;
+    }
+    .pulse-dot::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      animation: pulse 2.4s ease-out infinite;
+      opacity: 0;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.6); opacity: 0.7; }
+      80% { transform: scale(1.8); opacity: 0; }
+      100% { transform: scale(1.8); opacity: 0; }
     }
 
-    .title {
-      font-size: clamp(2.2rem, 5vw, 3.5rem);
-      font-weight: 900;
-      letter-spacing: 0.06em;
-      line-height: 1.1;
-      color: #fff;
+    h1.hero-title {
+      font-family: 'Fraunces', Georgia, serif;
+      font-optical-sizing: auto;
+      font-variation-settings: "SOFT" 30, "WONK" 0;
+      font-size: clamp(48px, 7.5vw, 92px);
+      line-height: 1.0;
+      letter-spacing: -0.03em;
+      font-weight: 600;
+      color: var(--text);
+      margin: 0;
     }
-
-    .title span {
-      background: linear-gradient(90deg, var(--cyan), var(--green), var(--cyan));
-      background-size: 200% auto;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: textShimmer 3s linear infinite;
+    h1.hero-title .accent {
+      color: var(--accent);
+      font-style: italic;
+      font-weight: 600;
     }
-
-    .title-line {
-      display: block;
-      height: 2px;
-      margin: 0.6rem auto 0;
-      background: linear-gradient(90deg, transparent, var(--cyan), var(--green), var(--cyan), transparent);
-      animation: revealLine 1.2s ease-out 0.8s both;
+    p.hero-sub {
+      max-width: 580px;
+      margin: 32px 0 0;
+      font-size: 18px;
+      color: var(--text-muted);
+      line-height: 1.55;
     }
-
-    .tagline {
-      font-size: clamp(0.95rem, 2.2vw, 1.15rem);
-      color: var(--muted);
-      max-width: 620px;
-      margin: 1rem auto 2rem;
-      line-height: 1.8;
-      animation: fadeUp 0.8s ease-out 0.3s both;
-    }
-
-    .badges {
+    .hero-cta {
       display: flex;
-      gap: 0.5rem;
+      gap: 12px;
+      margin-top: 40px;
       flex-wrap: wrap;
-      justify-content: center;
-      margin-bottom: 2rem;
-      animation: fadeUp 0.8s ease-out 0.4s both;
     }
-
-    .badges img {
-      height: 22px;
-    }
-
-    .buttons {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-bottom: 3rem;
-      animation: fadeUp 0.8s ease-out 0.5s both;
-    }
-
     .btn {
       display: inline-flex;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.8rem 2rem;
-      border-radius: 12px;
-      font-size: 0.95rem;
+      gap: 8px;
+      padding: 13px 26px;
+      border-radius: 999px;
       font-weight: 600;
-      transition: all 0.3s;
+      font-size: 14px;
+      letter-spacing: -0.005em;
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
       border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .btn:hover { text-decoration: none; }
+    .btn-primary {
+      background: var(--accent);
+      color: #062024;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(6, 214, 224, 0.2), 0 8px 24px -8px rgba(6, 214, 224, 0.35);
+    }
+    .btn-primary:hover { background: var(--accent-warm); transform: translateY(-1px); }
+    .btn-secondary {
+      background: rgba(245, 235, 215, 0.05);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+    }
+    .btn-secondary:hover { background: rgba(245, 235, 215, 0.09); transform: translateY(-1px); }
+
+    /* ─── Hero Image ─────────────────────────── */
+    .hero-image {
+      max-width: 1180px;
+      margin: 80px auto 0;
+      padding: 0 28px;
+      position: relative;
+    }
+    .hero-image::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 30%;
+      transform: translateX(-50%);
+      width: 80%;
+      height: 60%;
+      background: radial-gradient(50% 60% at 50% 50%, rgba(6, 214, 224, 0.22), transparent 65%);
+      pointer-events: none;
+      filter: blur(40px);
+      z-index: -1;
+    }
+    .frame {
+      border-radius: 18px;
+      border: 1px solid var(--border-strong);
+      overflow: hidden;
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.4),
+        0 30px 80px -20px rgba(0, 0, 0, 0.6);
+      background: #0a0a0a;
+      position: relative;
+    }
+    .frame .chrome {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 12px 18px;
+      background: #1a1714;
+      border-bottom: 1px solid var(--border);
+    }
+    .frame .chrome span {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+    .chrome .red { background: #ff5f57; }
+    .chrome .yellow { background: #febc2e; }
+    .chrome .green { background: #28c840; }
+    .frame .chrome .url {
+      flex: 1;
+      margin: 0 16px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-faint);
+    }
+    .frame img { width: 100%; display: block; }
+
+    /* ─── Screenshot marquee ────────────────── */
+    .screenshots {
+      margin-top: 88px;
+      overflow: hidden;
+      position: relative;
+      -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+              mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+    }
+    .screenshots::before {
+      content: '';
+      position: absolute;
+      inset: 20% 10% 0 10%;
+      background: radial-gradient(50% 60% at 50% 50%, rgba(6, 214, 224, 0.16), transparent 65%);
+      filter: blur(50px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .screenshots-track {
+      display: flex;
+      gap: 28px;
+      width: max-content;
+      animation: marquee 60s linear infinite;
+      padding: 0 14px;
+      position: relative;
+      z-index: 1;
+    }
+    .screenshots:hover .screenshots-track {
+      animation-play-state: paused;
+    }
+    .screenshot-card {
+      flex-shrink: 0;
+      width: min(82vw, 1080px);
+      border-radius: 16px;
+      border: 1px solid var(--border-strong);
+      overflow: hidden;
+      background: #0a0a0a;
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.4),
+        0 30px 80px -24px rgba(0, 0, 0, 0.55);
+    }
+    .screenshot-card .chrome {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 12px 18px;
+      background: #1a1714;
+      border-bottom: 1px solid var(--border);
+    }
+    .screenshot-card .chrome span {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+    .screenshot-card .chrome .url {
+      flex: 1;
+      margin: 0 16px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-faint);
+    }
+    .screenshot-card img { width: 100%; display: block; }
+    @keyframes marquee {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .screenshots-track { animation: none; }
+    }
+
+    /* ─── Logo strip ────────────────────────── */
+    .logos {
+      padding: 64px 0 24px;
+      border-top: 1px solid var(--border);
+    }
+    .logos-label {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-faint);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 28px;
+    }
+    .logos-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 52px;
+      flex-wrap: wrap;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--text-muted);
+      padding-bottom: 28px;
+    }
+    .logos-row span {
+      transition: color 0.15s ease;
+    }
+    .logos-row span:hover { color: var(--accent); }
+
+    /* ─── Section helpers ────────────────────── */
+    section { padding: 110px 0; position: relative; }
+    .section-title {
+      font-family: 'Fraunces', Georgia, serif;
+      font-optical-sizing: auto;
+      font-variation-settings: "SOFT" 30, "WONK" 0;
+      font-size: clamp(34px, 4.8vw, 56px);
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      max-width: 800px;
+      margin-bottom: 20px;
+      line-height: 1.05;
+      color: var(--text);
+    }
+    .section-title em {
+      font-style: italic;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .section-lede {
+      max-width: 660px;
+      color: var(--text-muted);
+      font-size: 18px;
+      line-height: 1.6;
+      margin-bottom: 56px;
+    }
+    .eyebrow {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+
+    /* ─── Quote ──────────────────────────────── */
+    .quote {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 88px 0;
       position: relative;
       overflow: hidden;
     }
-
-    .btn::before {
+    .quote::before {
       content: '';
       position: absolute;
-      inset: -1px;
-      border-radius: 12px;
-      padding: 1px;
-      z-index: -1;
-      background: linear-gradient(135deg, var(--cyan), var(--green), var(--cyan));
-      background-size: 200% 200%;
-      animation: borderTravel 3s linear infinite;
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      opacity: 0;
-      transition: opacity 0.3s;
+      left: -10%;
+      top: 0;
+      width: 60%;
+      height: 100%;
+      background: radial-gradient(circle, rgba(147, 160, 90, 0.08), transparent 60%);
+      pointer-events: none;
     }
-
-    .btn:hover::before {
-      opacity: 1;
+    .quote-inner {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 28px;
+      display: flex;
+      gap: 28px;
+      align-items: flex-start;
+      position: relative;
     }
-
-    .btn-primary {
-      background: linear-gradient(135deg, rgba(6, 214, 224, 0.12), rgba(0, 255, 136, 0.06));
-      border-color: rgba(6, 214, 224, 0.3);
-      color: var(--cyan);
+    .quote-glyph {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-size: 120px;
+      line-height: 0.6;
+      color: var(--accent);
+      flex-shrink: 0;
+      margin-top: 22px;
+      user-select: none;
     }
+    .quote-avatar {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(245, 235, 215, 0.18);
+      flex-shrink: 0;
+    }
+    .quote-body {
+      font-family: 'Fraunces', serif;
+      font-size: 26px;
+      line-height: 1.35;
+      color: var(--text);
+      font-weight: 400;
+      letter-spacing: -0.015em;
+    }
+    .quote-body p { margin-bottom: 16px; }
+    .quote-attr {
+      margin-top: 22px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .quote-attr strong { color: var(--text); font-weight: 600; }
 
-    .btn-primary:hover {
-      box-shadow: 0 0 40px rgba(6, 214, 224, 0.2);
-      text-decoration: none;
+    /* ─── Try it ──────────────────────────────── */
+    .try-it { background: var(--bg-soft); position: relative; }
+    .try-it::before {
+      content: '';
+      position: absolute;
+      top: -40px; left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 200px;
+      background: radial-gradient(circle, rgba(6, 214, 224, 0.16), transparent 60%);
+      pointer-events: none;
+      filter: blur(60px);
+    }
+    .try-it .wrap { position: relative; z-index: 1; }
+
+    .try-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 56px; align-items: center; }
+    @media (max-width: 900px) { .try-grid { grid-template-columns: 1fr; } }
+
+    .terminal {
+      border-radius: 14px;
+      background: #0a0908;
+      border: 1px solid var(--border);
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.4),
+        0 24px 50px -10px rgba(0, 0, 0, 0.5);
+    }
+    .terminal-header {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .terminal-header span:not(.label) {
+      width: 11px; height: 11px;
+      border-radius: 50%;
+    }
+    .terminal-header .label {
+      margin-left: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-faint);
+    }
+    .terminal-body {
+      padding: 22px 24px 26px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #e8dec9;
+      overflow-x: auto;
+    }
+    .terminal-body .prompt { color: var(--accent); font-weight: 600; }
+    .terminal-body .comment { color: #6c6356; font-style: italic; }
+    .terminal-body .cmd { color: var(--text-2); }
+    .terminal-body .flag { color: var(--olive); }
+    .terminal-body .ok { color: var(--olive); }
+
+    .install-points { list-style: none; padding: 0; margin: 0; }
+    .install-points li {
+      display: flex;
+      gap: 16px;
+      padding: 18px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+    .install-points li:last-child { border-bottom: none; }
+    .install-points .check {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .install-points h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+    .install-points p { font-size: 14px; color: var(--text-muted); line-height: 1.55; }
+
+    /* ─── Feature grid ─────────────────────── */
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    @media (max-width: 920px) { .features { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .features { grid-template-columns: 1fr; } }
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 30px;
+      transition: transform 0.25s ease, border-color 0.2s ease, background 0.2s ease;
+      position: relative;
+    }
+    .feature:hover {
+      border-color: rgba(6, 214, 224, 0.35);
       transform: translateY(-3px);
+      background: #1a1714;
     }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.03);
-      border-color: var(--border);
+    .feature-icon {
+      width: 42px; height: 42px;
+      border-radius: 12px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .feature h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 21px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      margin-bottom: 10px;
       color: var(--text);
     }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.07);
-      text-decoration: none;
-      transform: translateY(-3px);
+    .feature p {
+      color: var(--text-muted);
+      font-size: 14.5px;
+      line-height: 1.6;
     }
 
-    /* install terminal */
-    .install-box {
-      background: rgba(13, 17, 23, 0.9);
-      border: 1px solid rgba(6, 214, 224, 0.15);
-      border-radius: 14px;
-      padding: 1.25rem 1.75rem;
-      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-      font-size: 0.82rem;
-      color: var(--green);
-      max-width: 720px;
-      width: 100%;
-      margin: 0 auto;
-      text-align: left;
-      position: relative;
-      white-space: pre;
+    /* ─── Comparison ─────────────────────────── */
+    .compare-wrap {
       overflow-x: auto;
-      backdrop-filter: blur(10px);
-      animation: fadeUp 0.8s ease-out 0.65s both;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
     }
+    .compare {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+      font-size: 14.5px;
+    }
+    .compare th, .compare td {
+      padding: 18px 22px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .compare th {
+      font-weight: 600;
+      color: var(--text-muted);
+      background: rgba(245, 235, 215, 0.02);
+      font-size: 13px;
+    }
+    .compare th.us {
+      color: var(--accent);
+      font-weight: 700;
+      background: var(--accent-soft);
+    }
+    .compare td.us {
+      background: rgba(6, 214, 224, 0.05);
+      color: var(--text);
+      font-weight: 600;
+    }
+    .compare tr:last-child td { border-bottom: none; }
+    .compare tr:hover td { background: rgba(245, 235, 215, 0.02); }
+    .compare tr:hover td.us { background: rgba(6, 214, 224, 0.09); }
+    .compare .check { color: var(--accent); font-weight: 700; font-size: 16px; }
+    .compare .cross { color: var(--text-faint); }
+    .compare .partial { color: var(--olive); }
 
-    .install-box::before {
-      content: '';
-      position: absolute;
-      inset: -1px;
+    /* ─── OSS metrics ────────────────────────── */
+    .oss { display: grid; grid-template-columns: 1.25fr 1fr; gap: 56px; align-items: center; }
+    @media (max-width: 820px) { .oss { grid-template-columns: 1fr; } }
+    .oss-text h2 {
+      font-family: 'Fraunces', serif;
+      font-size: clamp(28px, 3.6vw, 42px);
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      margin-bottom: 18px;
+      line-height: 1.1;
+      color: var(--text);
+    }
+    .oss-text h2 em { color: var(--accent); font-style: italic; }
+    .oss-text p { color: var(--text-muted); margin-bottom: 26px; font-size: 17px; line-height: 1.6; }
+    .oss-badges { display: flex; gap: 12px; flex-wrap: wrap; }
+    .oss-badge {
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 1px;
-      z-index: -1;
-      background: linear-gradient(135deg, rgba(6, 214, 224, 0.3), rgba(0, 255, 136, 0.1), rgba(6, 214, 224, 0.3));
-      background-size: 200% 200%;
-      animation: borderTravel 4s linear infinite;
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-    }
-
-    .install-dots {
+      padding: 18px 22px;
       display: flex;
-      gap: 6px;
-      margin-bottom: 0.75rem;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 130px;
     }
-
-    .install-dots i {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
+    .oss-badge .num {
+      font-family: 'Fraunces', serif;
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+    .oss-badge .lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 600;
+    }
+    .star-history {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--surface);
+      padding: 12px;
+    }
+    .star-history img {
+      width: 100%;
       display: block;
+      border-radius: 12px;
+      filter: invert(0.9) hue-rotate(180deg) sepia(0.3) saturate(1.4);
     }
 
-    .install-dots i:nth-child(1) {
-      background: #ff5f57;
-    }
-
-    .install-dots i:nth-child(2) {
-      background: #febc2e;
-    }
-
-    .install-dots i:nth-child(3) {
-      background: #28c840;
-    }
-
-    .cmd-line {
-      visibility: hidden;
-      height: 1.6em;
-    }
-
-    .cmd-line.typed {
-      visibility: visible;
-    }
-
-    .cursor-blink {
-      animation: blink 1s step-end infinite;
-      color: var(--cyan);
-    }
-
-    /* ── Features ─────────────────────────────── */
-    .features {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 5rem 1.5rem 6rem;
-      position: relative;
-    }
-
-    .section-heading {
-      text-align: center;
-      font-size: 2.2rem;
-      font-weight: 800;
-      margin-bottom: 3.5rem;
-      opacity: 0;
-      transform: translateY(20px);
-    }
-
-    .section-heading.visible {
-      opacity: 1;
-      transform: translateY(0);
-      transition: all 0.7s ease-out;
-    }
-
-    .section-heading span {
-      color: var(--cyan);
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1.25rem;
-    }
-
-    .card {
+    /* ─── FAQ ────────────────────────────────── */
+    .faq { display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+    details.qa {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 16px;
-      padding: 2rem;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    details.qa:hover { border-color: var(--border-strong); }
+    details.qa[open] {
+      border-color: rgba(6, 214, 224, 0.3);
+      background: #18130f;
+    }
+    details.qa summary {
+      padding: 24px 26px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 17px;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      letter-spacing: -0.012em;
+      font-family: 'Fraunces', serif;
+      color: var(--text);
+    }
+    details.qa summary::-webkit-details-marker { display: none; }
+    details.qa summary::after {
+      content: '+';
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 300;
+      color: var(--accent);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+      font-family: 'Inter', sans-serif;
+    }
+    details.qa[open] summary::after { transform: rotate(45deg); }
+    details.qa .ans {
+      padding: 0 26px 24px;
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.7;
+      max-width: 720px;
+    }
+    details.qa .ans code {
+      background: var(--code-bg);
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 13px;
+      color: var(--accent);
+    }
+    .faq-more {
+      margin-top: 32px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .faq-more a { color: var(--accent); font-weight: 600; }
+
+    /* ─── Final CTA ─────────────────────────── */
+    .final-cta {
+      text-align: center;
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
       position: relative;
       overflow: hidden;
-      opacity: 0;
-      transform: translateY(30px);
-      transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
     }
-
-    .card.visible {
-      opacity: 1;
-      transform: translateY(0);
-      transition: all 0.6s ease-out;
-    }
-
-    .card::before {
+    .final-cta::before {
       content: '';
       position: absolute;
-      top: 0;
-      left: -75%;
-      width: 50%;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 80%;
       height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(6, 214, 224, 0.04), transparent);
-      transition: left 0.6s;
+      background: radial-gradient(ellipse at top, rgba(6, 214, 224, 0.14), transparent 50%);
       pointer-events: none;
     }
-
-    .card:hover::before {
-      left: 125%;
+    .final-cta .wrap { position: relative; z-index: 1; }
+    .final-cta h2 {
+      font-family: 'Fraunces', serif;
+      font-size: clamp(38px, 5.5vw, 64px);
+      letter-spacing: -0.03em;
+      font-weight: 600;
+      max-width: 780px;
+      margin: 0 auto 22px;
+      line-height: 1.05;
+      color: var(--text);
+    }
+    .final-cta h2 em { font-style: italic; color: var(--accent); }
+    .final-cta p {
+      max-width: 560px;
+      margin: 0 auto 36px;
+      color: var(--text-muted);
+      font-size: 18px;
     }
 
-    .card:hover {
-      border-color: rgba(6, 214, 224, 0.25);
-      box-shadow: 0 0 50px rgba(6, 214, 224, 0.06);
-      transform: translateY(-5px);
+    /* ─── Footer ─────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+      background: var(--bg-soft);
     }
-
-    .card-icon {
-      font-size: 1.6rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .card h3 {
-      font-size: 1.05rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-    }
-
-    .card p {
-      font-size: 0.875rem;
-      color: var(--muted);
-      line-height: 1.65;
-    }
-
-    /* ── Screenshots ──────────────────────────── */
-    .screenshots {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 0 1.5rem 6rem;
-    }
-
-    .screenshot-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
-      gap: 1.5rem;
-    }
-
-    @media (max-width:540px) {
-      .screenshot-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .screenshot-item {
-      text-align: center;
-      opacity: 0;
-      transform: translateY(30px);
-    }
-
-    .screenshot-item.visible {
-      opacity: 1;
-      transform: translateY(0);
-      transition: all 0.6s ease-out;
-    }
-
-    .screenshot-item img {
-      width: 100%;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      transition: transform 0.3s, box-shadow 0.3s;
-    }
-
-    .screenshot-item img:hover {
-      transform: scale(1.02);
-      box-shadow: 0 10px 50px rgba(6, 214, 224, 0.1);
-    }
-
-    .screenshot-item p {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-top: 0.75rem;
-    }
-
-    /* ── No More Section ─────────────────────── */
-    .nomore-section {
-      text-align: center;
-      padding: 5rem 1.5rem 4rem;
-    }
-    .nomore-card {
-      position: relative;
-      max-width: 640px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 2.5rem 3rem;
-      border-radius: 20px;
-      background: radial-gradient(ellipse at 50% 0%, rgba(6, 214, 224, 0.06) 0%, transparent 70%);
-      border: 1px solid rgba(6, 214, 224, 0.12);
-      overflow: hidden;
-    }
-    .nomore-card::before {
-      content: '';
-      position: absolute;
-      inset: -1px;
-      border-radius: 20px;
-      padding: 1px;
-      z-index: -1;
-      background: conic-gradient(from var(--nm-angle, 0deg), rgba(6,214,224,0.4), transparent 25%, rgba(0,255,136,0.3) 50%, transparent 75%, rgba(6,214,224,0.4));
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-    }
-    .nomore-title {
-      font-size: clamp(1.6rem, 3.5vw, 2.2rem);
-      font-weight: 900;
-      letter-spacing: 0.02em;
-      margin-bottom: 1rem;
-      background: linear-gradient(135deg, var(--cyan), #00ff88, var(--cyan));
-      background-size: 200% auto;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: textShimmer 3s linear infinite;
-    }
-    .nomore-divider {
-      width: 60px;
-      height: 2px;
-      margin: 0 auto 1.5rem;
-      background: linear-gradient(90deg, transparent, rgba(6,214,224,0.4), transparent);
-      border-radius: 2px;
-    }
-    .nomore-phrase-area {
-      height: 2.2rem;
+    .footer-inner {
       display: flex;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-    .nomore-phrase {
-      position: relative;
-      display: inline-block;
-      font-size: clamp(0.95rem, 2.2vw, 1.2rem);
-      font-weight: 500;
-      color: rgba(255,255,255,0.75);
-      letter-spacing: 0.01em;
-      white-space: nowrap;
-    }
-    .nomore-phrase .nm-strike {
-      position: absolute;
-      top: 50%;
-      left: 0;
-      height: 2px;
-      width: 0;
-      background: linear-gradient(90deg, var(--cyan), #00ff88);
-      box-shadow: 0 0 8px rgba(6,214,224,0.4), 0 0 20px rgba(6,214,224,0.15);
-      border-radius: 2px;
-      transform: translateY(-50%);
-      transition: width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    }
-    .nomore-phrase.struck { color: rgba(255,255,255,0.25); }
-    .nomore-phrase.struck .nm-strike { width: 100%; }
-    .nomore-phrase .nm-check {
-      position: absolute;
-      right: -1.8rem;
-      top: 50%;
-      transform: translateY(-50%) scale(0);
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: #00ff88;
-      filter: drop-shadow(0 0 6px rgba(0,255,136,0.6));
-      transition: transform 0.3s 0.4s;
-    }
-    .nomore-phrase.struck .nm-check { transform: translateY(-50%) scale(1); }
-    .nomore-stats {
-      display: flex;
+      justify-content: space-between;
+      gap: 24px;
       flex-wrap: wrap;
-      justify-content: center;
-      gap: 2.5rem;
-      margin-top: 3rem;
+      font-size: 13px;
+      color: var(--text-muted);
     }
-    .nomore-stat-val {
-      font-size: 1.6rem;
-      font-weight: 900;
-      font-family: 'SF Mono', 'Fira Code', monospace;
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 500;
+      color: var(--text);
     }
-    .nomore-stat-label {
-      font-size: 0.65rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      margin-top: 0.2rem;
+    .footer-brand .mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: block;
+      box-shadow: 0 0 0 1px var(--border);
     }
+    .footer-links { display: flex; gap: 22px; }
+    .footer-links a:hover { color: var(--text); }
 
-    /* ── Footer ───────────────────────────────── */
-    footer {
-      text-align: center;
-      padding: 3rem 1.5rem;
-      border-top: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 0.8rem;
-    }
-
-    footer a {
-      color: var(--cyan);
-    }
-
-    /* ── Mobile Responsiveness ────────────────── */
     @media (max-width: 768px) {
-      .hero { padding: 1.5rem 1rem; min-height: auto; padding-top: 3rem; padding-bottom: 3rem; }
-      .title { font-size: 1.8rem; }
-      .tagline { font-size: 0.85rem; margin: 0.75rem auto 1.5rem; }
-      .badges { gap: 0.3rem; }
-      .badges img { height: 18px; }
-      .buttons { gap: 0.5rem; }
-      .btn { padding: 0.6rem 1.2rem; font-size: 0.85rem; }
-      .install-box { font-size: 0.65rem; padding: 1rem 1rem; white-space: pre-wrap; word-break: break-all; }
-      .grid { grid-template-columns: 1fr; }
-      .features { padding: 3rem 1rem 4rem; }
-      .section-heading { font-size: 1.5rem; margin-bottom: 2rem; }
-      .card { padding: 1.5rem; }
-      .screenshot-grid { grid-template-columns: 1fr; }
-      .screenshots { padding: 0 1rem 4rem; }
-      footer { padding: 2rem 1rem; }
-    }
-
-    @media (max-width: 480px) {
-      .title { font-size: 1.5rem; letter-spacing: 0.03em; }
-      .tagline { font-size: 0.8rem; }
-      .badges img { height: 16px; }
-      .btn { padding: 0.5rem 1rem; font-size: 0.8rem; }
-      .install-box { font-size: 0.6rem; }
-      .logo svg { width: 56px; height: 56px; }
-      .logo-ring { width: 80px; height: 80px; margin: -40px 0 0 -40px; }
-      .logo-ring:nth-child(3) { width: 100px; height: 100px; margin: -50px 0 0 -50px; }
+      .hero { padding: 64px 0 40px; }
+      h1.hero-title { font-size: 44px; }
+      p.hero-sub { font-size: 16px; }
+      section { padding: 72px 0; }
+      .section-title { font-size: 32px; }
+      .section-lede { font-size: 16px; margin-bottom: 40px; }
+      .hero-image { margin-top: 52px; }
+      .quote-glyph { font-size: 80px; margin-top: 14px; }
+      .quote-body { font-size: 20px; }
+      .feature { padding: 24px; }
+      .feature h3 { font-size: 19px; }
     }
   </style>
 </head>
 
 <body>
 
+  <!-- ─── Nav ─────────────────────────────────── -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">
+        <img src="logo.svg" alt="" class="mark">
+        kube-argus
+      </a>
+      <div class="nav-links">
+        <a href="#features" class="desktop-only">Features</a>
+        <a href="#compare" class="desktop-only">Compare</a>
+        <a href="#faq" class="desktop-only">FAQ</a>
+        <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus" target="_blank" rel="noopener" class="desktop-only">ArtifactHub</a>
+        <a href="https://github.com/manishchaudhary101/kube-argus" target="_blank" rel="noopener" class="nav-cta">GitHub →</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ─── Hero ─────────────────────────────── -->
   <section class="hero">
-    <canvas id="particles"></canvas>
-    <div class="hero-grid"></div>
-    <div class="hero-scan"></div>
+    <div class="hero-orb hero-orb-1"></div>
+    <div class="hero-orb hero-orb-2"></div>
+    <div class="hero-orb hero-orb-3"></div>
 
-    <div class="hero-content">
-      <div class="logo">
-        <div class="logo-ring"></div>
-        <div class="logo-ring"></div>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <rect width="64" height="64" rx="14" fill="#0c1322" />
-          <text x="32" y="26" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="14"
-            fill="#ffffff" letter-spacing="1">KUBE</text>
-          <text x="32" y="46" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="12"
-            fill="#06d6e0" letter-spacing="1">ARGUS</text>
-          <rect x="4" y="52" width="56" height="3" rx="1.5" fill="url(#g)" />
-          <defs>
-            <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#06d6e0" />
-              <stop offset="100%" stop-color="#00ff88" />
-            </linearGradient>
-          </defs>
-        </svg>
+    <div class="wrap">
+      <div class="hero-content">
+        <div class="hero-eyebrow reveal">
+          <span class="pulse-dot"></span>
+          Open source · Apache 2.0 · v1.2.8
+        </div>
+        <h1 class="hero-title reveal reveal-delay-1">
+          The dashboard you'd build<br>
+          if you actually <span class="accent">cared</span>.
+        </h1>
+        <p class="hero-sub reveal reveal-delay-2">
+          Open-source Kubernetes dashboard with live cluster state, streaming logs, in-browser shell, AI diagnose,
+          JIT access, and cost analysis — in a single Go binary. Runs in your cluster. Your data, your machine.
+        </p>
+        <div class="hero-cta reveal reveal-delay-3">
+          <a href="#install" class="btn btn-primary">
+            Run it now
+          </a>
+          <a href="https://github.com/manishchaudhary101/kube-argus" target="_blank" rel="noopener" class="btn btn-secondary">
+            View source
+          </a>
+        </div>
       </div>
+    </div>
 
-      <div class="title-wrap">
-        <h1 class="title">KUBE-<span>ARGUS</span></h1>
-        <span class="title-line"></span>
-      </div>
-
-      <p class="tagline">
-        The Kubernetes dashboard you'd build if you were tired of switching between k9s, Grafana, and kubectl.<br>
-        Live cluster state, streaming logs, just-in-time exec access, cost analysis, and AI-powered diagnostics — in a
-        single binary with zero dependencies.
-      </p>
-
-      <div class="badges">
-        <a href="https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml"><img
-            src="https://github.com/manishchaudhary101/kube-argus/actions/workflows/ci.yaml/badge.svg" alt="build"></a>
-        <a href="https://github.com/manishchaudhary101/kube-argus/releases/latest"><img
-            src="https://img.shields.io/github/v/release/manishchaudhary101/kube-argus?color=green&label=release" alt="release"></a>
-        <a href="https://github.com/manishchaudhary101/kube-argus/commits/master"><img
-            src="https://img.shields.io/github/last-commit/manishchaudhary101/kube-argus?color=blue&label=last%20commit" alt="last commit"></a>
-        <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go">
-        <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React">
-        <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="License">
-        <img src="https://img.shields.io/badge/Kubernetes-1.24+-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes">
-        <a href="https://artifacthub.io/packages/search?repo=kube-argus"><img
-            src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kube-argus" alt="Artifact Hub"></a>
-        <a href="https://github.com/manishchaudhary101/kube-argus/pkgs/container/kube-argus"><img
-            src="https://img.shields.io/badge/GHCR-image-blue?logo=docker&logoColor=white" alt="Docker Image"></a>
-        <a href="https://github.com/manishchaudhary101/kube-argus/stargazers"><img
-            src="https://img.shields.io/github/stars/manishchaudhary101/kube-argus?style=flat&color=yellow" alt="GitHub Stars"></a>
-        <a href="https://github.com/manishchaudhary101/kube-argus/issues"><img
-            src="https://img.shields.io/github/issues/manishchaudhary101/kube-argus" alt="Issues"></a>
-        <img src="https://img.shields.io/github/repo-size/manishchaudhary101/kube-argus?color=orange&label=code%20size" alt="code size">
-        <a href="https://github.com/manishchaudhary101/kube-argus/blob/master/LICENSE"><img
-            src="https://img.shields.io/badge/license%20scan-passing-brightgreen?logo=fossa" alt="license scan"></a>
-      </div>
-
-      <div class="buttons">
-        <a href="https://github.com/manishchaudhary101/kube-argus" class="btn btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-          </svg>
-          GitHub
-        </a>
-        <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus" class="btn btn-secondary">
-          Artifact Hub
-        </a>
-      </div>
-
-      <div class="install-box">
-        <div class="install-dots"><i></i><i></i><i></i></div>
-        <div class="cmd-line" id="cmd1">$ helm repo add kube-argus https://manishchaudhary101.github.io/kube-argus</div>
-        <div class="cmd-line" id="cmd2">$ helm install kube-argus kube-argus/kube-argus -n kube-argus --create-namespace</div>
-        <span class="cursor-blink" id="cursor">_</span>
+    <div class="screenshots reveal" aria-label="Kube-Argus screenshots">
+      <div class="screenshots-track">
+        <div class="screenshot-card">
+          <div class="chrome">
+            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+            <span class="url">kube-argus · overview</span>
+          </div>
+          <img src="screenshot-overview.png" alt="Cluster overview — real-time node and pod status">
+        </div>
+        <div class="screenshot-card">
+          <div class="chrome">
+            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+            <span class="url">kube-argus · node detail</span>
+          </div>
+          <img src="screenshot-node-detail.png" alt="Node detail — pod heatmap and drain wizard">
+        </div>
+        <div class="screenshot-card">
+          <div class="chrome">
+            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+            <span class="url">kube-argus · pod metrics</span>
+          </div>
+          <img src="screenshot-pod-metrics.png" alt="Pod metrics — Prometheus CPU and memory charts">
+        </div>
+        <div class="screenshot-card">
+          <div class="chrome">
+            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+            <span class="url">kube-argus · spot advisor</span>
+          </div>
+          <img src="screenshot-spot-advisor.png" alt="Spot advisor — cost analysis and recommendations">
+        </div>
+        <!-- duplicate set for seamless loop -->
+        <div class="screenshot-card" aria-hidden="true">
+          <div class="chrome">
+            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+            <span class="url">kube-argus · overview</span>
+          </div>
+          <img src="screenshot-overview.png" alt="">
+        </div>
+        <div class="screenshot-card" aria-hidden="true">
+          <div class="chrome">
+            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+            <span class="url">kube-argus · node detail</span>
+          </div>
+          <img src="screenshot-node-detail.png" alt="">
+        </div>
+        <div class="screenshot-card" aria-hidden="true">
+          <div class="chrome">
+            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+            <span class="url">kube-argus · pod metrics</span>
+          </div>
+          <img src="screenshot-pod-metrics.png" alt="">
+        </div>
+        <div class="screenshot-card" aria-hidden="true">
+          <div class="chrome">
+            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+            <span class="url">kube-argus · spot advisor</span>
+          </div>
+          <img src="screenshot-spot-advisor.png" alt="">
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- No More section -->
-  <div class="nomore-section">
-    <div class="nomore-card">
-      <div class="nomore-title">No more.</div>
-      <div class="nomore-divider"></div>
-      <div class="nomore-phrase-area">
-        <div class="nomore-phrase" id="nomore-phrase"></div>
+  <!-- ─── Logo strip / Runs anywhere ─────────── -->
+  <div class="logos">
+    <div class="wrap">
+      <div class="logos-label">Runs anywhere Kubernetes does</div>
+      <div class="logos-row">
+        <span>EKS</span>
+        <span>GKE</span>
+        <span>AKS</span>
+        <span>OpenShift</span>
+        <span>Rancher</span>
+        <span>k3s</span>
+        <span>kind</span>
+        <span>On-prem</span>
       </div>
-    </div>
-    <div class="nomore-stats" id="nomore-stats">
-      <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--cyan)">~30MB</div><div class="nomore-stat-label">Docker Image</div></div>
-      <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--green)">0</div><div class="nomore-stat-label">Dependencies</div></div>
-      <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--cyan)">&lt;1s</div><div class="nomore-stat-label">Startup Time</div></div>
-      <div class="nomore-stat"><div class="nomore-stat-val" style="color:var(--green)">1</div><div class="nomore-stat-label">Binary</div></div>
     </div>
   </div>
 
-  <section class="features">
-    <h2 class="section-heading">What you <span>get</span></h2>
-    <div class="grid">
-      <div class="card">
-        <div class="card-icon">⚡</div>
-        <h3>Real-time Cluster State</h3>
-        <p>Nodes, pods, workloads, services, and events — auto-refreshing with zero manual reloads.</p>
+  <!-- ─── Founder quote ─────────────────────────── -->
+  <div class="quote">
+    <div class="quote-inner reveal">
+      <div class="quote-glyph">"</div>
+      <div>
+        <div class="quote-body">
+          <p>I don't care about beautiful graphs, I care about closing tabs during an incident. Kube-argus replaces k9s + Grafana + kubectl + the cost dashboard with one screen.</p>
+        </div>
+        <div class="quote-attr">
+          <img src="https://github.com/manishchaudhary101.png" alt="Manish Chaudhary" class="quote-avatar">
+          <div><strong>Manish Chaudhary</strong> · maintainer · SRE</div>
+        </div>
       </div>
-      <div class="card">
-        <div class="card-icon">📜</div>
-        <h3>Streaming Logs & Web Shell</h3>
-        <p>Live pod logs via SSE, aggregated workload logs, and browser-based terminal via xterm.js.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🤖</div>
-        <h3>AI-Powered Diagnostics</h3>
-        <p>LLM root cause analysis for troubled pods. Works with any OpenAI-compatible API.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">💰</div>
-        <h3>Spot Advisor & Cost Analysis</h3>
-        <p>Instance risk scoring, namespace cost allocation, and intelligent consolidation recommendations.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">📊</div>
-        <h3>Restart Timeline</h3>
-        <p>Color-coded scatter chart of restart events — OOMKills, probe failures, crash loops — spot patterns at a glance.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">&#x2699;&#xFE0F;</div>
-        <h3>Node Drain Wizard</h3>
-        <p>Safe, guided drains with PDB awareness, eviction preview, and real-time streaming progress.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">&#x1F511;</div>
-        <h3>Just-in-Time Access</h3>
-        <p>Zero-trust shell and CronJob access. Viewers request, admins approve. Workload-scoped, auto-expiring.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">▶️</div>
-        <h3>CronJob Manual Trigger</h3>
-        <p>Run scheduled jobs on demand. JIT-gated for viewers, instant for admins. Full audit trail.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">&#x270F;&#xFE0F;</div>
-        <h3>YAML Editor &amp; Config Drift</h3>
-        <p>View and edit YAML for 11 resource kinds. Detect when pods run stale ConfigMaps or Secrets.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">&#x1F517;</div>
-        <h3>Dependency Graph</h3>
-        <p>Visual map of Deployments → Services → Ingresses → HPAs → Secrets with drift highlighting.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">&#x1F6A8;</div>
-        <h3>Troubled Pods NOC Screen</h3>
-        <p>Dedicated fullscreen view of broken pods. Put it on a TV and walk away.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🔐</div>
-        <h3>SSO, RBAC & Audit Trail</h3>
-        <p>Google SSO, any OIDC provider, role-based access, full audit log, online user presence.</p>
+    </div>
+  </div>
+
+  <!-- ─── What is kube-argus ─────────────────── -->
+  <section>
+    <div class="wrap reveal">
+      <div class="eyebrow">What it is</div>
+      <h2 class="section-title">
+        An operational dashboard built for the team running the cluster — <em>not</em> the team selling you software.
+      </h2>
+      <p class="section-lede">
+        Kube-Argus is a single Go binary that ships as a Helm chart. It connects to your cluster's API via the
+        service account, watches resources via informers, and renders a real-time dashboard that knows about the
+        things SREs actually care about: who has access, what's failing, what it costs, and what the AI thinks is
+        wrong.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── Try it ─────────────────────────────── -->
+  <section class="try-it" id="install">
+    <div class="wrap">
+      <div class="eyebrow reveal">Get started</div>
+      <h2 class="section-title reveal">Install in <em>two</em> commands.</h2>
+      <p class="section-lede reveal">No operator. No CRDs. No database. Helm provisions a Deployment, a Service, and (optional) an Ingress. State lives in ConfigMaps. Auth is OIDC + Google SSO + admin-emails.</p>
+      <div class="try-grid">
+        <div class="terminal reveal">
+          <div class="terminal-header">
+            <span style="background:#ff5f57"></span>
+            <span style="background:#febc2e"></span>
+            <span style="background:#28c840"></span>
+            <span class="label">your-laptop · ~</span>
+          </div>
+          <div class="terminal-body">
+            <div><span class="comment"># 1 — add the Helm repo</span></div>
+            <div><span class="prompt">$</span> <span class="cmd">helm repo add kube-argus \</span></div>
+            <div>&nbsp;&nbsp;<span class="cmd">https://manishchaudhary101.github.io/kube-argus</span></div>
+            <div style="margin-top:16px"><span class="comment"># 2 — install into your cluster</span></div>
+            <div><span class="prompt">$</span> <span class="cmd">helm install kube-argus kube-argus/kube-argus \</span></div>
+            <div>&nbsp;&nbsp;<span class="cmd">-n kube-argus --create-namespace \</span></div>
+            <div>&nbsp;&nbsp;<span class="flag">--set</span> <span class="cmd">env.CLUSTER_NAME=&quot;production&quot;</span></div>
+            <div style="margin-top:16px"><span class="comment"># open the dashboard</span></div>
+            <div><span class="prompt">$</span> <span class="cmd">kubectl -n kube-argus port-forward \</span></div>
+            <div>&nbsp;&nbsp;<span class="cmd">svc/kube-argus 8080:8080</span></div>
+            <div style="margin-top:10px"><span class="prompt">→</span> <span class="ok">http://localhost:8080</span></div>
+          </div>
+        </div>
+        <ul class="install-points reveal reveal-delay-2">
+          <li>
+            <span class="check">✓</span>
+            <div>
+              <h4>One container, no daemons</h4>
+              <p>~12 MB image. Multi-arch (amd64 + arm64). Runs as nonroot. Distroless base. Zero ongoing maintenance.</p>
+            </div>
+          </li>
+          <li>
+            <span class="check">✓</span>
+            <div>
+              <h4>Persistent state via ConfigMaps</h4>
+              <p>Audit trail, JIT requests, Slack/webhook config — all stored in ConfigMaps that survive pod restarts and stay consistent across replicas.</p>
+            </div>
+          </li>
+          <li>
+            <span class="check">✓</span>
+            <div>
+              <h4>Zero telemetry</h4>
+              <p>The dashboard never phones home. Your cluster data stays in your cluster. AI and webhook integrations are opt-in.</p>
+            </div>
+          </li>
+          <li>
+            <span class="check">✓</span>
+            <div>
+              <h4>OIDC / SSO ready</h4>
+              <p>Plug into Google, Okta, Keycloak, Dex, Auth0 — or stay simple with admin-emails and a default role.</p>
+            </div>
+          </li>
+        </ul>
       </div>
     </div>
   </section>
 
-  <section class="screenshots">
-    <h2 class="section-heading">See it in <span>action</span></h2>
-    <div class="screenshot-grid">
-      <div class="screenshot-item">
-        <img src="screenshot-overview.png" alt="Cluster Overview" loading="lazy">
-        <p>Cluster Overview — Real-time node and pod status</p>
-      </div>
-      <div class="screenshot-item">
-        <img src="screenshot-node-detail.png" alt="Node Detail" loading="lazy">
-        <p>Node Detail — Pod heatmap, conditions, and drain wizard</p>
-      </div>
-      <div class="screenshot-item">
-        <img src="screenshot-pod-metrics.png" alt="Pod Metrics" loading="lazy">
-        <p>Pod Metrics — Prometheus CPU and memory charts</p>
-      </div>
-      <div class="screenshot-item">
-        <img src="screenshot-spot-advisor.png" alt="Spot Advisor" loading="lazy">
-        <p>Spot Advisor — Cost optimization and instance recommendations</p>
+  <!-- ─── Features ─────────────────────────── -->
+  <section id="features">
+    <div class="wrap">
+      <div class="eyebrow reveal">What's inside</div>
+      <h2 class="section-title reveal">Built for the on-call rotation, not the <em>slide deck</em>.</h2>
+      <p class="section-lede reveal">Every feature exists because somebody got paged and wished they had it.</p>
+      <div class="features">
+        <div class="feature reveal">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 3 3 12 12 12"/></svg>
+          </div>
+          <h3>Live cluster state</h3>
+          <p>Pods, nodes, workloads, services, events, ingresses — watched via informers, rendered in real time. No polling, no stale UIs.</p>
+        </div>
+        <div class="feature reveal reveal-delay-1">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </div>
+          <h3>Streaming logs & shell</h3>
+          <p>SSE-streamed pod logs with search, container picker, and error highlighting. Browser-based exec via xterm.js when you need a shell.</p>
+        </div>
+        <div class="feature reveal reveal-delay-2">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 14 8 20 8 15 12 17 18 12 14 7 18 9 12 4 8 10 8 12 2"/></svg>
+          </div>
+          <h3>AI diagnose</h3>
+          <p>One click on a struggling pod, the LLM tells you why — built on top of live status, events, logs, and last-termination state.</p>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h3>JIT exec access</h3>
+          <p>Viewers request shell or restart access. Admins approve from Slack or the dashboard. Every grant is time-bounded and audit-logged.</p>
+        </div>
+        <div class="feature reveal reveal-delay-1">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <h3>Cost & spot advisor</h3>
+          <p>Per-namespace cost breakdown, spot instance risk scoring, nodepool consolidation hints. Numbers sit next to the workload.</p>
+        </div>
+        <div class="feature reveal reveal-delay-2">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3>Drain wizard</h3>
+          <p>Guided node drains with PDB awareness, live eviction progress, and a dry-run mode. The operation you don't want to get wrong, made safer.</p>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </div>
+          <h3>YAML editor</h3>
+          <p>Inline YAML view and edit for every resource type, with syntax highlighting and structured drift detection against the live cluster state.</p>
+        </div>
+        <div class="feature reveal reveal-delay-1">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          </div>
+          <h3>Audit trail</h3>
+          <p>Every login, exec, restart, scale, and JIT grant logged. Persists across replicas via read-merge-write ConfigMap. WebSocket-driven, no polling.</p>
+        </div>
+        <div class="feature reveal reveal-delay-2">
+          <div class="feature-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <h3>Webhooks & Slack</h3>
+          <p>Push JIT events to Slack with interactive approve/deny, or any HTTPS endpoint with HMAC-SHA256 signing. Filter by event type per destination.</p>
+        </div>
       </div>
     </div>
   </section>
 
+  <!-- ─── Comparison ─────────────────────────── -->
+  <section id="compare" style="background: var(--bg-soft); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="wrap">
+      <div class="eyebrow reveal">How it stacks up</div>
+      <h2 class="section-title reveal"><em>vs.</em> the tools you're using today.</h2>
+      <p class="section-lede reveal">Three popular options against one binary.</p>
+      <div class="compare-wrap reveal">
+        <table class="compare">
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th class="us">kube-argus</th>
+              <th>k9s</th>
+              <th>Lens / Headlamp</th>
+              <th>Grafana + kubectl</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Real-time pod / workload state</td><td class="us check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="partial">partial</td></tr>
+            <tr><td>Browser-based exec terminal</td><td class="us check">✓</td><td class="cross">CLI only</td><td class="check">✓</td><td class="cross">—</td></tr>
+            <tr><td>AI-powered diagnose</td><td class="us check">✓</td><td class="cross">—</td><td class="cross">—</td><td class="cross">—</td></tr>
+            <tr><td>JIT access workflow</td><td class="us check">✓</td><td class="cross">—</td><td class="cross">—</td><td class="cross">—</td></tr>
+            <tr><td>Cost & spot advisor</td><td class="us check">✓</td><td class="cross">—</td><td class="cross">—</td><td class="partial">via plugins</td></tr>
+            <tr><td>Drain wizard with PDB awareness</td><td class="us check">✓</td><td class="partial">cordon/drain only</td><td class="partial">cordon/drain only</td><td class="cross">kubectl only</td></tr>
+            <tr><td>Audit trail (persisted)</td><td class="us check">✓</td><td class="cross">—</td><td class="cross">—</td><td class="cross">—</td></tr>
+            <tr><td>Slack / webhook notifications</td><td class="us check">✓</td><td class="cross">—</td><td class="cross">—</td><td class="partial">via Alertmanager</td></tr>
+            <tr><td>Single binary, no daemons</td><td class="us check">✓</td><td class="check">✓</td><td class="cross">Electron / server+UI</td><td class="cross">multi-component</td></tr>
+            <tr><td>OIDC / Google SSO built-in</td><td class="us check">✓</td><td class="cross">kubeconfig only</td><td class="check">✓</td><td class="partial">via proxy</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── OSS metrics ────────────────────── -->
+  <section>
+    <div class="wrap">
+      <div class="oss">
+        <div class="oss-text reveal">
+          <div class="eyebrow">Open source</div>
+          <h2>Apache 2.0. No <em>telemetry</em>. No paid tier.</h2>
+          <p>
+            The chart is on ArtifactHub. The image is multi-arch on GHCR. The source is on GitHub. The dashboard never
+            phones home — your cluster data stays in your cluster.
+          </p>
+          <div class="oss-badges">
+            <div class="oss-badge">
+              <span class="num">v1.2.8</span>
+              <span class="lbl">Latest release</span>
+            </div>
+            <div class="oss-badge">
+              <span class="num">Apache 2.0</span>
+              <span class="lbl">License</span>
+            </div>
+            <div class="oss-badge">
+              <span class="num">~12&nbsp;MB</span>
+              <span class="lbl">Image size</span>
+            </div>
+          </div>
+        </div>
+        <div class="star-history reveal reveal-delay-2">
+          <a href="https://star-history.com/#manishchaudhary101/kube-argus&Date" target="_blank" rel="noopener">
+            <img src="https://api.star-history.com/svg?repos=manishchaudhary101/kube-argus&type=Date" alt="Star history">
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── FAQ ────────────────────────────────── -->
+  <section id="faq" style="background: var(--bg-soft); border-top: 1px solid var(--border);">
+    <div class="wrap">
+      <div class="eyebrow reveal">Frequently asked</div>
+      <h2 class="section-title reveal">Questions you <em>probably</em> have.</h2>
+      <div class="faq reveal">
+        <details class="qa">
+          <summary>How is this different from k9s?</summary>
+          <div class="ans">
+            k9s is a terminal UI you run on your laptop using your local kubeconfig. Kube-argus is a web dashboard that
+            runs in your cluster, shared across the team. It also covers workflows k9s doesn't — AI diagnose, JIT
+            access, cost analysis, audit trail, Slack/webhook notifications. The two are complementary; many SREs use
+            both.
+          </div>
+        </details>
+        <details class="qa">
+          <summary>Does it require Prometheus?</summary>
+          <div class="ans">
+            No — but you get more if you have it. The core dashboard works against metrics-server alone (CPU/memory).
+            Prometheus unlocks per-pod historical graphs, namespace cost over time, and the spot advisor's risk
+            scoring. Configure via the <code>PROMETHEUS_URL</code> env var.
+          </div>
+        </details>
+        <details class="qa">
+          <summary>What auth options are supported?</summary>
+          <div class="ans">
+            Generic OIDC (Keycloak, Okta, Auth0, Dex), Google SSO, and <code>ADMIN_EMAILS</code> + <code>DEFAULT_ROLE</code> for simple setups.
+            Roles are admin (write access) and viewer (read access). View-as-viewer impersonation lets admins preview
+            the UI from a viewer's perspective without signing out.
+          </div>
+        </details>
+        <details class="qa">
+          <summary>What does the AI diagnose actually do?</summary>
+          <div class="ans">
+            It packages the pod's current status, events, container statuses, last termination state, and recent log
+            lines into a structured prompt, sends it to an OpenAI-compatible LLM gateway, and streams the response.
+            The output is a terse triage summary, not a long essay — designed for the on-call. Configure via
+            <code>LLM_GATEWAY_URL</code> / <code>LLM_GATEWAY_KEY</code> / <code>LLM_GATEWAY_MODEL</code>.
+          </div>
+        </details>
+        <details class="qa">
+          <summary>What's JIT access?</summary>
+          <div class="ans">
+            A viewer requests time-bounded shell or restart access on a specific workload, with a reason. An admin
+            approves or denies — from the dashboard or directly from Slack. Approved grants are time-limited (default
+            1h), audit-logged, and auto-expire. A non-bureaucratic path to least-privilege RBAC.
+          </div>
+        </details>
+        <details class="qa">
+          <summary>Does it send anything to the internet?</summary>
+          <div class="ans">
+            By default, no. The dashboard talks to your cluster's API server and metrics-server only. AI diagnose and
+            webhook features call external endpoints — only when you configure them and only when you trigger them.
+          </div>
+        </details>
+        <details class="qa">
+          <summary>Can I contribute?</summary>
+          <div class="ans">
+            Please do. PRs welcome on
+            <a href="https://github.com/manishchaudhary101/kube-argus" target="_blank" rel="noopener">GitHub</a>.
+            Bug reports, feature requests, and screenshots of cool clusters all appreciated.
+          </div>
+        </details>
+      </div>
+      <div class="faq-more reveal">
+        Still curious? <a href="https://github.com/manishchaudhary101/kube-argus/discussions" target="_blank" rel="noopener">Ask on GitHub Discussions →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Final CTA ─────────────────────────────── -->
+  <section class="final-cta">
+    <div class="wrap reveal">
+      <h2>Run the dashboard your future <em>on-call self</em> will thank you for.</h2>
+      <p>A 30-second helm install. No daemons, no database, no telemetry.</p>
+      <div class="hero-cta" style="justify-content: center">
+        <a href="#install" class="btn btn-primary">Run it now</a>
+        <a href="https://github.com/manishchaudhary101/kube-argus" target="_blank" rel="noopener" class="btn btn-secondary">
+          ★ Star on GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Footer ─────────────────────────────── -->
   <footer>
-    <p>
-      Apache 2.0 &middot; Built by <a href="https://github.com/manishchaudhary101">manishchaudhary101</a> &middot;
-      <a href="https://github.com/manishchaudhary101/kube-argus">GitHub</a> &middot;
-      <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus">Artifact Hub</a>
-    </p>
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <img src="logo.svg" alt="" class="mark">
+        kube-argus &middot; © 2026 &middot; Apache 2.0
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/manishchaudhary101/kube-argus" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus" target="_blank" rel="noopener">ArtifactHub</a>
+        <a href="https://github.com/manishchaudhary101/kube-argus/issues" target="_blank" rel="noopener">Issues</a>
+        <a href="https://github.com/manishchaudhary101/kube-argus/blob/master/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+      </div>
+    </div>
   </footer>
 
   <script>
-    /* ── Particle star field ────────────────── */
-    const canvas = document.getElementById('particles');
-    const ctx = canvas.getContext('2d');
-    let W, H, particles = [], mouse = { x: -1000, y: -1000 };
-
-    function resize() {
-      W = canvas.width = window.innerWidth;
-      H = canvas.height = canvas.parentElement.offsetHeight || window.innerHeight;
-    }
-    resize();
-    window.addEventListener('resize', resize);
-    document.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-    document.addEventListener('mouseleave', () => { mouse.x = -1000; mouse.y = -1000; });
-
-    function initParticles() {
-      particles = [];
-      for (let i = 0; i < 100; i++) {
-        particles.push({
-          x: Math.random() * W, y: Math.random() * H,
-          r: Math.random() * 1.5 + 0.3,
-          dx: (Math.random() - 0.5) * 0.3,
-          dy: (Math.random() - 0.5) * 0.3,
-          o: Math.random() * 0.4 + 0.1
-        });
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
       }
-    }
-    initParticles();
-
-    function drawParticles() {
-      ctx.clearRect(0, 0, W, H);
-      particles.forEach(p => {
-        p.x += p.dx; p.y += p.dy;
-        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-
-        const dist = Math.hypot(p.x - mouse.x, p.y - mouse.y);
-        const boost = dist < 150 ? (150 - dist) / 150 : 0;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r + boost * 2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(6,214,224,${p.o + boost * 0.4})`;
-        ctx.fill();
-      });
-
-      particles.forEach((a, i) => {
-        for (let j = i + 1; j < particles.length; j++) {
-          const b = particles[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < 100) {
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = `rgba(6,214,224,${0.06 * (1 - d / 100)})`;
-            ctx.stroke();
-          }
-        }
-      });
-      requestAnimationFrame(drawParticles);
-    }
-    drawParticles();
-
-    /* ── Terminal typing effect ─────────────── */
-    function typeLine(el, delay) {
-      return new Promise(resolve => {
-        const full = el.textContent.trim();
-        el.innerHTML = '\u00a0';
-        el.classList.add('typed');
-        let i = 0;
-        setTimeout(() => {
-          const iv = setInterval(() => {
-            el.innerHTML = full.substring(0, i + 1).replace(/^\$/, '<span style="color:#6b7280">$</span>');
-            i++;
-            if (i >= full.length) { clearInterval(iv); resolve(); }
-          }, 18);
-        }, delay);
-      });
-    }
-    (async () => {
-      await typeLine(document.getElementById('cmd1'), 1200);
-      await typeLine(document.getElementById('cmd2'), 400);
-    })();
-
-    /* ── Scroll reveals ────────────────────── */
-    const obs = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const d = entry.target.dataset.delay || 0;
-          setTimeout(() => entry.target.classList.add('visible'), d);
-          obs.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.12 });
-
-    document.querySelectorAll('.card').forEach((el, i) => { el.dataset.delay = i * 70; obs.observe(el); });
-    document.querySelectorAll('.screenshot-item').forEach((el, i) => { el.dataset.delay = i * 100; obs.observe(el); });
-    document.querySelectorAll('.section-heading').forEach(el => obs.observe(el));
-
-    /* ── No More rotating ticker ──────────── */
-    (function() {
-      const phrases = [
-        'Juggling k9s, Grafana & kubectl in 5 tabs.',
-        'Handing out permanent cluster shell access.',
-        'Hitting refresh and waiting... and waiting.',
-        'Guessing which pods are wasting resources.',
-        'Staring at CrashLoopBackOff with no clue why.',
-        'Copy-pasting YAML between terminals.',
-        '"Who deleted that pod?" with zero audit trail.',
-        'Running kubectl create job --from=cronjob manually.',
-        'Switching namespaces 50 times a day.',
-        'Scattered logs across multiple terminals.',
-      ];
-      const el = document.getElementById('nomore-phrase');
-      if (!el) return;
-      let idx = 0;
-      let running = false;
-
-      function show() {
-        if (!running) return;
-        const text = phrases[idx];
-        el.className = 'nomore-phrase';
-        el.innerHTML = text + '<span class="nm-strike"></span><span class="nm-check">&#10003;</span>';
-        el.style.opacity = '1';
-
-        setTimeout(function() {
-          el.classList.add('struck');
-          setTimeout(function() {
-            el.style.opacity = '0';
-            setTimeout(function() {
-              idx = (idx + 1) % phrases.length;
-              show();
-            }, 400);
-          }, 1400);
-        }, 1600);
-      }
-
-      var nmObs = new IntersectionObserver(function(entries) {
-        if (entries[0].isIntersecting && !running) {
-          running = true;
-          show();
-          nmObs.disconnect();
-        }
-      }, { threshold: 0.3 });
-      nmObs.observe(el.closest('.nomore-section'));
-
-      /* spinning border */
-      var card = document.querySelector('.nomore-card');
-      if (card) {
-        var angle = 0;
-        function spin() { angle = (angle + 0.5) % 360; card.style.setProperty('--nm-angle', angle + 'deg'); requestAnimationFrame(spin); }
-        spin();
-      }
-    })();
+    }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+    document.querySelectorAll('.reveal').forEach(el => io.observe(el));
   </script>
 
 </body>
