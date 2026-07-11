@@ -1,1 +1,4 @@
-github: [manishchaudhary101]
+# Configures the "Sponsor" button on the repo home page.
+# https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+github:
+  - manishchaudhary101
