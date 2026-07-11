@@ -14,6 +14,10 @@
     content="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png">
   <meta property="og:url" content="https://manishchaudhary101.github.io/kube-argus/">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image"
+    content="https://raw.githubusercontent.com/manishchaudhary101/kube-argus/master/docs/screenshot-overview.png">
+  <meta name="theme-color" content="#0e0d0c">
+  <link rel="canonical" href="https://manishchaudhary101.github.io/kube-argus/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -279,6 +283,18 @@
       border: 1px solid var(--border-strong);
     }
     .btn-secondary:hover { background: rgba(245, 235, 215, 0.09); transform: translateY(-1px); }
+
+    .hero-social {
+      display: flex;
+      gap: 10px;
+      margin-top: 28px;
+      flex-wrap: wrap;
+      align-items: center;
+      opacity: 0.9;
+    }
+    .hero-social a { display: inline-flex; align-items: center; transition: opacity 0.15s ease; }
+    .hero-social a:hover { opacity: 1; }
+    .hero-social img { height: 24px; display: block; }
 
     /* ─── Hero Image ─────────────────────────── */
     .hero-image {
@@ -735,6 +751,76 @@
       letter-spacing: 0.12em;
       font-weight: 600;
     }
+    .oss-release {
+      background: var(--bg-tint);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 30px 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .oss-release::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(6, 214, 224, 0.5), transparent);
+    }
+    .release-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .release-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+    .release-date { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+    .oss-release h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 22px;
+      line-height: 1.25;
+      color: var(--text);
+      margin-bottom: 18px;
+      font-weight: 500;
+      letter-spacing: -0.015em;
+    }
+    .release-notes { list-style: none; padding: 0; margin: 0 0 22px; }
+    .release-notes li {
+      padding: 10px 0 10px 20px;
+      position: relative;
+      color: var(--text-muted);
+      font-size: 14.5px;
+      line-height: 1.55;
+      border-bottom: 1px solid var(--border);
+    }
+    .release-notes li:last-child { border-bottom: none; }
+    .release-notes li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .release-notes li code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      color: var(--text-2);
+      background: var(--code-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .release-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--accent);
+      font-weight: 500;
+      font-size: 14px;
+      transition: color 0.15s ease;
+    }
+    .release-link:hover { color: var(--accent-warm); text-decoration: none; }
     .star-history {
       border: 1px solid var(--border);
       border-radius: 16px;
@@ -940,6 +1026,29 @@
           </a>
           <a href="https://github.com/manishchaudhary101/kube-argus" target="_blank" rel="noopener" class="btn btn-secondary">
             View source
+          </a>
+        </div>
+        <div class="hero-social reveal reveal-delay-3" aria-label="Project signals">
+          <a href="https://github.com/manishchaudhary101/kube-argus/stargazers" target="_blank" rel="noopener">
+            <img
+              src="https://img.shields.io/github/stars/manishchaudhary101/kube-argus?style=flat-square&label=stars&labelColor=1a1714&color=f5ebd7"
+              alt="GitHub stars">
+          </a>
+          <a href="https://artifacthub.io/packages/helm/kube-argus/kube-argus" target="_blank" rel="noopener">
+            <img
+              src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kube-argus&style=flat-square&labelColor=1a1714"
+              alt="ArtifactHub">
+          </a>
+          <a href="https://github.com/manishchaudhary101/kube-argus/pkgs/container/kube-argus" target="_blank"
+            rel="noopener">
+            <img
+              src="https://img.shields.io/badge/GHCR-multi--arch%20image-06d6e0?style=flat-square&labelColor=1a1714"
+              alt="Container image on GHCR">
+          </a>
+          <a href="https://github.com/manishchaudhary101/kube-argus/releases/latest" target="_blank" rel="noopener">
+            <img
+              src="https://img.shields.io/github/v/release/manishchaudhary101/kube-argus?style=flat-square&label=release&labelColor=1a1714&color=06d6e0"
+              alt="Latest release">
           </a>
         </div>
       </div>
@@ -1252,6 +1361,23 @@
               <span class="lbl">Image size</span>
             </div>
           </div>
+        </div>
+        <div class="oss-release reveal reveal-delay-2">
+          <div class="release-header">
+            <span class="release-tag">v1.2.8</span>
+            <span class="release-date">Released 2026-07-10</span>
+          </div>
+          <h3>What shipped in this release</h3>
+          <ul class="release-notes">
+            <li>Custom Resources &amp; Helm browser — every CRD, every release, rollback / uninstall for admins</li>
+            <li>Backend reorganized into <code>internal/{api,auth,audit,jit,notify,httpx}</code> — main.go is now 238 lines of pure wire-up</li>
+            <li>Secret redaction for non-admin Helm and YAML views, incl. subcharts and value-holder patterns</li>
+            <li>Initial test suite — 36 unit tests across 6 packages, security-critical helpers covered</li>
+          </ul>
+          <a href="https://github.com/manishchaudhary101/kube-argus/releases/tag/v1.2.8" target="_blank" rel="noopener"
+            class="release-link">
+            Read full release notes →
+          </a>
         </div>
       </div>
     </div>
